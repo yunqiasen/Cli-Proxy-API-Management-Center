@@ -119,6 +119,7 @@
 }
 
 .statPill {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -130,6 +131,82 @@
   border: 1px solid transparent;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
+}
+
+.statInteractive {
+  cursor: default;
+}
+
+.usageTooltip {
+  position: absolute;
+  z-index: 40;
+  left: 0;
+  top: calc(100% + 8px);
+  display: none;
+  width: max-content;
+  max-width: min(720px, calc(100vw - 80px));
+  padding: 10px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.18);
+}
+
+.statInteractive:hover .usageTooltip,
+.statInteractive:focus-within .usageTooltip {
+  display: block;
+}
+
+.usageTooltipTitle {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.usageTooltipRows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.usageTooltipRow {
+  display: grid;
+  grid-template-columns: minmax(120px, max-content) 58px 48px minmax(180px, 1fr);
+  gap: 10px;
+  align-items: center;
+  min-width: 360px;
+  font-size: 12px;
+  line-height: 1.35;
+
+  span,
+  em {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  strong {
+    color: var(--text-primary);
+    font-weight: 800;
+  }
+
+  em {
+    color: var(--muted-foreground);
+    font-style: normal;
+  }
+}
+
+.usageTooltipRow:has(em) {
+  min-width: 560px;
+}
+
+.usageTooltipRow:not(:has(em)) {
+  grid-template-columns: minmax(140px, max-content) 58px 48px;
+  min-width: 260px;
 }
 
 .statSuccess {

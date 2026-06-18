@@ -1,0 +1,147 @@
+@use '../../styles/variables' as *;
+
+.card {
+  min-height: 0;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: $spacing-sm;
+  flex-wrap: wrap;
+
+  :global(.form-group) {
+    margin: 0;
+  }
+}
+
+.pagesInput {
+  width: 82px;
+}
+
+.tableWrap {
+  width: 100%;
+  overflow: auto;
+  border: 1px solid var(--border-color);
+  border-radius: $radius-lg;
+}
+
+.table {
+  width: 100%;
+  min-width: 1180px;
+  border-collapse: collapse;
+  font-size: 12px;
+
+  th,
+  td {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border-color);
+    text-align: left;
+    vertical-align: top;
+  }
+
+  th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: var(--bg-secondary);
+    color: var(--muted-foreground);
+    font-weight: 700;
+  }
+
+  td {
+    max-width: 220px;
+    color: var(--text-primary);
+  }
+}
+
+.ok,
+.fail {
+  display: inline-flex;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.ok {
+  color: var(--success-badge-text);
+  background: var(--success-badge-bg);
+}
+
+.fail {
+  color: var(--failure-badge-text);
+  background: var(--failure-badge-bg);
+}
+
+.pagination {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: $spacing-sm;
+  margin-top: $spacing-md;
+  color: var(--muted-foreground);
+  font-size: 13px;
+}
+
+.detail {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-md;
+  max-height: min(72vh, 820px);
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.loadingHint {
+  color: var(--muted-foreground);
+  font-size: 13px;
+}
+
+.detailMeta {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: $spacing-sm;
+
+  div {
+    padding: 10px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: $radius-md;
+    background: var(--bg-secondary);
+  }
+
+  span {
+    display: block;
+    margin-bottom: 4px;
+    color: var(--muted-foreground);
+    font-size: 12px;
+  }
+
+  strong {
+    color: var(--text-primary);
+    font-size: 13px;
+    word-break: break-word;
+  }
+}
+
+.detailSection {
+  h3 {
+    margin: 0 0 8px;
+    color: var(--text-primary);
+    font-size: 14px;
+  }
+
+  pre {
+    margin: 0 0 8px;
+    padding: 12px;
+    border: 1px solid var(--border-color);
+    border-radius: $radius-md;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-size: 12px;
+    line-height: 1.55;
+  }
+}

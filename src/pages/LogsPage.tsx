@@ -28,6 +28,7 @@ import { useHeaderRefresh } from '@/hooks/useHeaderRefresh';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { useAuthStore, useConfigStore, useNotificationStore } from '@/stores';
 import { logsApi, type LogsQuery } from '@/services/api/logs';
+import { RequestLogsPanel } from '@/features/requestLogs/RequestLogsPanel';
 import { versionApi } from '@/services/api/version';
 import { copyToClipboard } from '@/utils/clipboard';
 import { getErrorMessage } from '@/utils/helpers';
@@ -137,7 +138,7 @@ const responseDataToText = async (data: unknown): Promise<string> => {
   }
 };
 
-type TabType = 'logs' | 'errors';
+type TabType = 'logs' | 'requests' | 'errors';
 
 export function LogsPage() {
   const { t } = useTranslation();
@@ -717,6 +718,16 @@ export function LogsPage() {
         </button>
         <button
           type="button"
+          className={`${styles.tabItem} ${activeTab === 'requests' ? styles.tabActive : ''}`}
+          onClick={() => {
+            setFullscreenLogs(false);
+            setActiveTab('requests');
+          }}
+        >
+          请求日志
+        </button>
+        <button
+          type="button"
           className={`${styles.tabItem} ${activeTab === 'errors' ? styles.tabActive : ''}`}
           onClick={() => {
             setFullscreenLogs(false);
@@ -728,6 +739,7 @@ export function LogsPage() {
       </div>
 
       <div className={styles.content}>
+        {activeTab === 'requests' && <RequestLogsPanel />}
         {activeTab === 'logs' && (
           <Card
             className={[styles.logCard, fullscreenLogs ? styles.logCardFullscreen : '']

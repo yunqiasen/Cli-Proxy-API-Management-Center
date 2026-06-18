@@ -20,12 +20,18 @@ import { ProviderStatusBar } from '@/components/providers/ProviderStatusBar';
 import {
   getOpenAIProviderRecentStatusData,
   getOpenAIProviderTotalStats,
+  getOpenAIProviderUsageDetails,
   getProviderRecentStatusData,
   getProviderTotalStats,
+  getProviderUsageDetails,
   type ProviderRecentUsageMap,
 } from '@/components/providers/utils';
 import type { OpenAIProviderConfig } from '@/types';
-import type { StatusBarData } from '@/utils/recentRequests';
+import type {
+  ApiKeyUsageFailureDetail,
+  ApiKeyUsageSuccessDetail,
+  StatusBarData
+} from '@/utils/recentRequests';
 import type { ProviderResource } from '../types';
 import styles from './ProviderResourceTable.module.scss';
 import statusBarStyles from './providerStatusBar.module.scss';
@@ -78,6 +84,23 @@ const resolveTotalStats = (
     resource.baseUrl ?? undefined
   );
 };
+
+const resolveUsageDetails = (
+  resource: ProviderResource,
+  usageByProvider: ProviderRecentUsageMap
+): { successDetails: ApiKeyUsageSuccessDetail[]; failureDetails: ApiKeyUsageFailureDetail[] } => {
+  if (resource.brand === 'openaiCompatibility') {
+    return getOpenAIProviderUsageDetails(resource.raw as OpenAIProviderConfig, usageByProvider);
+  }
+  return getProviderUsageDetails(
+    usageByProvider,
+    resource.brand,
+    resource.apiKey ?? undefined,
+    resource.baseUrl ?? undefined
+  );
+};
+
+const formatStatus = (status: number) => (status > 0 ? String(status) : 'unknown');
 
 export function ProviderResourceTable({
   resources,
@@ -141,6 +164,61 @@ export function ProviderResourceTable({
         <IconCheckCircle2 size={14} />
         {t('providersPage.status.active')}
       </span>
+    );
+  };
+
+  const renderSuccessDetailRows = (items: ApiKeyUsageSuccessDetail[]) => (
+    <div className={styles.usageTooltipRows}>
+      {items.slice(0, 10).map((item) => (
+        <div className={styles.usageTooltipRow} key={`${item.model}-${item.status}`}>
+          <span>{item.model}</span>
+          <span>{formatStatus(item.status)}</span>
+          <strong>{item.count}</strong>
+        </div>
+      ))}
+    </div>
+  );
+
+  const renderFailureDetailRows = (items: ApiKeyUsageFailureDetail[]) => (
+    <div className={styles.usageTooltipRows}>
+      {items.slice(0, 10).map((item) => (
+        <div className={styles.usageTooltipRow} key={`${item.model}-${item.status}-${item.error}`}>
+          <span>{item.model}</span>
+          <span>{formatStatus(item.status)}</span>
+          <strong>{item.count}</strong>
+          <em>{item.error}</em>
+        </div>
+      ))}
+    </div>
+  );
+
+  const renderUsageStats = (resource: ProviderResource, usage: ProviderRecentUsageMap) => {
+    const stats = resolveTotalStats(resource, usage);
+    const details = resolveUsageDetails(resource, usage);
+    const hasSuccessDetails = stats.success > 0 && details.successDetails.length > 0;
+    const hasFailureDetails = stats.failure > 0 && details.failureDetails.length > 0;
+
+    return (
+      <div className={styles.stats}>
+        <span className={`${styles.statPill} ${styles.statSuccess} ${hasSuccessDetails ? styles.statInteractive : ''}`}>
+          {t('stats.success')}: {stats.success}
+          {hasSuccessDetails && (
+            <span className={styles.usageTooltip}>
+              <span className={styles.usageTooltipTitle}>{t('stats.success')}</span>
+              {renderSuccessDetailRows(details.successDetails)}
+            </span>
+          )}
+        </span>
+        <span className={`${styles.statPill} ${styles.statFailure} ${hasFailureDetails ? styles.statInteractive : ''}`}>
+          {t('stats.failure')}: {stats.failure}
+          {hasFailureDetails && (
+            <span className={styles.usageTooltip}>
+              <span className={styles.usageTooltipTitle}>{t('stats.failure')}</span>
+              {renderFailureDetailRows(details.failureDetails)}
+            </span>
+          )}
+        </span>
+      </div>
     );
   };
 
@@ -216,19 +294,7 @@ export function ProviderResourceTable({
                   {renderStatus(resource)}
                   {usageByProvider ? (
                     <>
-                      {(() => {
-                        const stats = resolveTotalStats(resource, usageByProvider);
-                        return (
-                          <div className={styles.stats}>
-                            <span className={`${styles.statPill} ${styles.statSuccess}`}>
-                              {t('stats.success')}: {stats.success}
-                            </span>
-                            <span className={`${styles.statPill} ${styles.statFailure}`}>
-                              {t('stats.failure')}: {stats.failure}
-                            </span>
-                          </div>
-                        );
-                      })()}
+                      {renderUsageStats(resource, usageByProvider)}
                       <ProviderStatusBar
                         statusData={resolveStatusBarData(resource, usageByProvider)}
                         styles={statusBarStyles}

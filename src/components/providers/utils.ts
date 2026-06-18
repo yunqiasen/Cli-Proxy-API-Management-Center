@@ -4,6 +4,8 @@ import {
   mergeRecentRequestBucketGroups,
   statusBarDataFromRecentRequests,
   sumRecentRequests,
+  type ApiKeyUsageFailureDetail,
+  type ApiKeyUsageSuccessDetail,
   type RecentRequestBucket,
   type RecentRequestUsageEntry,
   type StatusBarData,
@@ -120,6 +122,8 @@ const EMPTY_RECENT_USAGE_ENTRY: RecentRequestUsageEntry = {
   success: 0,
   failed: 0,
   recentRequests: [],
+  successDetails: [],
+  failureDetails: []
 };
 
 const normalizeProviderRecentKey = (value: unknown): string =>
@@ -167,6 +171,36 @@ export function getProviderTotalStats(
 ): { success: number; failure: number } {
   const entry = getProviderRecentUsageEntry(usageByProvider, provider, apiKey, baseUrl);
   return { success: entry.success, failure: entry.failed };
+}
+
+const mergeSuccessDetails = (groups: ApiKeyUsageSuccessDetail[][]): ApiKeyUsageSuccessDetail[] => {
+  const merged = new Map<string, ApiKeyUsageSuccessDetail>();
+  groups.flat().forEach((item) => {
+    const key = `${item.model}|${item.status}`;
+    const current = merged.get(key);
+    merged.set(key, current ? { ...current, count: current.count + item.count } : { ...item });
+  });
+  return Array.from(merged.values()).sort((a, b) => b.count - a.count).slice(0, 10);
+};
+
+const mergeFailureDetails = (groups: ApiKeyUsageFailureDetail[][]): ApiKeyUsageFailureDetail[] => {
+  const merged = new Map<string, ApiKeyUsageFailureDetail>();
+  groups.flat().forEach((item) => {
+    const key = `${item.model}|${item.status}|${item.error}`;
+    const current = merged.get(key);
+    merged.set(key, current ? { ...current, count: current.count + item.count } : { ...item });
+  });
+  return Array.from(merged.values()).sort((a, b) => b.count - a.count).slice(0, 10);
+};
+
+export function getProviderUsageDetails(
+  usageByProvider: ProviderRecentUsageMap,
+  provider: string,
+  apiKey?: string,
+  baseUrl?: string
+): { successDetails: ApiKeyUsageSuccessDetail[]; failureDetails: ApiKeyUsageFailureDetail[] } {
+  const entry = getProviderRecentUsageEntry(usageByProvider, provider, apiKey, baseUrl);
+  return { successDetails: entry.successDetails, failureDetails: entry.failureDetails };
 }
 
 export function getProviderRecentWindowStats(
@@ -219,6 +253,19 @@ export function getOpenAIProviderTotalStats(
     },
     { success: 0, failure: 0 }
   );
+}
+
+export function getOpenAIProviderUsageDetails(
+  provider: OpenAIProviderConfig,
+  usageByProvider: ProviderRecentUsageMap
+): { successDetails: ApiKeyUsageSuccessDetail[]; failureDetails: ApiKeyUsageFailureDetail[] } {
+  const usageEntries = (provider.apiKeyEntries || []).map((entry) =>
+    getProviderRecentUsageEntry(usageByProvider, provider.name, entry.apiKey, provider.baseUrl)
+  );
+  return {
+    successDetails: mergeSuccessDetails(usageEntries.map((entry) => entry.successDetails)),
+    failureDetails: mergeFailureDetails(usageEntries.map((entry) => entry.failureDetails))
+  };
 }
 
 export function getOpenAIProviderRecentStatusData(

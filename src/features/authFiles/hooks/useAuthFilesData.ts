@@ -14,6 +14,24 @@ import {
   normalizeProviderKey,
 } from '@/features/authFiles/constants';
 
+const filenameFromContentDisposition = (value: unknown): string => {
+  const header = typeof value === 'string' ? value : '';
+  const utf8Match = header.match(/filename\*=UTF-8''([^;]+)/i);
+  if (utf8Match?.[1]) return decodeURIComponent(utf8Match[1].replace(/"/g, ''));
+  const match = header.match(/filename="?([^";]+)"?/i);
+  return match?.[1]?.trim() || '';
+};
+
+const zipFallbackName = (names: string[]): string => {
+  const providers = new Set(
+    names
+      .map((name) => normalizeProviderKey(name.split(/[._-]/)[0] || ''))
+      .filter(Boolean)
+  );
+  const label = providers.size === 1 ? Array.from(providers)[0] : 'credentials';
+  return `${label}-${names.length}.zip`;
+};
+
 type DeleteAllOptions = {
   filter: string;
   problemOnly: boolean;
@@ -562,33 +580,19 @@ export function useAuthFilesData(): UseAuthFilesDataResult {
       const uniqueNames = Array.from(new Set(names));
       if (uniqueNames.length === 0) return;
 
-      let successCount = 0;
-      let failCount = 0;
-
-      for (const name of uniqueNames) {
-        try {
-          const response = await apiClient.getRaw(
-            `/auth-files/download?name=${encodeURIComponent(name)}`,
-            { responseType: 'blob' }
-          );
-          const blob = new Blob([response.data]);
-          downloadBlob({ filename: name, blob });
-          successCount++;
-        } catch {
-          failCount++;
-        }
-      }
-
-      if (failCount === 0) {
+      try {
+        const response = await authFilesApi.downloadZip(uniqueNames);
+        const contentDisposition =
+          response.headers?.['content-disposition'] ?? response.headers?.['Content-Disposition'];
+        const filename = filenameFromContentDisposition(contentDisposition) || zipFallbackName(uniqueNames);
+        downloadBlob({ filename, blob: new Blob([response.data], { type: 'application/zip' }) });
         showNotification(
-          t('auth_files.batch_download_success', { count: successCount }),
+          t('auth_files.batch_download_success', { count: uniqueNames.length }),
           'success'
         );
-      } else {
-        showNotification(
-          t('auth_files.batch_download_partial', { success: successCount, failed: failCount }),
-          'warning'
-        );
+      } catch (err: unknown) {
+        const errorMessage = err instanceof Error ? err.message : t('notification.download_failed');
+        showNotification(`${t('notification.download_failed')}: ${errorMessage}`, 'error');
       }
     },
     [showNotification, t]

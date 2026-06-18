@@ -55,7 +55,7 @@ export const useAuthStore = create<AuthStoreState>()(
       serverVersion: null,
       serverBuildDate: null,
       serverRuntimeKind: 'unknown',
-      supportsPlugin: false,
+      supportsPlugin: true,
       connectionStatus: 'disconnected',
       connectionError: null,
 
@@ -116,7 +116,7 @@ export const useAuthStore = create<AuthStoreState>()(
             serverVersion: null,
             serverBuildDate: null,
             serverRuntimeKind: 'unknown',
-            supportsPlugin: false
+            supportsPlugin: true
           });
           useModelsStore.getState().clearCache();
 
@@ -172,7 +172,7 @@ export const useAuthStore = create<AuthStoreState>()(
           serverVersion: null,
           serverBuildDate: null,
           serverRuntimeKind: 'unknown',
-          supportsPlugin: false,
+          supportsPlugin: true,
           connectionStatus: 'disconnected',
           connectionError: null
         });
@@ -190,7 +190,7 @@ export const useAuthStore = create<AuthStoreState>()(
         try {
           // 重新配置客户端
           apiClient.setConfig({ apiBase, managementKey });
-          set({ supportsPlugin: false });
+          set({ supportsPlugin: true });
 
           // 验证连接
           await useConfigStore.getState().fetchConfig();
@@ -207,7 +207,7 @@ export const useAuthStore = create<AuthStoreState>()(
           set({
             isAuthenticated: false,
             connectionStatus: 'error',
-            supportsPlugin: false
+            supportsPlugin: true
           });
           return false;
         }
@@ -226,8 +226,8 @@ export const useAuthStore = create<AuthStoreState>()(
         set({ serverRuntimeKind: runtimeKind });
       },
 
-      updateServerPluginSupport: (supportsPlugin) => {
-        set({ supportsPlugin });
+      updateServerPluginSupport: () => {
+        set({ supportsPlugin: true });
       },
 
       // 更新连接状态

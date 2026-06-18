@@ -26,6 +26,18 @@ export interface RecentRequestUsageEntry {
   success: number;
   failed: number;
   recentRequests: RecentRequestBucket[];
+  successDetails: ApiKeyUsageSuccessDetail[];
+  failureDetails: ApiKeyUsageFailureDetail[];
+}
+
+export interface ApiKeyUsageSuccessDetail {
+  model: string;
+  status: number;
+  count: number;
+}
+
+export interface ApiKeyUsageFailureDetail extends ApiKeyUsageSuccessDetail {
+  error: string;
 }
 
 export type ApiKeyUsageResponse = Record<
@@ -37,6 +49,10 @@ export type ApiKeyUsageResponse = Record<
       failed?: unknown;
       recent_requests?: unknown;
       recentRequests?: unknown;
+      success_details?: unknown;
+      successDetails?: unknown;
+      failure_details?: unknown;
+      failureDetails?: unknown;
     }
   >
 >;
@@ -98,12 +114,32 @@ export function normalizeRecentRequestBuckets(input: unknown): RecentRequestBuck
   });
 }
 
+const normalizeUsageDetails = <T extends ApiKeyUsageSuccessDetail | ApiKeyUsageFailureDetail>(
+  input: unknown,
+  includeError: boolean
+): T[] => {
+  if (!Array.isArray(input)) return [];
+  return input.slice(0, 10).map((item) => {
+    const record = item && typeof item === 'object' ? (item as Record<string, unknown>) : {};
+    const base = {
+      model: String(record.model ?? 'unknown').trim() || 'unknown',
+      status: toFiniteNumber(record.status),
+      count: toFiniteNumber(record.count)
+    };
+    return (includeError
+      ? { ...base, error: String(record.error ?? 'unknown').trim() || 'unknown' }
+      : base) as T;
+  });
+};
+
 export function normalizeRecentRequestUsageEntry(input: unknown): RecentRequestUsageEntry {
   if (!input || typeof input !== 'object' || Array.isArray(input)) {
     return {
       success: 0,
       failed: 0,
       recentRequests: [],
+      successDetails: [],
+      failureDetails: []
     };
   }
 
@@ -113,6 +149,14 @@ export function normalizeRecentRequestUsageEntry(input: unknown): RecentRequestU
     success: normalizeUsageTotal(record.success),
     failed: normalizeUsageTotal(record.failed),
     recentRequests: normalizeRecentRequestBuckets(record.recent_requests ?? record.recentRequests),
+    successDetails: normalizeUsageDetails<ApiKeyUsageSuccessDetail>(
+      record.success_details ?? record.successDetails,
+      false
+    ),
+    failureDetails: normalizeUsageDetails<ApiKeyUsageFailureDetail>(
+      record.failure_details ?? record.failureDetails,
+      true
+    )
   };
 }
 

@@ -394,6 +394,14 @@ export const authFilesApi = {
     return blob.text();
   },
 
+  downloadZip: (names: string[]) =>
+    apiClient.requestRaw({
+      method: 'POST',
+      url: '/auth-files/download-zip',
+      data: { names },
+      responseType: 'blob'
+    }),
+
   async downloadJsonObject(name: string): Promise<Record<string, unknown>> {
     const rawText = await authFilesApi.downloadText(name);
     return parseAuthFileJsonObject(rawText);

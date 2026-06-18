@@ -8,6 +8,7 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { triggerHeaderRefresh } from '@/hooks/useHeaderRefresh';
+import { quotaRefreshApi, type QuotaRefreshJob } from '@/services/api';
 import { useNotificationStore, useQuotaStore, useThemeStore } from '@/stores';
 import type { AuthFileItem, ResolvedTheme } from '@/types';
 import { getStatusFromError } from '@/utils/quota';
@@ -117,6 +118,7 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
   const [viewMode, setViewMode] = useState<ViewMode>('paged');
   const [showTooManyWarning, setShowTooManyWarning] = useState(false);
   const [resettingQuotaName, setResettingQuotaName] = useState<string | null>(null);
+  const [refreshJob, setRefreshJob] = useState<QuotaRefreshJob | null>(null);
 
   const filteredFiles = useMemo(() => files.filter((file) => config.filterFn(file)), [
     files,
@@ -172,6 +174,64 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
     pendingQuotaRefreshRef.current = true;
     void triggerHeaderRefresh();
   }, []);
+
+  const pollRefreshJob = useCallback(
+    async (jobId: string) => {
+      try {
+        const job = await quotaRefreshApi.getJob(jobId);
+        setRefreshJob(job);
+        if (job.status === 'running') {
+          window.setTimeout(() => void pollRefreshJob(jobId), 2000);
+          return;
+        }
+        showNotification(
+          t('quota_management.refresh_all_done', {
+            defaultValue: '全部凭证刷新完成：成功 {{completed}}，失败 {{failed}}',
+            completed: job.completed,
+            failed: job.failed
+          }),
+          job.failed > 0 ? 'warning' : 'success'
+        );
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : t('common.unknown_error');
+        showNotification(
+          t('quota_management.refresh_all_failed', {
+            defaultValue: '刷新全部凭证任务失败：{{message}}',
+            message
+          }),
+          'error'
+        );
+      }
+    },
+    [showNotification, t]
+  );
+
+  const startBackgroundRefreshAll = useCallback(async () => {
+    if (disabled || refreshJob?.status === 'running') return;
+    try {
+      const job = await quotaRefreshApi.startJob(config.type, undefined, 3);
+      setRefreshJob(job);
+      showNotification(
+        t('quota_management.refresh_all_started', {
+          defaultValue: '已开始后台刷新全部凭证：{{count}} 个',
+          count: job.total
+        }),
+        'success'
+      );
+      if (job.status === 'running') {
+        window.setTimeout(() => void pollRefreshJob(job.id), 2000);
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : t('common.unknown_error');
+      showNotification(
+        t('quota_management.refresh_all_failed', {
+          defaultValue: '刷新全部凭证任务失败：{{message}}',
+          message
+        }),
+        'error'
+      );
+    }
+  }, [config.type, disabled, pollRefreshJob, refreshJob?.status, showNotification, t]);
 
   useEffect(() => {
     const wasLoading = prevFilesLoadingRef.current;
@@ -338,15 +398,38 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
             onClick={handleRefresh}
             disabled={disabled || isRefreshing}
             loading={isRefreshing}
+            title={t('quota_management.refresh_current_page', { defaultValue: '刷新当前页凭证' })}
+            aria-label={t('quota_management.refresh_current_page', { defaultValue: '刷新当前页凭证' })}
+          >
+            {!isRefreshing && <IconRefreshCw size={16} />}
+            {t('quota_management.refresh_current_page', { defaultValue: '刷新当前页凭证' })}
+          </Button>
+          <Button
+            variant="primary"
+            size="sm"
+            className={styles.refreshAllButton}
+            onClick={() => void startBackgroundRefreshAll()}
+            disabled={disabled || refreshJob?.status === 'running'}
+            loading={refreshJob?.status === 'running'}
             title={t('quota_management.refresh_all_credentials')}
             aria-label={t('quota_management.refresh_all_credentials')}
           >
-            {!isRefreshing && <IconRefreshCw size={16} />}
+            {refreshJob?.status !== 'running' && <IconRefreshCw size={16} />}
             {t('quota_management.refresh_all_credentials')}
           </Button>
         </div>
       }
     >
+      {refreshJob && (
+        <div className={styles.jobBanner}>
+          {t('quota_management.refresh_job_progress', {
+            defaultValue: '后台刷新：{{completed}} / {{total}}，失败 {{failed}}',
+            completed: refreshJob.completed,
+            total: refreshJob.total,
+            failed: refreshJob.failed
+          })}
+        </div>
+      )}
       {filteredFiles.length === 0 ? (
         <EmptyState
           title={t(`${config.i18nPrefix}.empty_title`)}

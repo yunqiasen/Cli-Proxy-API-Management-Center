@@ -1,4 +1,5 @@
-import type { ReactNode } from 'react';
+import { useCallback, useState, type FocusEvent, type MouseEvent, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import {
   IconAlertTriangle,
@@ -30,7 +31,7 @@ import type { OpenAIProviderConfig } from '@/types';
 import type {
   ApiKeyUsageFailureDetail,
   ApiKeyUsageSuccessDetail,
-  StatusBarData
+  StatusBarData,
 } from '@/utils/recentRequests';
 import type { ProviderResource } from '../types';
 import styles from './ProviderResourceTable.module.scss';
@@ -49,6 +50,38 @@ interface ProviderResourceTableProps {
 
 const columnWidths = ['18%', '18%', '6%', '14%', '24%', '20%'];
 const maxVisibleModelChips = 4;
+
+type UsageTooltipPlacement = 'left' | 'right';
+
+interface UsageTooltipRow {
+  model: string;
+  status: number;
+  count: number;
+  error?: string;
+}
+
+interface UsageTooltipState {
+  title: string;
+  rows: UsageTooltipRow[];
+  x: number;
+  y: number;
+  placement: UsageTooltipPlacement;
+}
+
+const usageTooltipPoint = (clientX: number, clientY: number) => {
+  const widthEstimate = Math.min(760, Math.max(280, window.innerWidth - 40));
+  const heightEstimate = Math.min(620, window.innerHeight * 0.7);
+  const canShowLeft = clientX - 12 - widthEstimate >= 20;
+  const canShowRight = clientX + 12 + widthEstimate <= window.innerWidth - 20;
+  const placement: UsageTooltipPlacement = canShowRight || !canShowLeft ? 'right' : 'left';
+  return {
+    x: placement === 'left'
+      ? Math.min(window.innerWidth - 20, clientX - 12)
+      : Math.min(Math.max(20, clientX + 12), Math.max(20, window.innerWidth - widthEstimate - 20)),
+    y: Math.min(Math.max(16, clientY + 12), Math.max(16, window.innerHeight - heightEstimate - 16)),
+    placement,
+  };
+};
 
 const resolveStatusBarData = (
   resource: ProviderResource,
@@ -189,30 +222,53 @@ export function ProviderResourceTable({
     );
   };
 
-  const renderSuccessDetailRows = (items: ApiKeyUsageSuccessDetail[]) => (
-    <div className={styles.usageTooltipRows}>
-      {items.slice(0, 10).map((item) => (
-        <div className={styles.usageTooltipRow} key={`${item.model}-${item.status}`}>
-          <span>{item.model}</span>
-          <span>{formatStatus(item.status)}</span>
-          <strong>{item.count}</strong>
-        </div>
-      ))}
-    </div>
+  const [usageTooltip, setUsageTooltip] = useState<UsageTooltipState | null>(null);
+
+  const openUsageTooltip = useCallback(
+    (event: MouseEvent<HTMLElement> | FocusEvent<HTMLElement>, title: string, rows: UsageTooltipRow[]) => {
+      if (!rows.length) return;
+      const point = 'clientX' in event && event.clientX > 0
+        ? usageTooltipPoint(event.clientX, event.clientY)
+        : (() => {
+            const rect = event.currentTarget.getBoundingClientRect();
+            return usageTooltipPoint(rect.left + rect.width / 2, rect.bottom);
+          })();
+      setUsageTooltip({ title, rows: rows.slice(0, 10), ...point });
+    },
+    []
   );
 
-  const renderFailureDetailRows = (items: ApiKeyUsageFailureDetail[]) => (
-    <div className={styles.usageTooltipRows}>
-      {items.slice(0, 10).map((item) => (
-        <div className={styles.usageTooltipRow} key={`${item.model}-${item.status}-${item.error}`}>
-          <span>{item.model}</span>
-          <span>{formatStatus(item.status)}</span>
-          <strong>{item.count}</strong>
-          <em>{item.error}</em>
+  const moveUsageTooltip = useCallback((event: MouseEvent<HTMLElement>) => {
+    setUsageTooltip((current) => (current ? { ...current, ...usageTooltipPoint(event.clientX, event.clientY) } : current));
+  }, []);
+
+  const closeUsageTooltip = useCallback(() => setUsageTooltip(null), []);
+
+  const renderUsageTooltip = () => {
+    if (!usageTooltip || typeof document === 'undefined') return null;
+    return createPortal(
+      <div
+        className={`${styles.usageTooltipPortal} ${
+          usageTooltip.placement === 'left' ? styles.usageTooltipPortalLeft : styles.usageTooltipPortalRight
+        }`}
+        style={{ left: usageTooltip.x, top: usageTooltip.y }}
+        role="tooltip"
+      >
+        <span className={styles.usageTooltipTitle}>{usageTooltip.title}</span>
+        <div className={styles.usageTooltipRows}>
+          {usageTooltip.rows.map((item, index) => (
+            <div className={styles.usageTooltipRow} key={`${item.model}-${item.status}-${item.error ?? ''}-${index}`}>
+              <span>{item.model}</span>
+              <span>{formatStatus(item.status)}</span>
+              <strong>{item.count}</strong>
+              {item.error ? <em>{item.error}</em> : null}
+            </div>
+          ))}
         </div>
-      ))}
-    </div>
-  );
+      </div>,
+      document.body
+    );
+  };
 
   const renderUsageStats = (resource: ProviderResource, usage: ProviderRecentUsageMap) => {
     const stats = resolveTotalStats(resource, usage);
@@ -220,25 +276,41 @@ export function ProviderResourceTable({
     const hasSuccessDetails = stats.success > 0 && details.successDetails.length > 0;
     const hasFailureDetails = stats.failure > 0 && details.failureDetails.length > 0;
 
+    const successRows = details.successDetails.map((item) => ({
+      model: item.model,
+      status: item.status,
+      count: item.count,
+    }));
+    const failureRows = details.failureDetails.map((item) => ({
+      model: item.model,
+      status: item.status,
+      count: item.count,
+      error: item.error,
+    }));
+
     return (
       <div className={styles.stats}>
-        <span className={`${styles.statPill} ${styles.statSuccess} ${hasSuccessDetails ? styles.statInteractive : ''}`}>
+        <span
+          className={`${styles.statPill} ${styles.statSuccess} ${hasSuccessDetails ? styles.statInteractive : ''}`}
+          tabIndex={hasSuccessDetails ? 0 : undefined}
+          onMouseEnter={hasSuccessDetails ? (event) => openUsageTooltip(event, t('stats.success'), successRows) : undefined}
+          onMouseMove={hasSuccessDetails ? moveUsageTooltip : undefined}
+          onMouseLeave={hasSuccessDetails ? closeUsageTooltip : undefined}
+          onFocus={hasSuccessDetails ? (event) => openUsageTooltip(event, t('stats.success'), successRows) : undefined}
+          onBlur={hasSuccessDetails ? closeUsageTooltip : undefined}
+        >
           {t('stats.success')}: {stats.success}
-          {hasSuccessDetails && (
-            <span className={styles.usageTooltip}>
-              <span className={styles.usageTooltipTitle}>{t('stats.success')}</span>
-              {renderSuccessDetailRows(details.successDetails)}
-            </span>
-          )}
         </span>
-        <span className={`${styles.statPill} ${styles.statFailure} ${hasFailureDetails ? styles.statInteractive : ''}`}>
+        <span
+          className={`${styles.statPill} ${styles.statFailure} ${hasFailureDetails ? styles.statInteractive : ''}`}
+          tabIndex={hasFailureDetails ? 0 : undefined}
+          onMouseEnter={hasFailureDetails ? (event) => openUsageTooltip(event, t('stats.failure'), failureRows) : undefined}
+          onMouseMove={hasFailureDetails ? moveUsageTooltip : undefined}
+          onMouseLeave={hasFailureDetails ? closeUsageTooltip : undefined}
+          onFocus={hasFailureDetails ? (event) => openUsageTooltip(event, t('stats.failure'), failureRows) : undefined}
+          onBlur={hasFailureDetails ? closeUsageTooltip : undefined}
+        >
           {t('stats.failure')}: {stats.failure}
-          {hasFailureDetails && (
-            <span className={styles.usageTooltip}>
-              <span className={styles.usageTooltipTitle}>{t('stats.failure')}</span>
-              {renderFailureDetailRows(details.failureDetails)}
-            </span>
-          )}
         </span>
       </div>
     );
@@ -282,6 +354,7 @@ export function ProviderResourceTable({
   };
 
   return (
+    <>
     <Table
       cols={columnWidths.map((w, i) => (
         <col key={i} style={{ width: w }} />
@@ -391,5 +464,7 @@ export function ProviderResourceTable({
         })}
       </TableBody>
     </Table>
+    {renderUsageTooltip()}
+    </>
   );
 }

@@ -521,7 +521,7 @@ export function BaseProviderForm({
                 id={`${fid}-apiKey`}
                 className={styles.passwordInput}
                 type={showSingleApiKey ? 'text' : 'password'}
-                value={form.apiKey}
+                value={showSingleApiKey && !form.apiKey ? fallbackApiKey : form.apiKey}
                 onChange={(e) => updateField('apiKey', e.target.value)}
                 autoComplete="new-password"
                 data-1p-ignore="true"
@@ -806,7 +806,11 @@ export function BaseProviderForm({
                       <input
                         className={styles.passwordInput}
                         type={showPasswords.has(realIdx) ? 'text' : 'password'}
-                        value={entry.apiKey}
+                        value={
+                          showPasswords.has(realIdx) && !entry.apiKey
+                            ? entry.existingApiKey ?? ''
+                            : entry.apiKey
+                        }
                         onChange={(e) =>
                           updateField(
                             'apiKeyEntries',

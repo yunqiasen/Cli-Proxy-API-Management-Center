@@ -29,16 +29,17 @@
 
 .table {
   width: 100%;
-  min-width: 1180px;
+  min-width: 1440px;
   border-collapse: collapse;
   font-size: 12px;
+  table-layout: fixed;
 
   th,
   td {
-    padding: 10px 12px;
+    padding: 9px 10px;
     border-bottom: 1px solid var(--border-color);
     text-align: left;
-    vertical-align: top;
+    vertical-align: middle;
   }
 
   th {
@@ -48,11 +49,14 @@
     background: var(--bg-secondary);
     color: var(--muted-foreground);
     font-weight: 700;
+    white-space: nowrap;
   }
 
   td {
-    max-width: 220px;
     color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 }
 
@@ -85,13 +89,22 @@
   font-size: 13px;
 }
 
+.detailModal {
+  :global(.modal-body) {
+    max-height: min(78vh, 860px);
+    overflow: auto;
+    overscroll-behavior: contain;
+    scroll-behavior: auto;
+  }
+}
+
 .detail {
   display: flex;
   flex-direction: column;
   gap: $spacing-md;
-  max-height: min(72vh, 820px);
-  overflow: auto;
-  padding-right: 4px;
+  max-height: none;
+  overflow: visible;
+  padding-right: 0;
 }
 
 .loadingHint {
@@ -132,6 +145,12 @@
     font-size: 14px;
   }
 
+  h4 {
+    margin: 0 0 6px;
+    color: var(--text-primary);
+    font-size: 13px;
+  }
+
   pre {
     margin: 0 0 8px;
     padding: 12px;
@@ -144,4 +163,63 @@
     font-size: 12px;
     line-height: 1.55;
   }
+}
+
+.toolGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: $spacing-sm;
+}
+
+.toolCard,
+.mcpBlock {
+  border: 1px solid var(--border-color);
+  border-radius: $radius-md;
+  background: var(--bg-secondary);
+  padding: 12px;
+}
+
+.toolCard {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+
+  strong {
+    color: var(--text-primary);
+    font-size: 13px;
+  }
+
+  span {
+    color: var(--muted-foreground);
+    font-size: 11px;
+    font-family: $font-mono;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  p {
+    margin: 4px 0 0;
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 1.45;
+    word-break: break-word;
+  }
+}
+
+.mcpBlock {
+  margin-bottom: $spacing-sm;
+
+  pre {
+    background: var(--bg-primary);
+  }
+}
+
+.pathLine {
+  margin: -2px 0 8px;
+  color: var(--muted-foreground);
+  font-family: $font-mono;
+  font-size: 11px;
+  overflow-wrap: anywhere;
 }

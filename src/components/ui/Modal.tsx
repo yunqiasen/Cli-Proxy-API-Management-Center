@@ -4,6 +4,7 @@ import {
   useId,
   useRef,
   useState,
+  type PointerEvent,
   type PropsWithChildren,
   type ReactNode,
 } from 'react';
@@ -20,6 +21,7 @@ interface ModalProps {
   width?: number | string;
   className?: string;
   closeDisabled?: boolean;
+  closeOnOverlayClick?: boolean;
 }
 
 const CLOSE_ANIMATION_DURATION = 350;
@@ -32,6 +34,7 @@ export function Modal({
   width = 520,
   className,
   closeDisabled = false,
+  closeOnOverlayClick = false,
   children,
 }: PropsWithChildren<ModalProps>) {
   const { t } = useTranslation();
@@ -94,6 +97,16 @@ export function Modal({
   const handleClose = useCallback(() => {
     startClose(true);
   }, [startClose]);
+
+  const handleOverlayPointerDown = useCallback(
+    (event: PointerEvent<HTMLDivElement>) => {
+      if (!closeOnOverlayClick || closeDisabled) return;
+      if (event.target !== event.currentTarget) return;
+      event.preventDefault();
+      handleClose();
+    },
+    [closeDisabled, closeOnOverlayClick, handleClose]
+  );
 
   useEffect(() => {
     return () => {
@@ -181,7 +194,7 @@ export function Modal({
   const modalClass = `modal ${isClosing ? 'modal-closing' : 'modal-entering'}${className ? ` ${className}` : ''}`;
 
   const modalContent = (
-    <div className={overlayClass}>
+    <div className={overlayClass} onPointerDown={handleOverlayPointerDown}>
       <div
         ref={modalRef}
         className={modalClass}

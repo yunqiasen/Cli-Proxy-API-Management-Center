@@ -17,6 +17,7 @@ export interface RequestLogItem {
   prompt_preview?: string;
   output_preview?: string;
   error_preview?: string;
+  tool_preview?: string;
   called_tools_preview?: string;
   system_prompt_preview?: string;
   has_error?: boolean;
@@ -27,9 +28,10 @@ export interface RequestLogDetail extends RequestLogItem {
   output?: string;
   error?: string;
   system_prompt?: string;
-  mcps?: Array<{ name: string; description?: string; tools?: Array<{ name: string; description?: string }> }>;
+  available_tools?: Array<{ name: string; display_name?: string; type?: string; description?: string; summary?: string }>;
+  mcps?: Array<{ name: string; description?: string; tools?: Array<{ name: string; display_name?: string; type?: string; description?: string; summary?: string }> }>;
   skills?: Array<{ name: string; description?: string; path?: string; prompt?: string }>;
-  called_tools?: Array<{ name: string; display_name?: string; type?: string; description?: string }>;
+  called_tools?: Array<{ name: string; display_name?: string; type?: string; description?: string; summary?: string }>;
 }
 
 export interface RequestLogsResponse {

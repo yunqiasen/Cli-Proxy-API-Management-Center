@@ -60,6 +60,7 @@ const matchesFilter = (r: ProviderResource, normalized: string): boolean => {
     r.baseUrl,
     r.proxyUrl,
     r.prefix,
+    ...r.modelSearchTerms,
   ]
     .filter(Boolean)
     .map((v) => String(v).toLowerCase());
@@ -182,7 +183,7 @@ export function ProvidersWorkbenchPage() {
     if (!activeGroup) return [];
     const seen = new Set<string>();
     activeGroup.resources.forEach((r) => {
-      r.models.forEach((name) => seen.add(name));
+      r.modelSearchTerms.forEach((name) => seen.add(name));
     });
     return Array.from(seen).sort();
   }, [activeGroup]);
@@ -198,7 +199,7 @@ export function ProvidersWorkbenchPage() {
   const visibleResources = useMemo(() => {
     let arr = filteredResources;
     if (selectedModels.size > 0) {
-      arr = arr.filter((r) => r.models.some((name) => selectedModels.has(name)));
+      arr = arr.filter((r) => r.modelSearchTerms.some((name) => selectedModels.has(name)));
     }
 
     const sorted = [...arr].sort((a, b) => {

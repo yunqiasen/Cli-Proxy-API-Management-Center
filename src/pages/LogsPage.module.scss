@@ -674,6 +674,25 @@
   }
 }
 
+.modelBadge {
+  display: inline-flex;
+  align-items: center;
+  max-width: 340px;
+  padding: 2px 8px;
+  border-radius: $radius-full;
+  border: 1px solid rgba($primary-color, 0.28);
+  background: rgba($primary-color, 0.1);
+  color: var(--primary-color);
+  font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  @include mobile {
+    max-width: 100%;
+  }
+}
+
 .message {
   color: var(--text-secondary);
   word-break: break-word;

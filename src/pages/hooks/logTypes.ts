@@ -22,6 +22,7 @@ export type ParsedLogLine = {
   ip?: string;
   method?: HttpMethod;
   path?: string;
+  model?: string;
   message: string;
 };
 

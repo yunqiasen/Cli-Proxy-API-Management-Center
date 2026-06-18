@@ -55,6 +55,46 @@
   align-items: center;
 }
 
+.modelSummaryCell {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.modelChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  min-width: 0;
+}
+
+.modelChip,
+.modelMore {
+  display: inline-flex;
+  align-items: center;
+  max-width: 180px;
+  padding: 2px 7px;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(59, 130, 246, 0.22);
+  background: rgba(59, 130, 246, 0.08);
+  color: var(--text-primary);
+  font-family: $font-mono;
+  font-size: 11px;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.modelMore {
+  color: var(--muted-foreground);
+  background: var(--muted-bg);
+  border-color: var(--border-color);
+  font-family: inherit;
+  font-weight: 700;
+}
+
 .metric {
   display: inline-flex;
   align-items: center;

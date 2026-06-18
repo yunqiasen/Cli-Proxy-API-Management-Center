@@ -48,6 +48,7 @@ interface ProviderResourceTableProps {
 }
 
 const columnWidths = ['18%', '18%', '6%', '14%', '24%', '20%'];
+const maxVisibleModelChips = 4;
 
 const resolveStatusBarData = (
   resource: ProviderResource,
@@ -127,6 +128,22 @@ export function ProviderResourceTable({
     </span>
   );
 
+  const renderModelChips = (r: ProviderResource) => {
+    if (r.modelDisplays.length === 0) return null;
+    const visibleModels = r.modelDisplays.slice(0, maxVisibleModelChips);
+    const hiddenCount = Math.max(r.modelDisplays.length - visibleModels.length, 0);
+    return (
+      <div className={styles.modelChips} title={r.modelDisplays.join(', ')}>
+        {visibleModels.map((name) => (
+          <span key={name} className={styles.modelChip}>
+            {name}
+          </span>
+        ))}
+        {hiddenCount > 0 && <span className={styles.modelMore}>+{hiddenCount}</span>}
+      </div>
+    );
+  };
+
   const renderModelsSummary = (r: ProviderResource) => {
     const items: ReactNode[] = [];
     if (r.brand === 'openaiCompatibility') {
@@ -147,7 +164,12 @@ export function ProviderResourceTable({
         items.push(renderFlagTag('cloak', t('providersPage.table.cloakTag')));
       }
     }
-    return <div className={styles.metricsCell}>{items}</div>;
+    return (
+      <div className={styles.modelSummaryCell}>
+        <div className={styles.metricsCell}>{items}</div>
+        {renderModelChips(r)}
+      </div>
+    );
   };
 
   const renderStatus = (r: ProviderResource) => {

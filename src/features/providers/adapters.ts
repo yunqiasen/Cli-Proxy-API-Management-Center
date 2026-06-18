@@ -13,11 +13,24 @@ import type {
 const countHeaders = (headers?: Record<string, string>): number =>
   headers ? Object.keys(headers).length : 0;
 
-const collectModelNames = (models?: Array<{ name?: string }>): string[] => {
+const collectModelSearchTerms = (models?: Array<{ name?: string; alias?: string }>): string[] => {
   const seen = new Set<string>();
   (models ?? []).forEach((model) => {
     const name = (model?.name ?? '').trim();
+    const alias = (model?.alias ?? '').trim();
+    if (alias) seen.add(alias);
     if (name) seen.add(name);
+  });
+  return Array.from(seen);
+};
+
+const collectModelDisplayNames = (models?: Array<{ name?: string; alias?: string }>): string[] => {
+  const seen = new Set<string>();
+  (models ?? []).forEach((model) => {
+    const alias = (model?.alias ?? '').trim();
+    const name = (model?.name ?? '').trim();
+    const display = alias || name;
+    if (display) seen.add(display);
   });
   return Array.from(seen);
 };
@@ -51,6 +64,7 @@ function providerKeyToResource(
     flags.cloakEnabled = Boolean(cloak?.mode?.trim());
   }
 
+  const modelSearchTerms = collectModelSearchTerms(config.models);
   const selector: ProviderResourceSelector = {
     brand,
     apiKey,
@@ -71,7 +85,9 @@ function providerKeyToResource(
     proxyUrl: config.proxyUrl ?? null,
     prefix: config.prefix ?? null,
     modelCount: config.models?.length ?? 0,
-    models: collectModelNames(config.models),
+    models: modelSearchTerms,
+    modelDisplays: collectModelDisplayNames(config.models),
+    modelSearchTerms,
     priority: normalizePriority(config.priority),
     headerCount: countHeaders(config.headers),
     excludedModelCount: stripDisableAllModelsRule(config.excludedModels).length,
@@ -106,6 +122,7 @@ export function openaiToResource(
   const name = (config.name ?? '').trim();
   const firstEntry = config.apiKeyEntries?.[0];
   const previewApiKey = firstEntry?.apiKey ? maskApiKey(firstEntry.apiKey) : null;
+  const modelSearchTerms = collectModelSearchTerms(config.models);
   return {
     id: buildId('openaiCompatibility', index, truncateForId(name) || `#${index}`),
     brand: 'openaiCompatibility',
@@ -119,7 +136,9 @@ export function openaiToResource(
     proxyUrl: null,
     prefix: config.prefix ?? null,
     modelCount: config.models?.length ?? 0,
-    models: collectModelNames(config.models),
+    models: modelSearchTerms,
+    modelDisplays: collectModelDisplayNames(config.models),
+    modelSearchTerms,
     priority: normalizePriority(config.priority),
     headerCount: countHeaders(config.headers),
     excludedModelCount: 0,

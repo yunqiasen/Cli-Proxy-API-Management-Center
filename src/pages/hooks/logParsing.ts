@@ -12,8 +12,16 @@ const LOG_IPV6_REGEX = /\b(?:[a-f0-9]{0,4}:){2,7}[a-f0-9]{0,4}\b/i;
 const LOG_REQUEST_ID_REGEX = /^([a-f0-9]{8}|--------)$/i;
 const LOG_NAMED_REQUEST_ID_REGEX = /\brequest[_-]?id=([A-Za-z0-9][A-Za-z0-9._:-]{0,127})\b/i;
 const LOG_TIME_OF_DAY_REGEX = /^\d{1,2}:\d{2}:\d{2}(?:\.\d{1,3})?$/;
+const LOG_MODEL_PATTERNS: RegExp[] = [
+  /\bmodel=("[^"]+"|'[^']+'|[^\s|]+)/i,
+  /\bmodel:\s*("[^"]+"|'[^']+'|[^\s|]+)/i,
+  /"model"\s*:\s*"([^"]+)"/i,
+];
 const GIN_TIMESTAMP_SEGMENT_REGEX =
   /^\[GIN\]\s+(\d{4})\/(\d{2})\/(\d{2})\s*-\s*(\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?)\s*$/;
+const HTTP_METHOD_PATH_QUOTED_REGEX = new RegExp(
+  `(?:\\(|\\b)(${HTTP_METHODS.join('|')})\\b(?:\\s+\\b(?:${HTTP_METHODS.join('|')})\\b)?\\)?\\s+"([^"]+)"`
+);
 
 const HTTP_STATUS_PATTERNS: RegExp[] = [
   /\|\s*([1-5]\d{2})\s*\|/,
@@ -96,14 +104,33 @@ const extractNamedRequestId = (text: string): string | undefined => {
   return id;
 };
 
+const cleanToken = (value: string): string =>
+  value.trim().replace(/^["']|["',;]+$/g, '');
+
+const extractModel = (text: string): string | undefined => {
+  for (const pattern of LOG_MODEL_PATTERNS) {
+    const match = text.match(pattern);
+    if (!match) continue;
+    const model = cleanToken(match[1]);
+    if (model) return model;
+  }
+  return undefined;
+};
+
 const extractHttpMethodAndPath = (text: string): { method?: HttpMethod; path?: string } => {
+  const quotedMatch = text.match(HTTP_METHOD_PATH_QUOTED_REGEX);
+  if (quotedMatch) {
+    return { method: quotedMatch[1] as HttpMethod, path: quotedMatch[2] };
+  }
+
   const match = text.match(HTTP_METHOD_REGEX);
   if (!match) return {};
 
   const method = match[1] as HttpMethod;
   const index = match.index ?? 0;
   const after = text.slice(index + match[0].length).trim();
-  const path = after ? after.split(/\s+/)[0] : undefined;
+  const token = after ? after.split(/\s+/)[0] : '';
+  const path = token && !HTTP_METHOD_REGEX.test(token) ? cleanToken(token) : undefined;
   return { method, path };
 };
 
@@ -146,6 +173,7 @@ export const parseLogLine = (raw: string): ParsedLogLine => {
   let ip: string | undefined;
   let method: HttpMethod | undefined;
   let path: string | undefined;
+  let model: string | undefined;
   let message = remaining;
 
   if (remaining.includes('|')) {
@@ -238,6 +266,14 @@ export const parseLogLine = (raw: string): ParsedLogLine => {
       consumed.add(methodIndex);
     }
 
+    const modelIndex = segments.findIndex((segment) =>
+      /^model\s*[:=]/i.test(segment.trim()) && Boolean(extractModel(segment))
+    );
+    if (modelIndex >= 0) {
+      model = extractModel(segments[modelIndex]);
+      consumed.add(modelIndex);
+    }
+
     // source (e.g. [gin_logger.go:94])
     const sourceIndex = segments.findIndex((segment) => LOG_SOURCE_REGEX.test(segment));
     if (sourceIndex >= 0) {
@@ -261,12 +297,15 @@ export const parseLogLine = (raw: string): ParsedLogLine => {
     method = parsed.method;
     path = parsed.path;
 
+    model = extractModel(remaining);
+
     if (!requestId) {
       requestId = extractNamedRequestId(remaining);
     }
   }
 
   if (!level) level = inferLogLevel(raw);
+  if (!model) model = extractModel(raw);
 
   if (message) {
     const match = message.match(GIN_TIMESTAMP_SEGMENT_REGEX);
@@ -290,6 +329,7 @@ export const parseLogLine = (raw: string): ParsedLogLine => {
     ip,
     method,
     path,
+    model,
     message,
   };
 };

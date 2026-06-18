@@ -49,6 +49,10 @@ export interface ProviderResource {
   modelCount: number;
   /** 去重后的模型名, 供筛选/搜索用 */
   models: string[];
+  /** 表格显示用模型名, alias 优先 */
+  modelDisplays: string[];
+  /** 模型搜索项, 同时包含 alias 与真实模型名 */
+  modelSearchTerms: string[];
   /** 排序用优先级,未配置时为 0 */
   priority: number;
   headerCount: number;

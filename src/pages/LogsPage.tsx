@@ -1117,6 +1117,12 @@ export function LogsPage() {
                               </span>
                             )}
 
+                            {line.model && (
+                              <span className={styles.modelBadge} title={line.model}>
+                                {line.model}
+                              </span>
+                            )}
+
                             {line.message && <span className={styles.message}>{line.message}</span>}
                           </div>
                         </div>

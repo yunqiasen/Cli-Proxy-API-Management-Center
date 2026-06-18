@@ -177,6 +177,22 @@ export function ProviderResourceTable({
     );
   };
 
+  const renderRoutingMeta = (r: ProviderResource) => {
+    const excludedTitle = r.excludedModels.length > 0 ? r.excludedModels.join(', ') : '';
+    return (
+      <div className={styles.routingMeta}>
+        <span className={styles.priorityTag} title={t('providersPage.form.priority')}>
+          {t('providersPage.form.priority')}: {r.priority}
+        </span>
+        {r.excludedModelCount > 0 ? (
+          <span className={styles.excludedTag} title={excludedTitle}>
+            {t('providersPage.form.excludedSection')}: {r.excludedModelCount}
+          </span>
+        ) : null}
+      </div>
+    );
+  };
+
   const renderModelsSummary = (r: ProviderResource) => {
     const items: ReactNode[] = [];
     if (r.brand === 'openaiCompatibility') {
@@ -200,6 +216,7 @@ export function ProviderResourceTable({
     return (
       <div className={styles.modelSummaryCell}>
         <div className={styles.metricsCell}>{items}</div>
+        {renderRoutingMeta(r)}
         {renderModelChips(r)}
       </div>
     );

@@ -12,6 +12,7 @@ import type {
   PluginStoreInstallResult,
   PluginStoreResponse,
   PluginStoreSource,
+  PluginStoreSourceError,
 } from '@/types';
 
 const asString = (value: unknown): string => {
@@ -181,6 +182,18 @@ const normalizeStoreSource = (value: unknown): PluginStoreSource | null => {
   };
 };
 
+const normalizeStoreSourceError = (value: unknown): PluginStoreSourceError | null => {
+  if (!isRecord(value)) return null;
+  const message = asString(value.message).trim();
+  if (!message) return null;
+  return {
+    sourceId: asString(value.source_id).trim(),
+    sourceName: asString(value.source_name).trim(),
+    sourceUrl: asString(value.source_url).trim(),
+    message,
+  };
+};
+
 const normalizeStoreList = (value: unknown): PluginStoreResponse => {
   const source = isRecord(value) ? value : {};
   const plugins = Array.isArray(source.plugins)
@@ -189,11 +202,15 @@ const normalizeStoreList = (value: unknown): PluginStoreResponse => {
   const sources = Array.isArray(source.sources)
     ? source.sources.map((item) => normalizeStoreSource(item)).filter(Boolean) as PluginStoreSource[]
     : [];
+  const sourceErrors = Array.isArray(source.source_errors)
+    ? source.source_errors.map((item) => normalizeStoreSourceError(item)).filter(Boolean) as PluginStoreSourceError[]
+    : [];
 
   return {
     pluginsEnabled: asBoolean(source.plugins_enabled),
     pluginsDir: asString(source.plugins_dir).trim() || 'plugins',
     sources,
+    sourceErrors,
     plugins,
   };
 };

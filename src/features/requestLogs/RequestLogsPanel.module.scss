@@ -20,8 +20,22 @@
   width: 82px;
 }
 
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 42%);
+  gap: $spacing-md;
+  align-items: stretch;
+  min-height: min(72vh, 860px);
+}
+
+.listPane,
+.previewPane {
+  min-width: 0;
+}
+
 .tableWrap {
   width: 100%;
+  max-height: min(72vh, 860px);
   overflow: auto;
   border: 1px solid var(--border-color);
   border-radius: $radius-lg;
@@ -29,7 +43,7 @@
 
 .table {
   width: 100%;
-  min-width: 1440px;
+  min-width: 900px;
   border-collapse: collapse;
   font-size: 12px;
   table-layout: fixed;
@@ -57,6 +71,40 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  tbody tr {
+    cursor: pointer;
+    transition: background-color $transition-fast;
+  }
+
+  tbody tr:hover {
+    background: var(--bg-secondary);
+  }
+}
+
+.selectedRow {
+  background: var(--primary-10) !important;
+}
+
+.requestCell,
+.promptCell {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+
+  strong,
+  span,
+  small {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  small {
+    color: var(--muted-foreground);
   }
 }
 
@@ -89,22 +137,62 @@
   font-size: 13px;
 }
 
-.detailModal {
-  :global(.modal-body) {
-    max-height: min(78vh, 860px);
-    overflow: auto;
-    overscroll-behavior: contain;
-    scroll-behavior: auto;
+.previewPane {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border-color);
+  border-radius: $radius-lg;
+  background: var(--bg-primary);
+  min-height: 0;
+  max-height: min(72vh, 860px);
+  overflow: hidden;
+}
+
+.previewHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: $spacing-sm;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+
+  div {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
   }
+
+  strong {
+    color: var(--text-primary);
+    font-size: 14px;
+  }
+
+  span {
+    color: var(--muted-foreground);
+    font-size: 12px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+.previewEmpty {
+  display: grid;
+  place-items: center;
+  flex: 1;
+  color: var(--muted-foreground);
+  font-size: 13px;
 }
 
 .detail {
   display: flex;
   flex-direction: column;
   gap: $spacing-md;
-  max-height: none;
-  overflow: visible;
-  padding-right: 0;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 14px;
 }
 
 .loadingHint {
@@ -222,4 +310,14 @@
   font-family: $font-mono;
   font-size: 11px;
   overflow-wrap: anywhere;
+}
+
+@media (max-width: 1180px) {
+  .workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .previewPane {
+    max-height: min(68vh, 760px);
+  }
 }

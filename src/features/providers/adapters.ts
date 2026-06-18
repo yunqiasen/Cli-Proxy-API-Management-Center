@@ -55,6 +55,7 @@ function providerKeyToResource(
 ): ProviderResource {
   const apiKey = config.apiKey ?? '';
   const disabled = hasDisableAllModelsRule(config.excludedModels);
+  const excludedModels = stripDisableAllModelsRule(config.excludedModels);
   const flags: ProviderResource['flags'] = {};
   if (brand === 'codex') {
     flags.websockets = (config as ProviderKeyConfig).websockets === true;
@@ -90,7 +91,8 @@ function providerKeyToResource(
     modelSearchTerms,
     priority: normalizePriority(config.priority),
     headerCount: countHeaders(config.headers),
-    excludedModelCount: stripDisableAllModelsRule(config.excludedModels).length,
+    excludedModelCount: excludedModels.length,
+    excludedModels,
     apiKeyEntryCount: 0,
     disabled,
     flags,
@@ -123,6 +125,7 @@ export function openaiToResource(
   const firstEntry = config.apiKeyEntries?.[0];
   const previewApiKey = firstEntry?.apiKey ? maskApiKey(firstEntry.apiKey) : null;
   const modelSearchTerms = collectModelSearchTerms(config.models);
+  const excludedModels = stripDisableAllModelsRule((config as { excludedModels?: string[] }).excludedModels);
   return {
     id: buildId('openaiCompatibility', index, truncateForId(name) || `#${index}`),
     brand: 'openaiCompatibility',
@@ -141,7 +144,8 @@ export function openaiToResource(
     modelSearchTerms,
     priority: normalizePriority(config.priority),
     headerCount: countHeaders(config.headers),
-    excludedModelCount: 0,
+    excludedModelCount: excludedModels.length,
+    excludedModels,
     apiKeyEntryCount: config.apiKeyEntries?.length ?? 0,
     disabled: config.disabled === true,
     flags: {},

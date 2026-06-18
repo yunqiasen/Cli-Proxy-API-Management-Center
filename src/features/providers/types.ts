@@ -57,6 +57,7 @@ export interface ProviderResource {
   priority: number;
   headerCount: number;
   excludedModelCount: number;
+  excludedModels: string[];
   /** 仅 OpenAI 有意义,其它 brand 该字段不展示但保留 */
   apiKeyEntryCount: number;
   /** 是否被禁用(各 brand 判定规则不同) */

@@ -91,10 +91,18 @@ export interface PluginStoreSource {
   url: string;
 }
 
+export interface PluginStoreSourceError {
+  sourceId: string;
+  sourceName: string;
+  sourceUrl: string;
+  message: string;
+}
+
 export interface PluginStoreResponse {
   pluginsEnabled: boolean;
   pluginsDir: string;
   sources: PluginStoreSource[];
+  sourceErrors: PluginStoreSourceError[];
   plugins: PluginStoreEntry[];
 }
 

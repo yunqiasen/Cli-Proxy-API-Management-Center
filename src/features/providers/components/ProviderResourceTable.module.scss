@@ -69,6 +69,39 @@
   min-width: 0;
 }
 
+.routingMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  min-width: 0;
+}
+
+.priorityTag,
+.excludedTag {
+  display: inline-flex;
+  align-items: center;
+  max-width: 190px;
+  padding: 2px 7px;
+  border-radius: var(--radius-md);
+  font-size: 11px;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.priorityTag {
+  border: 1px solid rgba(20, 184, 166, 0.28);
+  background: rgba(20, 184, 166, 0.09);
+  color: var(--text-primary);
+}
+
+.excludedTag {
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  background: rgba(245, 158, 11, 0.11);
+  color: var(--amber-text);
+}
+
 .modelChip,
 .modelMore {
   display: inline-flex;

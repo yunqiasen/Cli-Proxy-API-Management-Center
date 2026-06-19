@@ -87,6 +87,17 @@
   margin-top: $spacing-md;
   color: var(--muted-foreground);
   font-size: 13px;
+  white-space: nowrap;
+}
+
+.paginationCompact {
+  margin-top: 0;
+  padding-left: $spacing-sm;
+  border-left: 1px solid var(--border-color);
+}
+
+.pageJumpInput {
+  width: 68px;
 }
 
 .detailModal {

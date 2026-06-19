@@ -218,6 +218,42 @@ export function RequestLogsPanel() {
     ];
   }, [detail]);
 
+  const goToPage = (nextPage: number) => {
+    setPage(Math.min(Math.max(1, nextPage), totalPages));
+  };
+
+  const renderPagination = (compact = false) => (
+    <div className={`${styles.pagination} ${compact ? styles.paginationCompact : ''}`}>
+      <Button
+        variant="secondary"
+        size="sm"
+        disabled={loading || page <= 1}
+        onClick={() => goToPage(page - 1)}
+      >
+        上一页
+      </Button>
+      <span>
+        第 {page} / {totalPages} 页，共 {total} 条
+      </span>
+      <Input
+        type="number"
+        min={1}
+        max={totalPages}
+        value={String(page)}
+        onChange={(event) => goToPage(Number(event.target.value) || 1)}
+        className={styles.pageJumpInput}
+      />
+      <Button
+        variant="secondary"
+        size="sm"
+        disabled={loading || page >= totalPages}
+        onClick={() => goToPage(page + 1)}
+      >
+        下一页
+      </Button>
+    </div>
+  );
+
   return (
     <Card
       className={styles.card}
@@ -253,6 +289,7 @@ export function RequestLogsPanel() {
           <Button variant="secondary" size="sm" onClick={() => void load(false)} loading={loading}>
             {!loading && <IconRefreshCw size={15} />} 刷新列表
           </Button>
+          {renderPagination(true)}
         </div>
       }
     >
@@ -312,27 +349,7 @@ export function RequestLogsPanel() {
           </table>
         </div>
       )}
-      <div className={styles.pagination}>
-        <Button
-          variant="secondary"
-          size="sm"
-          disabled={page <= 1}
-          onClick={() => setPage((current) => current - 1)}
-        >
-          上一页
-        </Button>
-        <span>
-          第 {page} / {totalPages} 页，共 {total} 条
-        </span>
-        <Button
-          variant="secondary"
-          size="sm"
-          disabled={page >= totalPages}
-          onClick={() => setPage((current) => current + 1)}
-        >
-          下一页
-        </Button>
-      </div>
+      {renderPagination()}
 
       <Modal
         open={Boolean(detail)}

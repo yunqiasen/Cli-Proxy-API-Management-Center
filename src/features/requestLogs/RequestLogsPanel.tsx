@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
+import { Modal } from '@/components/ui/Modal';
 import { ToggleSwitch } from '@/components/ui/ToggleSwitch';
 import { IconDownload, IconEye, IconRefreshCw, IconSearch } from '@/components/ui/icons';
 import { requestLogsApi, type RequestLogDetail, type RequestLogItem } from '@/services/api';
@@ -20,7 +21,9 @@ type RequestMcpInfo = NonNullable<RequestLogDetail['mcps']>[number];
 type RequestSkillInfo = NonNullable<RequestLogDetail['skills']>[number];
 
 const preview = (value?: string, limit = 56) => {
-  const text = String(value ?? '').replace(/\s+/g, ' ').trim();
+  const text = String(value ?? '')
+    .replace(/\s+/g, ' ')
+    .trim();
   if (!text) return '—';
   return text.length > limit ? `${text.slice(0, limit)}…` : text;
 };
@@ -32,7 +35,8 @@ const formatTime = (value?: string) => {
   return new Date(timestamp).toLocaleString();
 };
 
-const uniqueLabels = (values: string[]) => Array.from(new Set(values.map((v) => v.trim()).filter(Boolean)));
+const uniqueLabels = (values: string[]) =>
+  Array.from(new Set(values.map((v) => v.trim()).filter(Boolean)));
 
 const toolName = (tool: RequestToolInfo) => tool.display_name || tool.name || 'unknown';
 
@@ -134,7 +138,11 @@ export function RequestLogsPanel() {
       if (!silent) setLoading(true);
       setError('');
       try {
-        const data = await requestLogsApi.list({ q: query.trim() || undefined, limit: PAGE_SIZE, offset });
+        const data = await requestLogsApi.list({
+          q: query.trim() || undefined,
+          limit: PAGE_SIZE,
+          offset,
+        });
         setItems(Array.isArray(data.items) ? data.items : []);
         setTotal(Number(data.total) || 0);
       } catch (err: unknown) {
@@ -163,16 +171,6 @@ export function RequestLogsPanel() {
     return () => window.clearInterval(timer);
   }, [autoRefresh, connectionStatus, load]);
 
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setDetail(null);
-      }
-    };
-    document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
-  }, []);
-
   const openDetail = async (item: RequestLogItem) => {
     setDetail(item as RequestLogDetail);
     setDetailLoading(true);
@@ -192,11 +190,13 @@ export function RequestLogsPanel() {
         limit: PAGE_SIZE,
         offset,
         pages: exportPages,
-        format
+        format,
       });
       downloadBlob({
         filename: `request-logs-${exportPages}页.${format}`,
-        blob: new Blob([response.data], { type: format === 'csv' ? 'text/csv' : 'application/x-ndjson' })
+        blob: new Blob([response.data], {
+          type: format === 'csv' ? 'text/csv' : 'application/x-ndjson',
+        }),
       });
     } catch (err: unknown) {
       showNotification(getErrorMessage(err) || '导出请求日志失败', 'error');
@@ -210,7 +210,11 @@ export function RequestLogsPanel() {
       ['模型', detail.channel_model || detail.upstream_model || detail.model || '—'],
       ['IP', `${detail.ip || '未记录'} ${detail.ip_location || ''}`.trim()],
       ['状态', `${detail.success ? '成功' : '失败'} · ${detail.status || 'unknown'}`],
-      ['实际调用工具', detail.called_tools_preview || preview(uniqueLabels((detail.called_tools || []).map(toolName)).join('、'))]
+      [
+        '实际调用工具',
+        detail.called_tools_preview ||
+          preview(uniqueLabels((detail.called_tools || []).map(toolName)).join('、')),
+      ],
     ];
   }, [detail]);
 
@@ -235,7 +239,9 @@ export function RequestLogsPanel() {
             min={1}
             max={100}
             value={String(exportPages)}
-            onChange={(event) => setExportPages(Math.max(1, Math.min(100, Number(event.target.value) || 1)))}
+            onChange={(event) =>
+              setExportPages(Math.max(1, Math.min(100, Number(event.target.value) || 1)))
+            }
             className={styles.pagesInput}
           />
           <Button variant="secondary" size="sm" onClick={() => void exportRows('csv')}>
@@ -252,112 +258,112 @@ export function RequestLogsPanel() {
     >
       {error ? <div className="error-box">{error}</div> : null}
       {!loading && items.length === 0 ? (
-        <EmptyState title="暂无请求日志" description="开启请求日志后，新请求会按时间顺序出现在这里。" />
+        <EmptyState
+          title="暂无请求日志"
+          description="开启请求日志后，新请求会按时间顺序出现在这里。"
+        />
       ) : (
-        <div className={styles.workspace}>
-          <div className={styles.listPane}>
-            <div className={styles.tableWrap}>
-              <table className={styles.table}>
-                <thead>
-                  <tr>
-                    <th>时间</th>
-                    <th>请求</th>
-                    <th>模型</th>
-                    <th>IP</th>
-                    <th>提示词</th>
-                    <th>状态</th>
-                    <th>操作</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {items.map((item) => {
-                    const selected = detail?.id === item.id;
-                    return (
-                      <tr
-                        key={item.id}
-                        className={selected ? styles.selectedRow : ''}
-                        onClick={() => void openDetail(item)}
-                      >
-                        <td>{formatTime(item.timestamp)}</td>
-                        <td>
-                          <div className={styles.requestCell}>
-                            <strong>{item.method || '—'}</strong>
-                            <span>{item.url || '—'}</span>
-                          </div>
-                        </td>
-                        <td>{preview(item.channel_model || item.upstream_model || item.model, 34)}</td>
-                        <td>{item.ip || '未记录'} {item.ip_location || ''}</td>
-                        <td>
-                          <div className={styles.promptCell}>
-                            <span>{preview(item.prompt_preview, 42)}</span>
-                            <small>{preview(item.called_tools_preview || item.tool_preview, 34)}</small>
-                          </div>
-                        </td>
-                        <td>
-                          <span className={item.success ? styles.ok : styles.fail}>
-                            {item.success ? '成功' : '失败'} {item.status || ''}
-                          </span>
-                        </td>
-                        <td>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              void openDetail(item);
-                            }}
-                          >
-                            <IconEye size={15} /> 预览
-                          </Button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-          <aside className={styles.previewPane}>
-            <div className={styles.previewHeader}>
-              <div>
-                <strong>请求预览</strong>
-                <span>{detail ? formatTime(detail.timestamp) : '选择左侧请求查看完整内容'}</span>
-              </div>
-              {detail ? (
-                <Button variant="secondary" size="sm" onClick={() => setDetail(null)}>
-                  关闭
-                </Button>
-              ) : null}
-            </div>
-            {detail ? (
-              <div className={styles.detail}>
-                {detailLoading ? <div className={styles.loadingHint}>{t('common.loading')}</div> : null}
-                <div className={styles.detailMeta}>
-                  {detailMeta.map(([label, value]) => (
-                    <div key={label}><span>{label}</span><strong>{value}</strong></div>
-                  ))}
-                </div>
-                {sectionText('用户提示词', detail.prompt)}
-                {sectionText('响应输出', detail.output)}
-                {sectionText('错误内容', detail.error)}
-                {toolSection('实际调用工具', detail.called_tools)}
-                {mcpSection(detail.mcps)}
-                {skillSection(detail.skills)}
-                {sectionText('系统提示词', detail.system_prompt)}
-                {toolSection('全部可用工具', detail.available_tools)}
-              </div>
-            ) : (
-              <div className={styles.previewEmpty}>暂无预览</div>
-            )}
-          </aside>
+        <div className={styles.tableWrap}>
+          <table className={styles.table}>
+            <thead>
+              <tr>
+                <th>时间</th>
+                <th>路径 / 方法</th>
+                <th>模型</th>
+                <th>IP / 归属地</th>
+                <th>实际调用</th>
+                <th>系统提示词</th>
+                <th>提示词摘要</th>
+                <th>输出摘要</th>
+                <th>状态</th>
+                <th>错误</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((item) => (
+                <tr key={item.id}>
+                  <td>{formatTime(item.timestamp)}</td>
+                  <td>
+                    {item.method || '—'} {item.url || '—'}
+                  </td>
+                  <td>{preview(item.channel_model || item.upstream_model || item.model, 44)}</td>
+                  <td>
+                    {item.ip || '未记录'} {item.ip_location || ''}
+                  </td>
+                  <td>{preview(item.called_tools_preview || item.tool_preview, 46)}</td>
+                  <td>{preview(item.system_prompt_preview, 44)}</td>
+                  <td>{preview(item.prompt_preview, 48)}</td>
+                  <td>{preview(item.output_preview, 48)}</td>
+                  <td>
+                    <span className={item.success ? styles.ok : styles.fail}>
+                      {item.success ? '成功' : '失败'} {item.status || ''}
+                    </span>
+                  </td>
+                  <td>{preview(item.error_preview, 48)}</td>
+                  <td>
+                    <Button variant="ghost" size="sm" onClick={() => void openDetail(item)}>
+                      <IconEye size={15} /> 预览
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
       <div className={styles.pagination}>
-        <Button variant="secondary" size="sm" disabled={page <= 1} onClick={() => setPage((current) => current - 1)}>上一页</Button>
-        <span>第 {page} / {totalPages} 页，共 {total} 条</span>
-        <Button variant="secondary" size="sm" disabled={page >= totalPages} onClick={() => setPage((current) => current + 1)}>下一页</Button>
+        <Button
+          variant="secondary"
+          size="sm"
+          disabled={page <= 1}
+          onClick={() => setPage((current) => current - 1)}
+        >
+          上一页
+        </Button>
+        <span>
+          第 {page} / {totalPages} 页，共 {total} 条
+        </span>
+        <Button
+          variant="secondary"
+          size="sm"
+          disabled={page >= totalPages}
+          onClick={() => setPage((current) => current + 1)}
+        >
+          下一页
+        </Button>
       </div>
 
+      <Modal
+        open={Boolean(detail)}
+        onClose={() => setDetail(null)}
+        title="请求预览"
+        width="min(1180px, 92vw)"
+        className={styles.detailModal}
+        closeOnOverlayClick
+      >
+        {detail ? (
+          <div className={styles.detail}>
+            {detailLoading ? <div className={styles.loadingHint}>{t('common.loading')}</div> : null}
+            <div className={styles.detailMeta}>
+              {detailMeta.map(([label, value]) => (
+                <div key={label}>
+                  <span>{label}</span>
+                  <strong>{value}</strong>
+                </div>
+              ))}
+            </div>
+            {sectionText('用户提示词', detail.prompt)}
+            {sectionText('响应输出', detail.output)}
+            {sectionText('错误内容', detail.error)}
+            {toolSection('实际调用工具', detail.called_tools)}
+            {mcpSection(detail.mcps)}
+            {skillSection(detail.skills)}
+            {sectionText('系统提示词', detail.system_prompt)}
+            {toolSection('全部可用工具', detail.available_tools)}
+          </div>
+        ) : null}
+      </Modal>
     </Card>
   );
 }

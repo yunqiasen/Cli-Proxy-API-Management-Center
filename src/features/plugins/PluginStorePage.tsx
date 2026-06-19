@@ -16,10 +16,10 @@ import {
   IconShield,
 } from '@/components/ui/icons';
 import { useHeaderRefresh } from '@/hooks/useHeaderRefresh';
-import { pluginsApi, pluginStoreApi } from '@/services/api';
+import { pluginStoreApi } from '@/services/api';
 import { useAuthStore, useConfigStore, useNotificationStore } from '@/stores';
 import { getErrorMessage, isRecord } from '@/utils/helpers';
-import type { PluginListEntry, PluginStoreEntry, PluginStoreResponse } from '@/types';
+import type { PluginStoreEntry, PluginStoreResponse } from '@/types';
 import {
   buildRepositoryURL,
   isDefaultPluginStoreSource,
@@ -51,31 +51,6 @@ const getStoreEntryTitle = (entry: PluginStoreEntry) => entry.name || entry.id;
 const getStoreEntryKey = (entry: PluginStoreEntry) => entry.storeId || entry.id;
 const getDescriptionDOMID = (entryKey: string) =>
   `plugin-store-desc-${encodeURIComponent(entryKey)}`;
-
-const localPluginToStoreEntry = (plugin: PluginListEntry): PluginStoreEntry => ({
-  storeId: `local/${plugin.id}`,
-  sourceId: 'local',
-  sourceName: 'Local',
-  sourceUrl: '',
-  id: plugin.id,
-  name: plugin.metadata?.name || plugin.id,
-  description: plugin.menus.map((menu) => menu.description || menu.menu).filter(Boolean).join('；'),
-  author: plugin.metadata?.author || '',
-  version: plugin.metadata?.version || '',
-  repository: plugin.metadata?.githubRepository || '',
-  logo: plugin.logo || plugin.metadata?.logo || '',
-  homepage: '',
-  license: '',
-  tags: ['local'],
-  installed: plugin.configured || plugin.registered || Boolean(plugin.path),
-  installedVersion: plugin.metadata?.version || '',
-  path: plugin.path,
-  configured: plugin.configured,
-  registered: plugin.registered,
-  enabled: plugin.enabled,
-  effectiveEnabled: plugin.effectiveEnabled,
-  updateAvailable: false,
-});
 
 function StoreCardLogo({ src }: { src: string }) {
   const [failed, setFailed] = useState(false);
@@ -128,40 +103,22 @@ export function PluginStorePage() {
       const store = await pluginStoreApi.list();
       setData(store);
     } catch (err: unknown) {
-      const loadLocalFallback = async (message: string) => {
-        const local = await pluginsApi.list();
-        setData({
-          pluginsEnabled: local.pluginsEnabled,
-          pluginsDir: local.pluginsDir,
-          sources: [],
-          sourceErrors: [{ sourceId: '', sourceName: '', sourceUrl: '', message }],
-          plugins: local.plugins.map(localPluginToStoreEntry).filter((plugin) => plugin.installed),
-        });
-        setError({ kind: 'registry', message: `${message}；已显示本地已安装插件。` });
-      };
       const status = getErrorStatus(err);
       if (status === 404) {
         setError({ kind: 'unsupported', message: t('plugin_store.unsupported_backend') });
       } else if (status === 502) {
         const detail = getErrorDetailMessage(err);
-        const message = detail
-          ? `${t('plugin_store.registry_failed')}: ${detail}`
-          : t('plugin_store.registry_failed');
-        try {
-          await loadLocalFallback(message);
-        } catch {
-          setError({ kind: 'registry', message });
-        }
+        setError({
+          kind: 'registry',
+          message: detail
+            ? `${t('plugin_store.registry_failed')}: ${detail}`
+            : t('plugin_store.registry_failed'),
+        });
       } else {
-        const message = getErrorMessage(err, t('plugin_store.load_failed'));
-        try {
-          await loadLocalFallback(message);
-        } catch {
-          setError({
-            kind: 'generic',
-            message,
-          });
-        }
+        setError({
+          kind: 'generic',
+          message: getErrorMessage(err, t('plugin_store.load_failed')),
+        });
       }
     } finally {
       setLoading(false);
@@ -316,7 +273,11 @@ export function PluginStorePage() {
         clearConfigCache();
         await loadStore();
       } catch (err: unknown) {
-        showNotification(`${t(failedKey)}: ${getErrorMessage(err, t(failedKey))}`, 'error');
+        const detailMessage = getErrorDetailMessage(err);
+        showNotification(
+          `${t(failedKey)}: ${detailMessage || getErrorMessage(err, t(failedKey))}`,
+          'error'
+        );
         throw err;
       } finally {
         setInstallingKey('');
@@ -570,7 +531,7 @@ export function PluginStorePage() {
         <div className={styles.warningBox}>
           {data.sourceErrors.slice(0, 3).map((sourceError) => (
             <div key={`${sourceError.sourceId}-${sourceError.message}`}>
-              {(sourceError.sourceName || sourceError.sourceUrl || 'registry')}: {sourceError.message}
+              {sourceError.sourceName || sourceError.sourceUrl || 'registry'}: {sourceError.message}
             </div>
           ))}
         </div>

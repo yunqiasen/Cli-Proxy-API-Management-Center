@@ -48,8 +48,9 @@ interface ProviderResourceTableProps {
   onToggleDisabled?: (resource: ProviderResource, disabled: boolean) => void;
 }
 
-const columnWidths = ['18%', '18%', '6%', '14%', '24%', '20%'];
+const columnWidths = ['22%', '18%', '6%', '14%', '24%', '16%'];
 const maxVisibleModelChips = 4;
+const maxVisibleExcludedModels = 2;
 
 type UsageTooltipPlacement = 'left' | 'right';
 
@@ -75,9 +76,13 @@ const usageTooltipPoint = (clientX: number, clientY: number) => {
   const canShowRight = clientX + 12 + widthEstimate <= window.innerWidth - 20;
   const placement: UsageTooltipPlacement = canShowRight || !canShowLeft ? 'right' : 'left';
   return {
-    x: placement === 'left'
-      ? Math.min(window.innerWidth - 20, clientX - 12)
-      : Math.min(Math.max(20, clientX + 12), Math.max(20, window.innerWidth - widthEstimate - 20)),
+    x:
+      placement === 'left'
+        ? Math.min(window.innerWidth - 20, clientX - 12)
+        : Math.min(
+            Math.max(20, clientX + 12),
+            Math.max(20, window.innerWidth - widthEstimate - 20)
+          ),
     y: Math.min(Math.max(16, clientY + 12), Math.max(16, window.innerHeight - heightEstimate - 16)),
     placement,
   };
@@ -88,10 +93,7 @@ const resolveStatusBarData = (
   usageByProvider: ProviderRecentUsageMap
 ): StatusBarData => {
   if (resource.brand === 'openaiCompatibility') {
-    return getOpenAIProviderRecentStatusData(
-      resource.raw as OpenAIProviderConfig,
-      usageByProvider
-    );
+    return getOpenAIProviderRecentStatusData(resource.raw as OpenAIProviderConfig, usageByProvider);
   }
   return getProviderRecentStatusData(
     usageByProvider,
@@ -106,10 +108,7 @@ const resolveTotalStats = (
   usageByProvider: ProviderRecentUsageMap
 ): { success: number; failure: number } => {
   if (resource.brand === 'openaiCompatibility') {
-    return getOpenAIProviderTotalStats(
-      resource.raw as OpenAIProviderConfig,
-      usageByProvider
-    );
+    return getOpenAIProviderTotalStats(resource.raw as OpenAIProviderConfig, usageByProvider);
   }
   return getProviderTotalStats(
     usageByProvider,
@@ -179,6 +178,8 @@ export function ProviderResourceTable({
 
   const renderRoutingMeta = (r: ProviderResource) => {
     const excludedTitle = r.excludedModels.length > 0 ? r.excludedModels.join(', ') : '';
+    const excludedPreview = r.excludedModels.slice(0, maxVisibleExcludedModels).join(', ');
+    const hiddenExcludedCount = Math.max(r.excludedModels.length - maxVisibleExcludedModels, 0);
     return (
       <div className={styles.routingMeta}>
         <span className={styles.priorityTag} title={t('providersPage.form.priority')}>
@@ -186,7 +187,8 @@ export function ProviderResourceTable({
         </span>
         {r.excludedModelCount > 0 ? (
           <span className={styles.excludedTag} title={excludedTitle}>
-            {t('providersPage.form.excludedSection')}: {r.excludedModelCount}
+            {t('providersPage.form.excludedSection')}: {excludedPreview}
+            {hiddenExcludedCount > 0 ? ` +${hiddenExcludedCount}` : ''}
           </span>
         ) : null}
       </div>
@@ -199,12 +201,12 @@ export function ProviderResourceTable({
       items.push(
         renderMetric('models', t('providersPage.table.metrics.models'), r.modelCount),
         renderMetric('keys', t('providersPage.table.metrics.keys'), r.apiKeyEntryCount),
-        renderMetric('headers', t('providersPage.table.metrics.headers'), r.headerCount),
+        renderMetric('headers', t('providersPage.table.metrics.headers'), r.headerCount)
       );
     } else {
       items.push(
         renderMetric('models', t('providersPage.table.metrics.models'), r.modelCount),
-        renderMetric('headers', t('providersPage.table.metrics.headers'), r.headerCount),
+        renderMetric('headers', t('providersPage.table.metrics.headers'), r.headerCount)
       );
       if (r.brand === 'codex' && r.flags.websockets) {
         items.push(renderFlagTag('ws', t('providersPage.table.websocketsTag')));
@@ -216,7 +218,6 @@ export function ProviderResourceTable({
     return (
       <div className={styles.modelSummaryCell}>
         <div className={styles.metricsCell}>{items}</div>
-        {renderRoutingMeta(r)}
         {renderModelChips(r)}
       </div>
     );
@@ -242,21 +243,28 @@ export function ProviderResourceTable({
   const [usageTooltip, setUsageTooltip] = useState<UsageTooltipState | null>(null);
 
   const openUsageTooltip = useCallback(
-    (event: MouseEvent<HTMLElement> | FocusEvent<HTMLElement>, title: string, rows: UsageTooltipRow[]) => {
+    (
+      event: MouseEvent<HTMLElement> | FocusEvent<HTMLElement>,
+      title: string,
+      rows: UsageTooltipRow[]
+    ) => {
       if (!rows.length) return;
-      const point = 'clientX' in event && event.clientX > 0
-        ? usageTooltipPoint(event.clientX, event.clientY)
-        : (() => {
-            const rect = event.currentTarget.getBoundingClientRect();
-            return usageTooltipPoint(rect.left + rect.width / 2, rect.bottom);
-          })();
+      const point =
+        'clientX' in event && event.clientX > 0
+          ? usageTooltipPoint(event.clientX, event.clientY)
+          : (() => {
+              const rect = event.currentTarget.getBoundingClientRect();
+              return usageTooltipPoint(rect.left + rect.width / 2, rect.bottom);
+            })();
       setUsageTooltip({ title, rows: rows.slice(0, 10), ...point });
     },
     []
   );
 
   const moveUsageTooltip = useCallback((event: MouseEvent<HTMLElement>) => {
-    setUsageTooltip((current) => (current ? { ...current, ...usageTooltipPoint(event.clientX, event.clientY) } : current));
+    setUsageTooltip((current) =>
+      current ? { ...current, ...usageTooltipPoint(event.clientX, event.clientY) } : current
+    );
   }, []);
 
   const closeUsageTooltip = useCallback(() => setUsageTooltip(null), []);
@@ -266,7 +274,9 @@ export function ProviderResourceTable({
     return createPortal(
       <div
         className={`${styles.usageTooltipPortal} ${
-          usageTooltip.placement === 'left' ? styles.usageTooltipPortalLeft : styles.usageTooltipPortalRight
+          usageTooltip.placement === 'left'
+            ? styles.usageTooltipPortalLeft
+            : styles.usageTooltipPortalRight
         }`}
         style={{ left: usageTooltip.x, top: usageTooltip.y }}
         role="tooltip"
@@ -274,7 +284,10 @@ export function ProviderResourceTable({
         <span className={styles.usageTooltipTitle}>{usageTooltip.title}</span>
         <div className={styles.usageTooltipRows}>
           {usageTooltip.rows.map((item, index) => (
-            <div className={styles.usageTooltipRow} key={`${item.model}-${item.status}-${item.error ?? ''}-${index}`}>
+            <div
+              className={styles.usageTooltipRow}
+              key={`${item.model}-${item.status}-${item.error ?? ''}-${index}`}
+            >
               <span>{item.model}</span>
               <span>{formatStatus(item.status)}</span>
               <strong>{item.count}</strong>
@@ -310,10 +323,18 @@ export function ProviderResourceTable({
         <span
           className={`${styles.statPill} ${styles.statSuccess} ${hasSuccessDetails ? styles.statInteractive : ''}`}
           tabIndex={hasSuccessDetails ? 0 : undefined}
-          onMouseEnter={hasSuccessDetails ? (event) => openUsageTooltip(event, t('stats.success'), successRows) : undefined}
+          onMouseEnter={
+            hasSuccessDetails
+              ? (event) => openUsageTooltip(event, t('stats.success'), successRows)
+              : undefined
+          }
           onMouseMove={hasSuccessDetails ? moveUsageTooltip : undefined}
           onMouseLeave={hasSuccessDetails ? closeUsageTooltip : undefined}
-          onFocus={hasSuccessDetails ? (event) => openUsageTooltip(event, t('stats.success'), successRows) : undefined}
+          onFocus={
+            hasSuccessDetails
+              ? (event) => openUsageTooltip(event, t('stats.success'), successRows)
+              : undefined
+          }
           onBlur={hasSuccessDetails ? closeUsageTooltip : undefined}
         >
           {t('stats.success')}: {stats.success}
@@ -321,10 +342,18 @@ export function ProviderResourceTable({
         <span
           className={`${styles.statPill} ${styles.statFailure} ${hasFailureDetails ? styles.statInteractive : ''}`}
           tabIndex={hasFailureDetails ? 0 : undefined}
-          onMouseEnter={hasFailureDetails ? (event) => openUsageTooltip(event, t('stats.failure'), failureRows) : undefined}
+          onMouseEnter={
+            hasFailureDetails
+              ? (event) => openUsageTooltip(event, t('stats.failure'), failureRows)
+              : undefined
+          }
           onMouseMove={hasFailureDetails ? moveUsageTooltip : undefined}
           onMouseLeave={hasFailureDetails ? closeUsageTooltip : undefined}
-          onFocus={hasFailureDetails ? (event) => openUsageTooltip(event, t('stats.failure'), failureRows) : undefined}
+          onFocus={
+            hasFailureDetails
+              ? (event) => openUsageTooltip(event, t('stats.failure'), failureRows)
+              : undefined
+          }
           onBlur={hasFailureDetails ? closeUsageTooltip : undefined}
         >
           {t('stats.failure')}: {stats.failure}
@@ -339,18 +368,16 @@ export function ProviderResourceTable({
       return (
         <div className={styles.primaryCell}>
           <span className={styles.primaryName}>{r.name ?? r.identifier}</span>
-          <span className={styles.primarySub}>
-            {(r.apiKeyPreview ?? '—') + extra}
-          </span>
+          <span className={styles.primarySub}>{(r.apiKeyPreview ?? '—') + extra}</span>
+          {renderRoutingMeta(r)}
         </div>
       );
     }
     return (
       <div className={styles.primaryCell}>
         <span className={styles.primaryName}>{r.apiKeyPreview ?? '—'}</span>
-        {r.authIndex ? (
-          <span className={styles.primarySub}>auth: {r.authIndex}</span>
-        ) : null}
+        {r.authIndex ? <span className={styles.primarySub}>auth: {r.authIndex}</span> : null}
+        {renderRoutingMeta(r)}
       </div>
     );
   };
@@ -363,125 +390,116 @@ export function ProviderResourceTable({
         </span>
       );
     }
-    return (
-      <span className={styles.baseUrl}>
-        {r.baseUrl ?? t('providersPage.status.notSet')}
-      </span>
-    );
+    return <span className={styles.baseUrl}>{r.baseUrl ?? t('providersPage.status.notSet')}</span>;
   };
 
   return (
     <>
-    <Table
-      cols={columnWidths.map((w, i) => (
-        <col key={i} style={{ width: w }} />
-      ))}
-    >
-      <TableHeader>
-        <TableRow>
-          <TableHead>{t('providersPage.table.key')}</TableHead>
-          <TableHead>{t('providersPage.table.baseUrl')}</TableHead>
-          <TableHead>{t('providersPage.table.prefix')}</TableHead>
-          <TableHead>{t('providersPage.table.models')}</TableHead>
-          <TableHead>{t('providersPage.table.status')}</TableHead>
-          <TableHead alignRight>{t('providersPage.table.actions')}</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {resources.map((resource) => {
-          return (
-            <TableRow key={resource.id} selected={resource.id === selectedId}>
-              <TableCell>{renderPrimary(resource)}</TableCell>
-              <TableCell>{renderBaseUrl(resource)}</TableCell>
-              <TableCell>
-                {resource.prefix ? (
-                  <span className={styles.chip}>{resource.prefix}</span>
-                ) : (
-                  <span className={styles.baseUrl}>{t('providersPage.status.none')}</span>
-                )}
-              </TableCell>
-              <TableCell>{renderModelsSummary(resource)}</TableCell>
-              <TableCell>
-                <div className={styles.statusCell}>
-                  {renderStatus(resource)}
-                  {usageByProvider ? (
-                    <>
-                      {renderUsageStats(resource, usageByProvider)}
-                      <ProviderStatusBar
-                        statusData={resolveStatusBarData(resource, usageByProvider)}
-                        styles={statusBarStyles}
-                      />
-                    </>
-                  ) : null}
-                </div>
-              </TableCell>
-              <TableCell alignRight>
-                <div className={styles.actions}>
-                  {onToggleDisabled ? (
-                    <span
-                      className={styles.toggleWrap}
-                      onClick={(e) => e.stopPropagation()}
+      <Table
+        cols={columnWidths.map((w, i) => (
+          <col key={i} style={{ width: w }} />
+        ))}
+      >
+        <TableHeader>
+          <TableRow>
+            <TableHead>{t('providersPage.table.key')}</TableHead>
+            <TableHead>{t('providersPage.table.baseUrl')}</TableHead>
+            <TableHead>{t('providersPage.table.prefix')}</TableHead>
+            <TableHead>{t('providersPage.table.models')}</TableHead>
+            <TableHead>{t('providersPage.table.status')}</TableHead>
+            <TableHead alignRight>{t('providersPage.table.actions')}</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {resources.map((resource) => {
+            return (
+              <TableRow key={resource.id} selected={resource.id === selectedId}>
+                <TableCell>{renderPrimary(resource)}</TableCell>
+                <TableCell>{renderBaseUrl(resource)}</TableCell>
+                <TableCell>
+                  {resource.prefix ? (
+                    <span className={styles.chip}>{resource.prefix}</span>
+                  ) : (
+                    <span className={styles.baseUrl}>{t('providersPage.status.none')}</span>
+                  )}
+                </TableCell>
+                <TableCell>{renderModelsSummary(resource)}</TableCell>
+                <TableCell>
+                  <div className={styles.statusCell}>
+                    {renderStatus(resource)}
+                    {usageByProvider ? (
+                      <>
+                        {renderUsageStats(resource, usageByProvider)}
+                        <ProviderStatusBar
+                          statusData={resolveStatusBarData(resource, usageByProvider)}
+                          styles={statusBarStyles}
+                        />
+                      </>
+                    ) : null}
+                  </div>
+                </TableCell>
+                <TableCell alignRight>
+                  <div className={styles.actions}>
+                    {onToggleDisabled ? (
+                      <span className={styles.toggleWrap} onClick={(e) => e.stopPropagation()}>
+                        <ToggleSwitch
+                          checked={!resource.disabled}
+                          disabled={disableMutations}
+                          onChange={(value) => onToggleDisabled(resource, !value)}
+                          ariaLabel={
+                            resource.disabled
+                              ? t('providersPage.actions.enable')
+                              : t('providersPage.actions.disable')
+                          }
+                        />
+                      </span>
+                    ) : null}
+                    <button
+                      type="button"
+                      className={styles.iconBtn}
+                      aria-label={t('providersPage.actions.view')}
+                      title={t('providersPage.actions.view')}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onView(resource);
+                      }}
                     >
-                      <ToggleSwitch
-                        checked={!resource.disabled}
-                        disabled={disableMutations}
-                        onChange={(value) =>
-                          onToggleDisabled(resource, !value)
-                        }
-                        ariaLabel={
-                          resource.disabled
-                            ? t('providersPage.actions.enable')
-                            : t('providersPage.actions.disable')
-                        }
-                      />
-                    </span>
-                  ) : null}
-                  <button
-                    type="button"
-                    className={styles.iconBtn}
-                    aria-label={t('providersPage.actions.view')}
-                    title={t('providersPage.actions.view')}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onView(resource);
-                    }}
-                  >
-                    <IconEye size={16} />
-                  </button>
-                  <button
-                    type="button"
-                    className={styles.iconBtn}
-                    aria-label={t('providersPage.actions.edit')}
-                    title={t('providersPage.actions.edit')}
-                    disabled={disableMutations}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onEdit(resource);
-                    }}
-                  >
-                    <IconPencil size={16} />
-                  </button>
-                  <button
-                    type="button"
-                    className={`${styles.iconBtn} ${styles.iconBtnDanger}`}
-                    aria-label={t('providersPage.actions.delete')}
-                    title={t('providersPage.actions.delete')}
-                    disabled={disableMutations}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onDelete(resource);
-                    }}
-                  >
-                    <IconTrash2 size={16} />
-                  </button>
-                </div>
-              </TableCell>
-            </TableRow>
-          );
-        })}
-      </TableBody>
-    </Table>
-    {renderUsageTooltip()}
+                      <IconEye size={16} />
+                    </button>
+                    <button
+                      type="button"
+                      className={styles.iconBtn}
+                      aria-label={t('providersPage.actions.edit')}
+                      title={t('providersPage.actions.edit')}
+                      disabled={disableMutations}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onEdit(resource);
+                      }}
+                    >
+                      <IconPencil size={16} />
+                    </button>
+                    <button
+                      type="button"
+                      className={`${styles.iconBtn} ${styles.iconBtnDanger}`}
+                      aria-label={t('providersPage.actions.delete')}
+                      title={t('providersPage.actions.delete')}
+                      disabled={disableMutations}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onDelete(resource);
+                      }}
+                    >
+                      <IconTrash2 size={16} />
+                    </button>
+                  </div>
+                </TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
+      {renderUsageTooltip()}
     </>
   );
 }

@@ -73,14 +73,16 @@ const clamp = (value: number, min: number, max: number) => Math.min(Math.max(val
 
 const usageTooltipPoint = (target: HTMLElement, rowCount: number) => {
   const rect = target.getBoundingClientRect();
-  const widthEstimate = Math.min(640, Math.max(320, window.innerWidth - 32));
+  const widthEstimate = rowCount > 0 ? 560 : 320;
   const heightEstimate = Math.min(360, 42 + rowCount * 32);
-  const left = clamp(rect.left, 16, Math.max(16, window.innerWidth - widthEstimate - 16));
-  const belowTop = rect.bottom + 8;
-  const canShowBelow = belowTop + heightEstimate <= window.innerHeight - 16;
+  const targetCenter = rect.left + rect.width / 2;
+  const preferredLeft = targetCenter - widthEstimate / 2;
+  const left = clamp(preferredLeft, 12, Math.max(12, window.innerWidth - widthEstimate - 12));
+  const belowTop = rect.bottom + 6;
+  const canShowBelow = belowTop + heightEstimate <= window.innerHeight - 12;
   return {
     x: left,
-    y: canShowBelow ? belowTop : Math.max(16, rect.top - heightEstimate - 8),
+    y: canShowBelow ? belowTop : Math.max(12, rect.top - heightEstimate - 6),
     placement: canShowBelow ? 'below' as const : 'above' as const,
   };
 };

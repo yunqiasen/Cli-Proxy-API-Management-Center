@@ -129,19 +129,72 @@ const EMPTY_RECENT_USAGE_ENTRY: RecentRequestUsageEntry = {
 const normalizeProviderRecentKey = (value: unknown): string =>
   String(value ?? '').trim().toLowerCase();
 
+const normalizeUsageBaseUrl = (value: unknown): string =>
+  String(value ?? '')
+    .trim()
+    .replace(/\/+$/g, '')
+    .toLowerCase();
+
+const splitRecentCompositeKey = (compositeKey: string): { baseUrl: string; apiKey: string } => {
+  const separatorIndex = compositeKey.lastIndexOf('|');
+  if (separatorIndex < 0) {
+    return { baseUrl: '', apiKey: compositeKey.trim() };
+  }
+  return {
+    baseUrl: compositeKey.slice(0, separatorIndex),
+    apiKey: compositeKey.slice(separatorIndex + 1),
+  };
+};
+
+const hasRecentUsage = (entry: RecentRequestUsageEntry): boolean =>
+  entry.success > 0 ||
+  entry.failed > 0 ||
+  entry.recentRequests.some((bucket) => bucket.success > 0 || bucket.failed > 0) ||
+  entry.successDetails.length > 0 ||
+  entry.failureDetails.length > 0;
+
+const findCompatibleRecentUsageEntry = (
+  providerBucket: Map<string, RecentRequestUsageEntry>,
+  apiKey?: string,
+  baseUrl?: string
+): RecentRequestUsageEntry => {
+  const normalizedApiKey = String(apiKey ?? '').trim();
+  const normalizedBaseUrl = normalizeUsageBaseUrl(baseUrl);
+  const candidates: RecentRequestUsageEntry[] = [];
+
+  providerBucket.forEach((entry, compositeKey) => {
+    if (!hasRecentUsage(entry)) return;
+    const parsed = splitRecentCompositeKey(compositeKey);
+    if (normalizedApiKey && parsed.apiKey.trim() !== normalizedApiKey) return;
+    if (normalizeUsageBaseUrl(parsed.baseUrl) !== normalizedBaseUrl) return;
+    candidates.push(entry);
+  });
+
+  return candidates.length === 1 ? candidates[0] : EMPTY_RECENT_USAGE_ENTRY;
+};
+
 const getProviderRecentUsageEntry = (
   usageByProvider: ProviderRecentUsageMap,
   provider: string,
   apiKey?: string,
   baseUrl?: string
 ): RecentRequestUsageEntry => {
-  if (!String(apiKey ?? '').trim()) {
+  const providerKey = normalizeProviderRecentKey(provider);
+  const providerBucket = usageByProvider.get(providerKey);
+  if (!providerBucket) {
     return EMPTY_RECENT_USAGE_ENTRY;
   }
 
-  const providerKey = normalizeProviderRecentKey(provider);
-  const compositeKey = buildRecentRequestCompositeKey(baseUrl, apiKey);
-  return usageByProvider.get(providerKey)?.get(compositeKey) ?? EMPTY_RECENT_USAGE_ENTRY;
+  const normalizedApiKey = String(apiKey ?? '').trim();
+  if (normalizedApiKey) {
+    const compositeKey = buildRecentRequestCompositeKey(baseUrl, normalizedApiKey);
+    const exactEntry = providerBucket.get(compositeKey);
+    if (exactEntry) {
+      return exactEntry;
+    }
+  }
+
+  return findCompatibleRecentUsageEntry(providerBucket, normalizedApiKey, baseUrl);
 };
 
 const getProviderRecentBuckets = (

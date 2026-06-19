@@ -52,7 +52,7 @@ const columnWidths = ['22%', '18%', '6%', '14%', '24%', '16%'];
 const maxVisibleModelChips = 4;
 const maxVisibleExcludedModels = 2;
 
-type UsageTooltipPlacement = 'left' | 'right';
+type UsageTooltipPlacement = 'above' | 'below';
 
 interface UsageTooltipRow {
   model: string;
@@ -69,22 +69,19 @@ interface UsageTooltipState {
   placement: UsageTooltipPlacement;
 }
 
-const usageTooltipPoint = (clientX: number, clientY: number) => {
-  const widthEstimate = Math.min(760, Math.max(280, window.innerWidth - 40));
-  const heightEstimate = Math.min(620, window.innerHeight * 0.7);
-  const canShowLeft = clientX - 12 - widthEstimate >= 20;
-  const canShowRight = clientX + 12 + widthEstimate <= window.innerWidth - 20;
-  const placement: UsageTooltipPlacement = canShowRight || !canShowLeft ? 'right' : 'left';
+const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
+
+const usageTooltipPoint = (target: HTMLElement, rowCount: number) => {
+  const rect = target.getBoundingClientRect();
+  const widthEstimate = Math.min(640, Math.max(320, window.innerWidth - 32));
+  const heightEstimate = Math.min(360, 42 + rowCount * 32);
+  const left = clamp(rect.left, 16, Math.max(16, window.innerWidth - widthEstimate - 16));
+  const belowTop = rect.bottom + 8;
+  const canShowBelow = belowTop + heightEstimate <= window.innerHeight - 16;
   return {
-    x:
-      placement === 'left'
-        ? Math.min(window.innerWidth - 20, clientX - 12)
-        : Math.min(
-            Math.max(20, clientX + 12),
-            Math.max(20, window.innerWidth - widthEstimate - 20)
-          ),
-    y: Math.min(Math.max(16, clientY + 12), Math.max(16, window.innerHeight - heightEstimate - 16)),
-    placement,
+    x: left,
+    y: canShowBelow ? belowTop : Math.max(16, rect.top - heightEstimate - 8),
+    placement: canShowBelow ? 'below' as const : 'above' as const,
   };
 };
 
@@ -249,23 +246,15 @@ export function ProviderResourceTable({
       rows: UsageTooltipRow[]
     ) => {
       if (!rows.length) return;
-      const point =
-        'clientX' in event && event.clientX > 0
-          ? usageTooltipPoint(event.clientX, event.clientY)
-          : (() => {
-              const rect = event.currentTarget.getBoundingClientRect();
-              return usageTooltipPoint(rect.left + rect.width / 2, rect.bottom);
-            })();
-      setUsageTooltip({ title, rows: rows.slice(0, 10), ...point });
+      const visibleRows = rows.slice(0, 10);
+      setUsageTooltip({
+        title,
+        rows: visibleRows,
+        ...usageTooltipPoint(event.currentTarget, visibleRows.length),
+      });
     },
     []
   );
-
-  const moveUsageTooltip = useCallback((event: MouseEvent<HTMLElement>) => {
-    setUsageTooltip((current) =>
-      current ? { ...current, ...usageTooltipPoint(event.clientX, event.clientY) } : current
-    );
-  }, []);
 
   const closeUsageTooltip = useCallback(() => setUsageTooltip(null), []);
 
@@ -273,11 +262,8 @@ export function ProviderResourceTable({
     if (!usageTooltip || typeof document === 'undefined') return null;
     return createPortal(
       <div
-        className={`${styles.usageTooltipPortal} ${
-          usageTooltip.placement === 'left'
-            ? styles.usageTooltipPortalLeft
-            : styles.usageTooltipPortalRight
-        }`}
+        className={styles.usageTooltipPortal}
+        data-placement={usageTooltip.placement}
         style={{ left: usageTooltip.x, top: usageTooltip.y }}
         role="tooltip"
       >
@@ -303,20 +289,27 @@ export function ProviderResourceTable({
   const renderUsageStats = (resource: ProviderResource, usage: ProviderRecentUsageMap) => {
     const stats = resolveTotalStats(resource, usage);
     const details = resolveUsageDetails(resource, usage);
-    const hasSuccessDetails = stats.success > 0 && details.successDetails.length > 0;
-    const hasFailureDetails = stats.failure > 0 && details.failureDetails.length > 0;
-
-    const successRows = details.successDetails.map((item) => ({
-      model: item.model,
-      status: item.status,
-      count: item.count,
-    }));
-    const failureRows = details.failureDetails.map((item) => ({
-      model: item.model,
-      status: item.status,
-      count: item.count,
-      error: item.error,
-    }));
+    const successRows = details.successDetails.length
+      ? details.successDetails.map((item) => ({
+          model: item.model,
+          status: item.status,
+          count: item.count,
+        }))
+      : stats.success > 0
+        ? [{ model: 'unknown', status: 0, count: stats.success }]
+        : [];
+    const failureRows = details.failureDetails.length
+      ? details.failureDetails.map((item) => ({
+          model: item.model,
+          status: item.status,
+          count: item.count,
+          error: item.error,
+        }))
+      : stats.failure > 0
+        ? [{ model: 'unknown', status: 0, count: stats.failure, error: '未记录明细' }]
+        : [];
+    const hasSuccessDetails = successRows.length > 0;
+    const hasFailureDetails = failureRows.length > 0;
 
     return (
       <div className={styles.stats}>
@@ -328,7 +321,6 @@ export function ProviderResourceTable({
               ? (event) => openUsageTooltip(event, t('stats.success'), successRows)
               : undefined
           }
-          onMouseMove={hasSuccessDetails ? moveUsageTooltip : undefined}
           onMouseLeave={hasSuccessDetails ? closeUsageTooltip : undefined}
           onFocus={
             hasSuccessDetails
@@ -347,7 +339,6 @@ export function ProviderResourceTable({
               ? (event) => openUsageTooltip(event, t('stats.failure'), failureRows)
               : undefined
           }
-          onMouseMove={hasFailureDetails ? moveUsageTooltip : undefined}
           onMouseLeave={hasFailureDetails ? closeUsageTooltip : undefined}
           onFocus={
             hasFailureDetails

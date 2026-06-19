@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type MouseEvent } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -19,6 +20,12 @@ const AUTO_REFRESH_MS = 5000;
 type RequestToolInfo = NonNullable<RequestLogDetail['called_tools']>[number];
 type RequestMcpInfo = NonNullable<RequestLogDetail['mcps']>[number];
 type RequestSkillInfo = NonNullable<RequestLogDetail['skills']>[number];
+
+interface HoverTooltipState {
+  text: string;
+  x: number;
+  y: number;
+}
 
 const preview = (value?: string, limit = 56) => {
   const text = String(value ?? '')
@@ -69,14 +76,21 @@ const requestPathTitle = (item: RequestLogItem) =>
 const requestModelLabel = (item: RequestLogItem) =>
   preview(item.model || item.upstream_model || item.channel_model, 36);
 
-const requestModelTitle = (item: RequestLogItem) => {
-  const lines = [
-    item.provider ? `提供商: ${item.provider}` : '',
-    item.model ? `请求模型: ${item.model}` : '',
-    item.upstream_model ? `上游模型: ${item.upstream_model}` : '',
-    item.channel_model ? `渠道模型: ${item.channel_model}` : '',
-  ].filter(Boolean);
-  return lines.join('\n') || '—';
+const requestModelTooltip = (item: RequestLogItem) => {
+  const channelModel = String(item.channel_model ?? '').trim();
+  if (channelModel) return channelModel;
+  return [item.provider, item.upstream_model || item.model].filter(Boolean).join(' / ') || '—';
+};
+
+const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
+
+const tooltipPoint = (target: HTMLElement, text: string) => {
+  const rect = target.getBoundingClientRect();
+  const widthEstimate = Math.min(420, Math.max(180, text.length * 8 + 28));
+  return {
+    x: clamp(rect.left, 12, Math.max(12, window.innerWidth - widthEstimate - 12)),
+    y: Math.min(rect.bottom + 8, window.innerHeight - 52),
+  };
 };
 
 const uniqueLabels = (values: string[]) =>
@@ -172,6 +186,7 @@ export function RequestLogsPanel() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [exportPages, setExportPages] = useState(1);
   const [autoRefresh, setAutoRefresh] = useState(true);
+  const [hoverTooltip, setHoverTooltip] = useState<HoverTooltipState | null>(null);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const offset = (page - 1) * PAGE_SIZE;
@@ -298,6 +313,24 @@ export function RequestLogsPanel() {
     </div>
   );
 
+  const showHoverTooltip = (event: MouseEvent<HTMLElement>, text: string) => {
+    const normalized = text.trim();
+    if (!normalized || normalized === '—') return;
+    setHoverTooltip({ text: normalized, ...tooltipPoint(event.currentTarget, normalized) });
+  };
+
+  const hideHoverTooltip = () => setHoverTooltip(null);
+
+  const renderHoverTooltip = () => {
+    if (!hoverTooltip || typeof document === 'undefined') return null;
+    return createPortal(
+      <div className={styles.hoverTooltip} style={{ left: hoverTooltip.x, top: hoverTooltip.y }}>
+        {hoverTooltip.text}
+      </div>,
+      document.body
+    );
+  };
+
   return (
     <Card
       className={styles.card}
@@ -365,13 +398,19 @@ export function RequestLogsPanel() {
               {items.map((item) => (
                 <tr key={item.id}>
                   <td>{formatTime(item.timestamp)}</td>
-                  <td title={requestPathTitle(item)}>
+                  <td
+                    onMouseEnter={(event) => showHoverTooltip(event, requestPathTitle(item))}
+                    onMouseLeave={hideHoverTooltip}
+                  >
                     <span className={styles.requestPathCell}>
                       <span className={styles.methodTag}>{item.method || '—'}</span>
                       <span className={styles.shortText}>{compactRequestPath(item.url)}</span>
                     </span>
                   </td>
-                  <td title={requestModelTitle(item)}>
+                  <td
+                    onMouseEnter={(event) => showHoverTooltip(event, requestModelTooltip(item))}
+                    onMouseLeave={hideHoverTooltip}
+                  >
                     <span className={styles.shortText}>{requestModelLabel(item)}</span>
                   </td>
                   <td>
@@ -399,6 +438,8 @@ export function RequestLogsPanel() {
         </div>
       )}
       {renderPagination()}
+
+      {renderHoverTooltip()}
 
       <Modal
         open={Boolean(detail)}

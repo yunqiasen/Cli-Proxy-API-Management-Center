@@ -35,6 +35,50 @@ const formatTime = (value?: string) => {
   return new Date(timestamp).toLocaleString();
 };
 
+const compactRequestPath = (value?: string) => {
+  const raw = String(value ?? '').trim();
+  if (!raw) return '—';
+  let pathname = raw;
+  try {
+    pathname =
+      raw.startsWith('http://') || raw.startsWith('https://')
+        ? new URL(raw).pathname
+        : raw.split(/[?#]/)[0];
+  } catch {
+    pathname = raw.split(/[?#]/)[0];
+  }
+  const parts = pathname
+    .split('/')
+    .map((part) => part.trim())
+    .filter(Boolean);
+  const withoutVersion = parts[0] && /^v\d+(?:beta)?$/i.test(parts[0]) ? parts.slice(1) : parts;
+  if (!withoutVersion.length) return pathname || '—';
+  if (
+    withoutVersion.length >= 2 &&
+    withoutVersion[0] === 'chat' &&
+    withoutVersion[1] === 'completions'
+  ) {
+    return 'chat/completions';
+  }
+  return withoutVersion[withoutVersion.length - 1] || '—';
+};
+
+const requestPathTitle = (item: RequestLogItem) =>
+  [item.method, item.url].filter(Boolean).join(' ') || '—';
+
+const requestModelLabel = (item: RequestLogItem) =>
+  preview(item.model || item.upstream_model || item.channel_model, 36);
+
+const requestModelTitle = (item: RequestLogItem) => {
+  const lines = [
+    item.provider ? `提供商: ${item.provider}` : '',
+    item.model ? `请求模型: ${item.model}` : '',
+    item.upstream_model ? `上游模型: ${item.upstream_model}` : '',
+    item.channel_model ? `渠道模型: ${item.channel_model}` : '',
+  ].filter(Boolean);
+  return lines.join('\n') || '—';
+};
+
 const uniqueLabels = (values: string[]) =>
   Array.from(new Set(values.map((v) => v.trim()).filter(Boolean)));
 
@@ -321,10 +365,15 @@ export function RequestLogsPanel() {
               {items.map((item) => (
                 <tr key={item.id}>
                   <td>{formatTime(item.timestamp)}</td>
-                  <td>
-                    {item.method || '—'} {item.url || '—'}
+                  <td title={requestPathTitle(item)}>
+                    <span className={styles.requestPathCell}>
+                      <span className={styles.methodTag}>{item.method || '—'}</span>
+                      <span className={styles.shortText}>{compactRequestPath(item.url)}</span>
+                    </span>
                   </td>
-                  <td>{preview(item.channel_model || item.upstream_model || item.model, 44)}</td>
+                  <td title={requestModelTitle(item)}>
+                    <span className={styles.shortText}>{requestModelLabel(item)}</span>
+                  </td>
                   <td>
                     {item.ip || '未记录'} {item.ip_location || ''}
                   </td>

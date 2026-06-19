@@ -60,6 +60,30 @@
   }
 }
 
+.requestPathCell {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.methodTag {
+  flex: 0 0 auto;
+  color: var(--muted-foreground);
+  font-weight: 800;
+}
+
+.shortText {
+  display: inline-block;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+  white-space: nowrap;
+}
+
 .ok,
 .fail {
   display: inline-flex;

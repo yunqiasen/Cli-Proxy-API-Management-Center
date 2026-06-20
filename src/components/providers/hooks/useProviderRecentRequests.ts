@@ -23,6 +23,40 @@ let inFlightRequest: Promise<ProviderRecentRequests> | null = null;
 
 const normalizeProviderKey = (value: unknown): string => String(value ?? '').trim().toLowerCase();
 
+const hasRecentUsageEntryData = (entry: RecentRequestUsageEntry): boolean =>
+  entry.success > 0 ||
+  entry.failed > 0 ||
+  entry.recentRequests.some((bucket) => bucket.success > 0 || bucket.failed > 0) ||
+  entry.successDetails.length > 0 ||
+  entry.failureDetails.length > 0;
+
+const mergeProviderRecentRequestsWithCache = (
+  incoming: ProviderRecentRequests,
+  previous: ProviderRecentRequests
+): ProviderRecentRequests => {
+  if (previous.size === 0) return incoming;
+
+  const merged: ProviderRecentRequests = new Map();
+  previous.forEach((entries, providerKey) => {
+    merged.set(providerKey, new Map(entries));
+  });
+
+  incoming.forEach((entries, providerKey) => {
+    const bucket = new Map(merged.get(providerKey) ?? []);
+    entries.forEach((entry, compositeKey) => {
+      const cached = bucket.get(compositeKey);
+      if (cached && hasRecentUsageEntryData(cached) && !hasRecentUsageEntryData(entry)) {
+        bucket.set(compositeKey, cached);
+        return;
+      }
+      bucket.set(compositeKey, entry);
+    });
+    merged.set(providerKey, bucket);
+  });
+
+  return merged;
+};
+
 const normalizeApiKeyUsageResponse = (payload: ApiKeyUsageResponse): ProviderRecentRequests => {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
     return EMPTY_USAGE_BY_PROVIDER;
@@ -53,9 +87,10 @@ const fetchProviderRecentRequests = async (): Promise<ProviderRecentRequests> =>
       .getUsage()
       .then((payload) => {
         const normalized = normalizeApiKeyUsageResponse(payload);
-        cachedUsageByProvider = normalized;
+        const merged = mergeProviderRecentRequestsWithCache(normalized, cachedUsageByProvider);
+        cachedUsageByProvider = merged;
         cachedAt = Date.now();
-        return normalized;
+        return merged;
       })
       .finally(() => {
         inFlightRequest = null;

@@ -1316,7 +1316,10 @@
     "clear_login_title": "本地登入資訊",
     "clear_login_desc": "清理本地儲存的登入資訊並登出。",
     "clear_login_button": "清理登入資訊",
-    "clear_login_confirm": "確認清理本地登入資訊並登出？"
+    "clear_login_confirm": "確認清理本地登入資訊並登出？",
+    "panel_update_button": "更新面板",
+    "panel_update_success": "管理面板已更新，正在重新整理頁面",
+    "panel_update_error": "管理面板更新失敗"
   },
   "notification": {
     "debug_updated": "除錯設定已更新",

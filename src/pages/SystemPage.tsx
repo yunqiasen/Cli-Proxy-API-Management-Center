@@ -94,6 +94,7 @@ export function SystemPage() {
   const [requestLogTouched, setRequestLogTouched] = useState(false);
   const [requestLogSaving, setRequestLogSaving] = useState(false);
   const [checkingVersion, setCheckingVersion] = useState(false);
+  const [updatingPanel, setUpdatingPanel] = useState(false);
 
   const versionTapCount = useRef(0);
   const versionTapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -263,6 +264,22 @@ export function SystemPage() {
     }
   }, [auth.serverVersion, showNotification, t]);
 
+  const handlePanelUpdate = useCallback(async () => {
+    setUpdatingPanel(true);
+    try {
+      await versionApi.updateManagementPanel();
+      showNotification(t('system_info.panel_update_success'), 'success');
+      window.setTimeout(() => window.location.reload(), 800);
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : typeof error === 'string' ? error : '';
+      const suffix = message ? `: ${message}` : '';
+      showNotification(`${t('system_info.panel_update_error')}${suffix}`, 'error');
+    } finally {
+      setUpdatingPanel(false);
+    }
+  }, [showNotification, t]);
+
   useEffect(() => {
     fetchConfig().catch(() => {
       // ignore
@@ -299,16 +316,38 @@ export function SystemPage() {
           </div>
 
           <div className={styles.aboutInfoGrid}>
-            <button
-              type="button"
+            <div
+              role="button"
+              tabIndex={0}
               className={`${styles.infoTile} ${styles.tapTile}`}
               onClick={handleInfoVersionTap}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  handleInfoVersionTap();
+                }
+              }}
             >
               <div className={styles.tileHeader}>
                 <div className={styles.tileLabel}>{t('footer.version')}</div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className={styles.tileAction}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    void handlePanelUpdate();
+                  }}
+                  loading={updatingPanel}
+                  title={t('system_info.panel_update_button')}
+                  aria-label={t('system_info.panel_update_button')}
+                >
+                  {t('system_info.panel_update_button')}
+                </Button>
               </div>
               <div className={styles.tileValue}>{appVersion}</div>
-            </button>
+            </div>
 
             <div className={styles.infoTile}>
               <div className={styles.tileHeader}>
@@ -346,7 +385,7 @@ export function SystemPage() {
           <p className={styles.sectionDescription}>{t('system_info.quick_links_desc')}</p>
           <div className={styles.quickLinks}>
             <a
-              href="https://github.com/router-for-me/CLIProxyAPI"
+              href="https://github.com/yunqiasen/CLIProxyAPI"
               target="_blank"
               rel="noopener noreferrer"
               className={styles.linkCard}
@@ -364,7 +403,7 @@ export function SystemPage() {
             </a>
 
             <a
-              href="https://github.com/router-for-me/Cli-Proxy-API-Management-Center"
+              href="https://github.com/yunqiasen/Cli-Proxy-API-Management-Center"
               target="_blank"
               rel="noopener noreferrer"
               className={styles.linkCard}

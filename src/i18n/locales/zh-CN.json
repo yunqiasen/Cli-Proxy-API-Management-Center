@@ -1290,7 +1290,10 @@
     "clear_login_title": "本地登录信息",
     "clear_login_desc": "清理本地保存的登录信息并退出登录。",
     "clear_login_button": "清理登录信息",
-    "clear_login_confirm": "确认清理本地登录信息并退出登录？"
+    "clear_login_confirm": "确认清理本地登录信息并退出登录？",
+    "panel_update_button": "更新面板",
+    "panel_update_success": "管理面板已更新，正在刷新页面",
+    "panel_update_error": "管理面板更新失败"
   },
   "notification": {
     "debug_updated": "调试设置已更新",

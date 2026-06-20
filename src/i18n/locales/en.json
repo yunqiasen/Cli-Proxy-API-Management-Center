@@ -1290,7 +1290,10 @@
     "clear_login_title": "Local Login Data",
     "clear_login_desc": "Clear locally saved login data and sign out.",
     "clear_login_button": "Clear login data",
-    "clear_login_confirm": "Clear local login data and sign out now?"
+    "clear_login_confirm": "Clear local login data and sign out now?",
+    "panel_update_button": "Update panel",
+    "panel_update_success": "Management panel updated; reloading",
+    "panel_update_error": "Management panel update failed"
   },
   "notification": {
     "debug_updated": "Debug settings updated",

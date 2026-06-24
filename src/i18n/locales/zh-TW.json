@@ -1304,6 +1304,7 @@
     "version_is_latest": "目前已是最新版本",
     "version_check_error": "檢查更新失敗",
     "version_current_missing": "未取得到伺服器版本號，暫無法比對",
+    "version_current_uncomparable": "目前版本 {{current}} 不是標準版本號，已取得上游最新版 {{latest}}，暫無法直接比對",
     "version_unknown": "未知",
     "quick_links_title": "快速連結",
     "quick_links_desc": "存取專案儲存庫和文件，取得協助和更新。",

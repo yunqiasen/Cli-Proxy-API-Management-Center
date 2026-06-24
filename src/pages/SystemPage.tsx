@@ -245,7 +245,13 @@ export function SystemPage() {
       }
 
       if (comparison === null) {
-        showNotification(t('system_info.version_current_missing'), 'warning');
+        const current = auth.serverVersion?.trim();
+        showNotification(
+          current
+            ? t('system_info.version_current_uncomparable', { current, latest })
+            : t('system_info.version_current_missing'),
+          'warning'
+        );
         return;
       }
 

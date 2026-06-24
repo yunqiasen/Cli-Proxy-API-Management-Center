@@ -1278,6 +1278,7 @@
     "version_is_latest": "当前已是最新版本",
     "version_check_error": "检查更新失败",
     "version_current_missing": "未获取到服务器版本号，暂无法比对",
+    "version_current_uncomparable": "当前版本 {{current}} 不是标准版本号，已获取上游最新版 {{latest}}，暂无法直接比对",
     "version_unknown": "未知",
     "quick_links_title": "快捷链接",
     "quick_links_desc": "访问项目仓库和文档，获取帮助和更新。",

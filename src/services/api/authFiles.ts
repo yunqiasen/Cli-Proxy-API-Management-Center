@@ -237,11 +237,9 @@ const dedupeAuthFilesResponse = (payload: AuthFilesResponse): AuthFilesResponse 
 };
 
 const parseAuthFileJsonObject = (rawText: string): Record<string, unknown> => {
-  const trimmed = rawText.trim();
-
   let parsed: unknown;
   try {
-    parsed = JSON.parse(trimmed) as unknown;
+    parsed = JSON.parse(rawText.trim()) as unknown;
   } catch {
     throw new Error(AUTH_FILE_INVALID_JSON_OBJECT_ERROR);
   }
@@ -249,13 +247,12 @@ const parseAuthFileJsonObject = (rawText: string): Record<string, unknown> => {
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
     throw new Error(AUTH_FILE_INVALID_JSON_OBJECT_ERROR);
   }
-
   return { ...(parsed as Record<string, unknown>) };
 };
 
 const saveAuthFileText = async (name: string, text: string) => {
   const file = new File([text], name, { type: 'application/json' });
-  await authFilesApi.upload(file);
+  await authFilesApi.uploadFiles([file]);
 };
 
 export const isAuthFileInvalidJsonObjectError = (err: unknown): boolean =>
@@ -365,8 +362,6 @@ export const authFilesApi = {
     return normalizeBatchUploadResponse(payload, requestedNames);
   },
 
-  upload: (file: File) => authFilesApi.uploadFiles([file]),
-
   deleteFiles: async (names: string[]): Promise<AuthFileBatchDeleteResult> => {
     const requestedNames = normalizeRequestedAuthFileNames(names);
     if (requestedNames.length === 0) {
@@ -395,12 +390,7 @@ export const authFilesApi = {
   },
 
   downloadZip: (names: string[]) =>
-    apiClient.requestRaw({
-      method: 'POST',
-      url: '/auth-files/download-zip',
-      data: { names },
-      responseType: 'blob'
-    }),
+    apiClient.postRaw('/auth-files/download-zip', { names }, { responseType: 'blob' }),
 
   async downloadJsonObject(name: string): Promise<Record<string, unknown>> {
     const rawText = await authFilesApi.downloadText(name);

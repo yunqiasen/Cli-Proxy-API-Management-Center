@@ -39,6 +39,7 @@ export interface PluginListEntry {
   enabled: boolean;
   effectiveEnabled: boolean;
   supportsOAuth: boolean;
+  oauthProvider?: string;
   logo: string;
   configFields: PluginConfigField[];
   menus: PluginMenu[];
@@ -71,6 +72,10 @@ export interface PluginStoreEntry {
   author: string;
   version: string;
   repository: string;
+  installType: string;
+  authRequired: boolean;
+  authConfigured: boolean;
+  platforms: PluginStorePlatform[];
   logo: string;
   homepage: string;
   license: string;
@@ -85,10 +90,9 @@ export interface PluginStoreEntry {
   updateAvailable: boolean;
 }
 
-export interface PluginStoreSource {
-  id: string;
-  name: string;
-  url: string;
+export interface PluginStorePlatform {
+  goos: string;
+  goarch: string;
 }
 
 export interface PluginStoreSourceError {
@@ -101,7 +105,6 @@ export interface PluginStoreSourceError {
 export interface PluginStoreResponse {
   pluginsEnabled: boolean;
   pluginsDir: string;
-  sources: PluginStoreSource[];
   sourceErrors: PluginStoreSourceError[];
   plugins: PluginStoreEntry[];
 }
@@ -113,6 +116,7 @@ export interface PluginStoreInstallResult {
   sourceUrl: string;
   id: string;
   version: string;
+  installType: string;
   path: string;
   pluginsEnabled: boolean;
   restartRequired: boolean;

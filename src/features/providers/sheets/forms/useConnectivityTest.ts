@@ -9,6 +9,7 @@ import {
 import { buildHeaderObject, hasHeader } from '@/utils/headers';
 import { getErrorMessage } from '@/utils/helpers';
 import type { ApiKeyEntryInput, ModelEntryInput, ProviderBrand } from '../../types';
+import { createCodexConnectivityRequest } from './codexConnectivityRequest';
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 const DEFAULT_ANTHROPIC_VERSION = '2023-06-01';
@@ -327,6 +328,8 @@ export function useConnectivityTest(
       }
     }
 
+    const connectivityRequest = createCodexConnectivityRequest(model, headerObj);
+
     setCodexStatus({ state: 'loading', message: '' });
     setInFlight((n) => n + 1);
     try {
@@ -335,12 +338,8 @@ export function useConnectivityTest(
           authIndex: resolvedAuthIndex,
           method: 'POST',
           url: endpoint,
-          header: headerObj,
-          data: JSON.stringify({
-            model,
-            input: 'Hi',
-            stream: false,
-          }),
+          header: connectivityRequest.headers,
+          data: JSON.stringify(connectivityRequest.body),
         },
         { timeout: DEFAULT_TIMEOUT_MS }
       );

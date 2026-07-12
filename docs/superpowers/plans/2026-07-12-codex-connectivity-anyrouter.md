@@ -6,7 +6,7 @@
 
 **Architecture:** Add a small pure request builder that generates one session UUID, applies it consistently to the `Session_id` header and `prompt_cache_key` body field, and builds the complete Codex probe payload. Keep the existing connectivity hook responsible for authentication, endpoint selection, status handling, and UI state.
 
-**Tech Stack:** React 19, TypeScript 6, Bun test runner, Vite single-file build.
+**Tech Stack:** React 19, TypeScript 6, Node.js test runner, Vite single-file build.
 
 ---
 
@@ -22,7 +22,7 @@ Test that the builder preserves custom headers, replaces any case-variant sessio
 
 - [ ] **Step 2: Run the focused test and verify RED**
 
-Run: `bun test src/features/providers/sheets/forms/codexConnectivityRequest.test.ts`
+Run: `node --experimental-strip-types --test test/codex_connectivity_request_test.mjs`
 Expected: FAIL because `codexConnectivityRequest.ts` does not exist.
 
 - [ ] **Step 3: Implement the minimal pure builder**
@@ -31,7 +31,7 @@ Create `createCodexConnectivityRequest(model, headers, createSessionId)` returni
 
 - [ ] **Step 4: Run the focused test and verify GREEN**
 
-Run: `bun test src/features/providers/sheets/forms/codexConnectivityRequest.test.ts`
+Run: `node --experimental-strip-types --test test/codex_connectivity_request_test.mjs`
 Expected: PASS.
 
 ### Task 2: Use the builder in the Codex connectivity hook
@@ -50,8 +50,8 @@ After authorization is resolved, build the probe and pass its normalized headers
 - [ ] **Step 3: Run focused and static checks**
 
 Run:
-- `bun test src/features/providers/sheets/forms/codexConnectivityRequest.test.ts`
-- `bun run type-check`
+- `node --experimental-strip-types --test test/codex_connectivity_request_test.mjs`
+- `npm run type-check`
 
 Expected: both exit 0.
 
@@ -63,8 +63,8 @@ Expected: both exit 0.
 
 - [ ] **Step 1: Build the production UI**
 
-Run: `bun run build`
-Expected: exit 0 and a fresh single-file `dist/management.html`.
+Run: `npm run build`
+Expected: exit 0 and a fresh single-file `dist/index.html`; the release workflow renames it to `management.html`.
 
 - [ ] **Step 2: Commit and push `CPA-UI-fork`**
 

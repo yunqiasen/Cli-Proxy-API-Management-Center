@@ -275,3 +275,25 @@
   font-size: 11px;
   overflow-wrap: anywhere;
 }
+
+.syncStatus {
+  display: flex;
+  align-items: center;
+  gap: $spacing-sm;
+  flex-wrap: wrap;
+  margin-bottom: $spacing-md;
+  color: var(--muted-foreground);
+  font-size: 12px;
+
+  span {
+    padding: 4px 8px;
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+    background: var(--bg-secondary);
+  }
+
+  .syncError {
+    color: var(--failure-badge-text);
+    background: var(--failure-badge-bg);
+  }
+}

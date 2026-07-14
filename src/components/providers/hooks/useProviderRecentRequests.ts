@@ -6,8 +6,15 @@ import {
   type ApiKeyUsageResponse,
   type RecentRequestUsageEntry,
 } from '@/utils/recentRequests';
-
-const PROVIDER_RECENT_REQUESTS_STALE_TIME_MS = 240_000;
+import {
+  PROVIDER_RECENT_REQUESTS_STALE_TIME_MS,
+  beginProviderRecentRequestsLoad,
+  createInFlightRequestDeduper,
+  createProviderRecentRequestsCacheState,
+  failProviderRecentRequestsLoad,
+  isProviderRecentRequestsCacheFresh,
+  resolveProviderRecentRequestsLoad,
+} from './providerRecentRequestsCache';
 
 export type ProviderRecentRequests = Map<string, Map<string, RecentRequestUsageEntry>>;
 
@@ -17,48 +24,14 @@ export type UseProviderRecentRequestsOptions = {
 
 const EMPTY_USAGE_BY_PROVIDER: ProviderRecentRequests = new Map();
 
-let cachedUsageByProvider: ProviderRecentRequests = EMPTY_USAGE_BY_PROVIDER;
-let cachedAt = 0;
-let inFlightRequest: Promise<ProviderRecentRequests> | null = null;
+let cacheState =
+  createProviderRecentRequestsCacheState<ProviderRecentRequests>(EMPTY_USAGE_BY_PROVIDER);
+const requestDeduper = createInFlightRequestDeduper<ProviderRecentRequests>();
 
 const normalizeProviderKey = (value: unknown): string =>
   String(value ?? '')
     .trim()
     .toLowerCase();
-
-const hasRecentUsageEntryData = (entry: RecentRequestUsageEntry): boolean =>
-  entry.success > 0 ||
-  entry.failed > 0 ||
-  entry.recentRequests.some((bucket) => bucket.success > 0 || bucket.failed > 0) ||
-  entry.successDetails.length > 0 ||
-  entry.failureDetails.length > 0;
-
-const mergeProviderRecentRequestsWithCache = (
-  incoming: ProviderRecentRequests,
-  previous: ProviderRecentRequests
-): ProviderRecentRequests => {
-  if (previous.size === 0) return incoming;
-
-  const merged: ProviderRecentRequests = new Map();
-  previous.forEach((entries, providerKey) => {
-    merged.set(providerKey, new Map(entries));
-  });
-
-  incoming.forEach((entries, providerKey) => {
-    const bucket = new Map(merged.get(providerKey) ?? []);
-    entries.forEach((entry, compositeKey) => {
-      const cached = bucket.get(compositeKey);
-      if (cached && hasRecentUsageEntryData(cached) && !hasRecentUsageEntryData(entry)) {
-        bucket.set(compositeKey, cached);
-        return;
-      }
-      bucket.set(compositeKey, entry);
-    });
-    merged.set(providerKey, bucket);
-  });
-
-  return merged;
-};
 
 const normalizeApiKeyUsageResponse = (payload: ApiKeyUsageResponse): ProviderRecentRequests => {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
@@ -66,76 +39,70 @@ const normalizeApiKeyUsageResponse = (payload: ApiKeyUsageResponse): ProviderRec
   }
 
   const usageByProvider: ProviderRecentRequests = new Map();
-
   Object.entries(payload).forEach(([provider, entries]) => {
     const providerKey = normalizeProviderKey(provider);
-    if (!providerKey || !entries || typeof entries !== 'object' || Array.isArray(entries)) {
-      return;
-    }
+    if (!providerKey || !entries || typeof entries !== 'object' || Array.isArray(entries)) return;
 
     const usageByCompositeKey = new Map<string, RecentRequestUsageEntry>();
     Object.entries(entries).forEach(([compositeKey, entry]) => {
       usageByCompositeKey.set(compositeKey, normalizeRecentRequestUsageEntry(entry));
     });
-
     usageByProvider.set(providerKey, usageByCompositeKey);
   });
-
   return usageByProvider;
 };
 
-const fetchProviderRecentRequests = async (): Promise<ProviderRecentRequests> => {
-  if (!inFlightRequest) {
-    inFlightRequest = apiKeyUsageApi
-      .getUsage()
-      .then((payload) => {
-        const normalized = normalizeApiKeyUsageResponse(payload);
-        const merged = mergeProviderRecentRequestsWithCache(normalized, cachedUsageByProvider);
-        cachedUsageByProvider = merged;
-        cachedAt = Date.now();
-        return merged;
-      })
-      .finally(() => {
-        inFlightRequest = null;
-      });
-  }
+const fetchProviderRecentRequests = (): Promise<ProviderRecentRequests> => {
+  const currentRequest = requestDeduper.current();
+  if (currentRequest) return currentRequest;
 
-  return inFlightRequest;
+  const started = beginProviderRecentRequestsLoad(cacheState);
+  cacheState = started.state;
+  return requestDeduper.run(async () => {
+    try {
+      const payload = await apiKeyUsageApi.getUsage();
+      const normalized = normalizeApiKeyUsageResponse(payload);
+      cacheState = resolveProviderRecentRequestsLoad(
+        cacheState,
+        started.requestId,
+        normalized,
+        Date.now()
+      );
+      return cacheState.data;
+    } catch (error) {
+      cacheState = failProviderRecentRequestsLoad(
+        cacheState,
+        started.requestId,
+        error instanceof Error ? error.message : String(error)
+      );
+      throw error;
+    }
+  });
 };
 
 export function useProviderRecentRequests(options: UseProviderRecentRequestsOptions = {}) {
   const enabled = options.enabled ?? true;
-  const [usageByProvider, setUsageByProvider] =
-    useState<ProviderRecentRequests>(cachedUsageByProvider);
-  const [isLoading, setIsLoading] = useState(false);
+  const [viewState, setViewState] = useState(cacheState);
 
   const loadRecentRequests = useCallback(
     async (loadOptions: { force?: boolean } = {}) => {
-      if (!enabled) {
-        return EMPTY_USAGE_BY_PROVIDER;
-      }
+      if (!enabled) return EMPTY_USAGE_BY_PROVIDER;
 
-      const hasFreshCache =
-        cachedAt > 0 && Date.now() - cachedAt < PROVIDER_RECENT_REQUESTS_STALE_TIME_MS;
-
+      const hasFreshCache = isProviderRecentRequestsCacheFresh(cacheState.cachedAt, Date.now());
       if (!loadOptions.force && hasFreshCache) {
-        setUsageByProvider(cachedUsageByProvider);
-        return cachedUsageByProvider;
+        setViewState(cacheState);
+        return cacheState.data;
       }
 
-      setIsLoading(true);
+      const request = fetchProviderRecentRequests();
+      setViewState(cacheState);
       try {
-        const nextUsage = await fetchProviderRecentRequests();
-        setUsageByProvider(nextUsage);
-        return nextUsage;
+        await request;
       } catch {
-        if (cachedAt > 0) {
-          setUsageByProvider(cachedUsageByProvider);
-        }
-        return cachedUsageByProvider;
-      } finally {
-        setIsLoading(false);
+        // The cache transition retains the last committed snapshot.
       }
+      setViewState(cacheState);
+      return cacheState.data;
     },
     [enabled]
   );
@@ -147,22 +114,24 @@ export function useProviderRecentRequests(options: UseProviderRecentRequestsOpti
 
   useEffect(() => {
     if (!enabled) {
-      setUsageByProvider(EMPTY_USAGE_BY_PROVIDER);
+      setViewState(createProviderRecentRequestsCacheState(EMPTY_USAGE_BY_PROVIDER));
       return;
     }
-    void loadRecentRequests().catch(() => {});
+    void loadRecentRequests();
   }, [enabled, loadRecentRequests]);
 
   useInterval(
     () => {
-      void refreshRecentRequests().catch(() => {});
+      void refreshRecentRequests();
     },
     enabled ? PROVIDER_RECENT_REQUESTS_STALE_TIME_MS : null
   );
 
   return {
-    usageByProvider: enabled ? usageByProvider : EMPTY_USAGE_BY_PROVIDER,
-    isLoading: enabled ? isLoading : false,
+    usageByProvider: enabled ? viewState.data : EMPTY_USAGE_BY_PROVIDER,
+    hasLoaded: enabled ? viewState.hasLoaded : false,
+    isLoading: enabled ? viewState.isLoading || !viewState.hasLoaded : false,
+    error: enabled ? viewState.error : null,
     loadRecentRequests,
     refreshRecentRequests,
   };

@@ -332,8 +332,7 @@ const serializeApiKeyEntry = (entry: ApiKeyEntry) => {
   return payload;
 };
 
-const serializeProviderKey = (config: ProviderKeyConfig) =>
-  serializeNativeProviderPayload(config);
+const serializeProviderKey = (config: ProviderKeyConfig) => serializeNativeProviderPayload(config);
 
 const serializeVertexModelAliases = (models?: ModelAlias[]) =>
   Array.isArray(models)
@@ -363,8 +362,7 @@ const serializeVertexKey = (config: ProviderKeyConfig) => {
   return payload;
 };
 
-const serializeGeminiKey = (config: GeminiKeyConfig) =>
-  serializeNativeProviderPayload(config);
+const serializeGeminiKey = (config: GeminiKeyConfig) => serializeNativeProviderPayload(config);
 
 const serializeOpenAIProvider = (provider: OpenAIProviderConfig) => {
   const payload: Record<string, unknown> = {
@@ -404,6 +402,19 @@ export const providersApi = {
       )
     ),
 
+  updateGeminiKeyAtIndex: (index: number, config: GeminiKeyConfig) =>
+    mutateLatestProviderList('gemini-api-key', (latestItems) =>
+      replaceLatestProviderRecord(
+        latestItems,
+        (_record, currentIndex) => currentIndex === index,
+        serializeGeminiKey(config),
+        (raw, payload) => mergeProviderKeyPayload(raw, payload, GEMINI_KEY_FIELDS)
+      )
+    ),
+
+  deleteGeminiKeyAtIndex: (index: number) =>
+    apiClient.delete(`/gemini-api-key?index=${encodeURIComponent(String(index))}`),
+
   deleteGeminiKey: (apiKey: string, baseUrl?: string) =>
     apiClient.delete(`/gemini-api-key${buildProviderDeleteQuery(apiKey, baseUrl)}`),
 
@@ -424,6 +435,19 @@ export const providersApi = {
       )
     ),
 
+  updateCodexConfigAtIndex: (index: number, config: ProviderKeyConfig) =>
+    mutateLatestProviderList('codex-api-key', (latestItems) =>
+      replaceLatestProviderRecord(
+        latestItems,
+        (_record, currentIndex) => currentIndex === index,
+        serializeProviderKey(config),
+        (raw, payload) => mergeProviderKeyPayload(raw, payload, CODEX_KEY_FIELDS)
+      )
+    ),
+
+  deleteCodexConfigAtIndex: (index: number) =>
+    apiClient.delete(`/codex-api-key?index=${encodeURIComponent(String(index))}`),
+
   deleteCodexConfig: (apiKey: string, baseUrl?: string) =>
     apiClient.delete(`/codex-api-key${buildProviderDeleteQuery(apiKey, baseUrl)}`),
 
@@ -443,6 +467,19 @@ export const providersApi = {
         (raw, payload) => mergeProviderKeyPayload(raw, payload, CLAUDE_KEY_FIELDS)
       )
     ),
+
+  updateClaudeConfigAtIndex: (index: number, config: ProviderKeyConfig) =>
+    mutateLatestProviderList('claude-api-key', (latestItems) =>
+      replaceLatestProviderRecord(
+        latestItems,
+        (_record, currentIndex) => currentIndex === index,
+        serializeProviderKey(config),
+        (raw, payload) => mergeProviderKeyPayload(raw, payload, CLAUDE_KEY_FIELDS)
+      )
+    ),
+
+  deleteClaudeConfigAtIndex: (index: number) =>
+    apiClient.delete(`/claude-api-key?index=${encodeURIComponent(String(index))}`),
 
   deleteClaudeConfig: (apiKey: string, baseUrl?: string) =>
     apiClient.delete(`/claude-api-key${buildProviderDeleteQuery(apiKey, baseUrl)}`),

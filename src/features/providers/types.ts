@@ -160,6 +160,7 @@ export interface SponsorKeyEntryInput {
 
 export interface ApiKeyEntryInput {
   apiKey: string;
+  priority?: number;
   existingApiKey?: string;
   proxyUrl: string;
   authIndex?: string;
@@ -194,6 +195,7 @@ export interface ProviderEntryFormInput {
   /** Claude 专属 */
   cloak?: CloakInput;
   experimentalCchSigning?: boolean;
+  rebuildMidSystemMessage?: boolean;
   /** OpenAI persists this; Gemini/Claude use it for one-off connectivity tests. */
   testModel?: string;
   apiKeyEntries?: ApiKeyEntryInput[];

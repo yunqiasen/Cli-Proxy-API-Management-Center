@@ -1524,8 +1524,18 @@
       "validation": {
         "nameRequired": "名稱必填",
         "apiKeyRequired": "至少填寫一個 API 金鑰",
-        "baseUrlRequired": "服務位址必填"
-      }
+        "baseUrlRequired": "服務位址必填",
+        "duplicateApiKey": "同一提供商群組內的 API 金鑰不得重複"
+      },
+      "providerName": "提供商名稱",
+      "providerNameHint": "選填，用於識別這組金鑰",
+      "keyPriority": "金鑰優先級",
+      "inheritedValue": "繼承",
+      "inheritedPriorityHint": "留空繼承提供商優先級",
+      "inheritedProxyHint": "留空繼承提供商代理",
+      "multiKeyCount": "{{count}} 個金鑰",
+      "rebuildMidSystemMessage": "重建對話中段系統訊息",
+      "rebuildMidSystemMessageHint": "將對話中段的 system 訊息移入 Claude 頂層 system 欄位"
     },
     "delete": {
       "title": "刪除資源",

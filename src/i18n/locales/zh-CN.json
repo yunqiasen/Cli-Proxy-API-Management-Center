@@ -1498,8 +1498,18 @@
       "validation": {
         "nameRequired": "名称必填",
         "apiKeyRequired": "至少填写一个 API 密钥",
-        "baseUrlRequired": "服务地址必填"
-      }
+        "baseUrlRequired": "服务地址必填",
+        "duplicateApiKey": "同一提供商组内的 API 密钥不能重复"
+      },
+      "providerName": "提供商名称",
+      "providerNameHint": "可选，用于标识这组密钥",
+      "keyPriority": "密钥优先级",
+      "inheritedValue": "继承",
+      "inheritedPriorityHint": "留空继承提供商优先级",
+      "inheritedProxyHint": "留空继承提供商代理",
+      "multiKeyCount": "{{count}} 个密钥",
+      "rebuildMidSystemMessage": "重建对话中段系统消息",
+      "rebuildMidSystemMessageHint": "将对话中段的 system 消息移入 Claude 顶层 system 字段"
     },
     "delete": {
       "title": "删除资源",

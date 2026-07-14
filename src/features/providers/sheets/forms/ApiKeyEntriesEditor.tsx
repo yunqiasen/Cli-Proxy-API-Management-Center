@@ -27,6 +27,8 @@ interface ApiKeyEntriesEditorProps {
   mutating: boolean;
   statuses: ConnectivityStatus[];
   isTestingAny: boolean;
+  showConnectivity?: boolean;
+  showPriority?: boolean;
   onUpdate: (idx: number, patch: Partial<ApiKeyEntryInput>) => void;
   /** Appends a new blank entry and returns its index. */
   onAdd: () => number;
@@ -41,6 +43,8 @@ export function ApiKeyEntriesEditor({
   mutating,
   statuses,
   isTestingAny,
+  showConnectivity = true,
+  showPriority = false,
   onUpdate,
   onAdd,
   onRemove,
@@ -102,19 +106,21 @@ export function ApiKeyEntriesEditor({
           <IconPlus size={12} />
           <span>{t('providersPage.form.addApiKeyEntry')}</span>
         </button>
-        <button
-          type="button"
-          className={styles.connectivityBtn}
-          disabled={mutating || isTestingAny}
-          onClick={onTestAll}
-        >
-          {isTestingAny ? (
-            <span className={`${styles.statusIcon} ${styles.statusIconLoading}`}>
-              <IconLoader2 size={14} />
-            </span>
-          ) : null}
-          <span>{t('providersPage.connectivity.testAll')}</span>
-        </button>
+        {showConnectivity ? (
+          <button
+            type="button"
+            className={styles.connectivityBtn}
+            disabled={mutating || isTestingAny}
+            onClick={onTestAll}
+          >
+            {isTestingAny ? (
+              <span className={`${styles.statusIcon} ${styles.statusIconLoading}`}>
+                <IconLoader2 size={14} />
+              </span>
+            ) : null}
+            <span>{t('providersPage.connectivity.testAll')}</span>
+          </button>
+        ) : null}
       </div>
       {visible.map(({ entry, idx }) => {
         const status = statuses[idx] ?? idleStatus;
@@ -131,6 +137,11 @@ export function ApiKeyEntriesEditor({
               >
                 <span>{t('providersPage.form.apiKeyEntry', { index: idx + 1 })}</span>
                 <span className={styles.entrySummary}>
+                  {entry.priority !== undefined ? (
+                    <span className={styles.entryBadge}>
+                      {t('providersPage.form.keyPriority')}: {entry.priority}
+                    </span>
+                  ) : null}
                   {entry.proxyUrl.trim() ? (
                     <span className={styles.entryBadge} title={entry.proxyUrl}>
                       {t('providersPage.form.proxyBadge')}
@@ -142,20 +153,22 @@ export function ApiKeyEntriesEditor({
                 </span>
               </button>
               <div className={styles.entryCardHeaderRight}>
-                <ConnectivityStatusIcon state={status.state} />
-                <button
-                  type="button"
-                  className={styles.connectivityBtnGhost}
-                  disabled={mutating || status.state === 'loading'}
-                  onClick={() => onTest(idx)}
-                >
-                  {status.state === 'loading' ? (
-                    <span className={`${styles.statusIcon} ${styles.statusIconLoading}`}>
-                      <IconLoader2 size={14} />
-                    </span>
-                  ) : null}
-                  <span>{t('providersPage.connectivity.test')}</span>
-                </button>
+                {showConnectivity ? <ConnectivityStatusIcon state={status.state} /> : null}
+                {showConnectivity ? (
+                  <button
+                    type="button"
+                    className={styles.connectivityBtnGhost}
+                    disabled={mutating || status.state === 'loading'}
+                    onClick={() => onTest(idx)}
+                  >
+                    {status.state === 'loading' ? (
+                      <span className={`${styles.statusIcon} ${styles.statusIconLoading}`}>
+                        <IconLoader2 size={14} />
+                      </span>
+                    ) : null}
+                    <span>{t('providersPage.connectivity.test')}</span>
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   className={styles.entryCardIconBtn}
@@ -183,7 +196,7 @@ export function ApiKeyEntriesEditor({
                 </button>
               </div>
             </div>
-            {status.state === 'error' ? (
+            {showConnectivity && status.state === 'error' ? (
               <div className={styles.connectivityError}>{status.message}</div>
             ) : null}
             {expanded ? (
@@ -231,8 +244,39 @@ export function ApiKeyEntriesEditor({
                     </button>
                   </div>
                 </div>
+                {showPriority ? (
+                  <div className={styles.field}>
+                    <label className={styles.label}>
+                      {t('providersPage.form.keyPriority')}
+                      <span className={styles.labelHint}>
+                        {' '}
+                        · {t('providersPage.form.inheritedPriorityHint')}
+                      </span>
+                    </label>
+                    <input
+                      className={styles.input}
+                      type="number"
+                      value={entry.priority ?? ''}
+                      onChange={(e) =>
+                        onUpdate(idx, {
+                          priority: e.target.value === '' ? undefined : Number(e.target.value),
+                        })
+                      }
+                      disabled={mutating}
+                      placeholder={t('providersPage.form.inheritedValue')}
+                    />
+                  </div>
+                ) : null}
                 <div className={styles.field}>
-                  <label className={styles.label}>{t('providersPage.form.proxyUrl')}</label>
+                  <label className={styles.label}>
+                    {t('providersPage.form.proxyUrl')}
+                    {showPriority ? (
+                      <span className={styles.labelHint}>
+                        {' '}
+                        · {t('providersPage.form.inheritedProxyHint')}
+                      </span>
+                    ) : null}
+                  </label>
                   <input
                     className={styles.input}
                     value={entry.proxyUrl}

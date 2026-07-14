@@ -224,10 +224,11 @@ export function ProviderResourceTable({
         renderMetric('headers', t('providersPage.table.metrics.headers'), r.headerCount)
       );
     } else {
-      items.push(
-        renderMetric('models', t('providersPage.table.metrics.models'), r.modelCount),
-        renderMetric('headers', t('providersPage.table.metrics.headers'), r.headerCount)
-      );
+      items.push(renderMetric('models', t('providersPage.table.metrics.models'), r.modelCount));
+      if (r.apiKeyEntryCount > 0) {
+        items.push(renderMetric('keys', t('providersPage.table.metrics.keys'), r.apiKeyEntryCount));
+      }
+      items.push(renderMetric('headers', t('providersPage.table.metrics.headers'), r.headerCount));
       if (r.brand === 'codex' && r.flags.websockets) {
         items.push(renderFlagTag('ws', t('providersPage.table.websocketsTag')));
       }
@@ -395,10 +396,19 @@ export function ProviderResourceTable({
         </div>
       );
     }
+    const extraKeys = r.apiKeyEntryCount > 1 ? ` · +${r.apiKeyEntryCount - 1}` : '';
     return (
       <div className={styles.primaryCell}>
-        <span className={styles.primaryName}>{r.apiKeyPreview ?? '—'}</span>
-        {r.authIndex ? <span className={styles.primarySub}>auth: {r.authIndex}</span> : null}
+        <span className={styles.primaryName}>{r.name ?? r.apiKeyPreview ?? '—'}</span>
+        {r.name ? (
+          <span className={styles.primarySub}>{(r.apiKeyPreview ?? '—') + extraKeys}</span>
+        ) : r.apiKeyEntryCount > 1 ? (
+          <span className={styles.primarySub}>
+            {t('providersPage.form.multiKeyCount', { count: r.apiKeyEntryCount })}
+          </span>
+        ) : r.authIndex ? (
+          <span className={styles.primarySub}>auth: {r.authIndex}</span>
+        ) : null}
         {renderRoutingMeta(r)}
       </div>
     );

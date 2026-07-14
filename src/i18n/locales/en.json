@@ -1498,8 +1498,18 @@
       "validation": {
         "nameRequired": "Name is required",
         "apiKeyRequired": "At least one API key is required",
-        "baseUrlRequired": "Base URL is required"
-      }
+        "baseUrlRequired": "Base URL is required",
+        "duplicateApiKey": "API keys in one provider group must be unique"
+      },
+      "providerName": "Provider name",
+      "providerNameHint": "Optional display name for this key group",
+      "keyPriority": "Key priority",
+      "inheritedValue": "Inherit",
+      "inheritedPriorityHint": "Blank inherits provider priority",
+      "inheritedProxyHint": "Blank inherits provider proxy",
+      "multiKeyCount": "{{count}} keys",
+      "rebuildMidSystemMessage": "Rebuild mid-conversation system messages",
+      "rebuildMidSystemMessageHint": "Move mid-conversation system messages into the top-level Claude system field"
     },
     "delete": {
       "title": "Delete resource",

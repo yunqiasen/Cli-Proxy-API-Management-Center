@@ -29,6 +29,11 @@ import { ApiKeyEntriesEditor } from './ApiKeyEntriesEditor';
 import { ModelEntriesEditor } from './ModelEntriesEditor';
 import styles from './sharedForm.module.scss';
 import { CLAUDE_API_BASE_URL } from '../../claudeApi';
+import {
+  buildNativeProviderFormInput,
+  validateNativeProviderKeyEntries,
+  type NativeProviderBrand,
+} from '../../nativeProviderForm';
 
 interface BaseProviderFormProps {
   brand: ProviderBrand;
@@ -58,11 +63,19 @@ const formatJsonObject = (value?: Record<string, unknown>): string => {
 const isClaudeLikeBrand = (brand: ProviderBrand): boolean =>
   brand === 'claude' || brand === 'claudeApi';
 
+const isNativeProviderBrand = (brand: ProviderBrand): brand is NativeProviderBrand =>
+  brand === 'gemini' || brand === 'codex' || brand === 'claude';
+
 function buildInitialForm(
   brand: ProviderBrand,
   resource: ProviderResource | null,
   mode: 'create' | 'edit'
 ): ProviderEntryFormInput {
+  if (isNativeProviderBrand(brand)) {
+    const config =
+      mode === 'edit' && resource ? (resource.raw as GeminiKeyConfig | ProviderKeyConfig) : null;
+    return buildNativeProviderFormInput(brand, config);
+  }
   if (mode === 'create' || !resource) {
     return {
       apiKey: '',
@@ -76,18 +89,12 @@ function buildInitialForm(
       models: [emptyModel()],
       headers: [emptyHeader()],
       excludedModelsText: '',
-      websockets: brand === 'codex' ? false : undefined,
+      websockets: undefined,
       cloak: isClaudeLikeBrand(brand)
         ? { mode: '', strictMode: false, sensitiveWordsText: '', cacheUserId: false }
         : undefined,
       experimentalCchSigning: isClaudeLikeBrand(brand) ? false : undefined,
-      testModel:
-        brand === 'openaiCompatibility' ||
-        brand === 'codex' ||
-        isClaudeLikeBrand(brand) ||
-        brand === 'gemini'
-          ? ''
-          : undefined,
+      testModel: brand === 'openaiCompatibility' || isClaudeLikeBrand(brand) ? '' : undefined,
       apiKeyEntries: brand === 'openaiCompatibility' ? [emptyApiKeyEntry()] : undefined,
     };
   }
@@ -158,7 +165,7 @@ function buildInitialForm(
       ? Object.entries(cfg.headers).map(([k, v]) => ({ key: k, value: String(v) }))
       : [emptyHeader()],
     excludedModelsText: excludedList.join('\n'),
-    websockets: brand === 'codex' ? (cfg as ProviderKeyConfig).websockets === true : undefined,
+    websockets: undefined,
     cloak: isClaudeLikeBrand(brand)
       ? {
           mode: (cfg as ProviderKeyConfig).cloak?.mode ?? '',
@@ -170,7 +177,7 @@ function buildInitialForm(
     experimentalCchSigning: isClaudeLikeBrand(brand)
       ? (cfg as ProviderKeyConfig).experimentalCchSigning === true
       : undefined,
-    testModel: brand === 'codex' || isClaudeLikeBrand(brand) || brand === 'gemini' ? '' : undefined,
+    testModel: isClaudeLikeBrand(brand) ? '' : undefined,
   };
 }
 
@@ -204,16 +211,20 @@ export function BaseProviderForm({
     onDirtyChange?.(isDirty);
   }, [isDirty, onDirtyChange]);
 
+  const firstNativeKeyEntry = isNativeProviderBrand(brand) ? form.apiKeyEntries?.[0] : undefined;
+  const connectivityApiKey = firstNativeKeyEntry?.apiKey ?? form.apiKey;
+
   const fallbackApiKey = useMemo(() => {
-    if (mode !== 'edit' || !resource) return '';
-    if (brand === 'openaiCompatibility') return '';
+    if (firstNativeKeyEntry) return firstNativeKeyEntry.existingApiKey ?? '';
+    if (mode !== 'edit' || !resource || brand === 'openaiCompatibility') return '';
     return (resource.raw as { apiKey?: string } | undefined)?.apiKey ?? '';
-  }, [brand, mode, resource]);
+  }, [brand, firstNativeKeyEntry, mode, resource]);
 
   const fallbackAuthIndex = useMemo(() => {
+    if (firstNativeKeyEntry?.authIndex) return firstNativeKeyEntry.authIndex;
     if (mode !== 'edit' || !resource) return '';
     return (resource.raw as { authIndex?: string } | undefined)?.authIndex ?? '';
-  }, [mode, resource]);
+  }, [firstNativeKeyEntry, mode, resource]);
 
   const connectivityMessages = useMemo<ConnectivityErrorMessages>(
     () => ({
@@ -235,7 +246,7 @@ export function BaseProviderForm({
       models: form.models,
       formHeaders: form.headers,
       apiKeyEntries: form.apiKeyEntries,
-      apiKey: form.apiKey,
+      apiKey: connectivityApiKey,
       fallbackApiKey,
       authIndex: fallbackAuthIndex,
     },
@@ -247,7 +258,7 @@ export function BaseProviderForm({
     baseUrl: form.baseUrl,
     formHeaders: form.headers,
     apiKeyEntries: form.apiKeyEntries,
-    apiKey: form.apiKey,
+    apiKey: connectivityApiKey,
     fallbackApiKey,
     authIndex: fallbackAuthIndex,
   });
@@ -357,10 +368,18 @@ export function BaseProviderForm({
   };
 
   const validate = (): string | null => {
-    if (descriptor.supportsName && !form.name.trim()) {
+    if (brand === 'openaiCompatibility' && !form.name.trim()) {
       return t('providersPage.form.validation.nameRequired');
     }
-    if (descriptor.supportsApiKey && mode === 'create' && !form.apiKey.trim()) {
+    if (isNativeProviderBrand(brand)) {
+      const keyError = validateNativeProviderKeyEntries(form.apiKeyEntries);
+      if (keyError === 'api-key-required') {
+        return t('providersPage.form.validation.apiKeyRequired');
+      }
+      if (keyError === 'duplicate-api-key') {
+        return t('providersPage.form.validation.duplicateApiKey');
+      }
+    } else if (descriptor.supportsApiKey && mode === 'create' && !form.apiKey.trim()) {
       return t('providersPage.form.validation.apiKeyRequired');
     }
     if (descriptor.baseUrlRequired && !form.baseUrl.trim()) {
@@ -436,7 +455,15 @@ export function BaseProviderForm({
         {descriptor.supportsName ? (
           <div className={styles.field}>
             <label className={styles.label} htmlFor={`${fid}-name`}>
-              {t('providersPage.form.name')}
+              {isNativeProviderBrand(brand)
+                ? t('providersPage.form.providerName')
+                : t('providersPage.form.name')}
+              {isNativeProviderBrand(brand) ? (
+                <span className={styles.labelHint}>
+                  {' '}
+                  · {t('providersPage.form.providerNameHint')}
+                </span>
+              ) : null}
             </label>
             <input
               id={`${fid}-name`}
@@ -679,6 +706,8 @@ export function BaseProviderForm({
             mutating={mutating}
             statuses={connectivity.openaiStatuses}
             isTestingAny={connectivity.isTestingAny}
+            showConnectivity={brand === 'openaiCompatibility'}
+            showPriority={isNativeProviderBrand(brand)}
             onUpdate={(idx, patch) =>
               updateField(
                 'apiKeyEntries',
@@ -865,6 +894,21 @@ export function BaseProviderForm({
                 <small>{t('providersPage.form.cloakCacheUserIdHint')}</small>
               </span>
             </label>
+            {brand === 'claude' ? (
+              <label className={styles.checkboxRow}>
+                <input
+                  type="checkbox"
+                  className={styles.checkboxBox}
+                  checked={form.rebuildMidSystemMessage ?? false}
+                  disabled={mutating}
+                  onChange={(e) => updateField('rebuildMidSystemMessage', e.target.checked)}
+                />
+                <span className={styles.checkboxText}>
+                  <span>{t('providersPage.form.rebuildMidSystemMessage')}</span>
+                  <small>{t('providersPage.form.rebuildMidSystemMessageHint')}</small>
+                </span>
+              </label>
+            ) : null}
             <label className={styles.checkboxRow}>
               <input
                 type="checkbox"

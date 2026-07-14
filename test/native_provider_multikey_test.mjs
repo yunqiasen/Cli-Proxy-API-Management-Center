@@ -4,9 +4,12 @@ import {
   normalizeNativeProviderPayload,
   serializeNativeProviderPayload,
 } from '../src/services/api/nativeProviderContracts.ts';
+import { buildNativeProviderResourceData } from '../src/features/providers/nativeProviderResource.ts';
 import {
-  buildNativeProviderResourceData,
-} from '../src/features/providers/nativeProviderResource.ts';
+  buildNativeProviderConfig,
+  buildNativeProviderFormInput,
+  validateNativeProviderKeyEntries,
+} from '../src/features/providers/nativeProviderForm.ts';
 
 const mask = (value) => `masked:${value}`;
 
@@ -99,4 +102,98 @@ test('builds grouped native provider identity, key previews, search terms, and s
   assert.deepEqual(data.keyPreviews, ['masked:key-a', 'masked:key-b']);
   assert.deepEqual(data.searchTerms, ['relay-a', 'key-a', 'key-b', 'masked:key-a', 'masked:key-b']);
   assert.deepEqual(data.selector, { index: 3, name: 'relay-a' });
+});
+
+test('keeps an untouched legacy native provider in legacy form', () => {
+  const existing = {
+    apiKey: 'legacy-key',
+    priority: 8,
+    proxyUrl: 'http://provider-proxy',
+    cloak: { mode: 'always', strictMode: true },
+    experimentalCchSigning: true,
+    rebuildMidSystemMessage: true,
+  };
+  const form = buildNativeProviderFormInput('claude', existing);
+  const saved = buildNativeProviderConfig('claude', form, existing);
+
+  assert.equal(form.apiKeyEntries.length, 1);
+  assert.equal(form.apiKeyEntries[0].existingApiKey, 'legacy-key');
+  assert.equal(saved.apiKey, 'legacy-key');
+  assert.equal(saved.apiKeyEntries, undefined);
+  assert.deepEqual(saved.cloak, existing.cloak);
+  assert.equal(saved.experimentalCchSigning, true);
+  assert.equal(saved.rebuildMidSystemMessage, true);
+});
+
+test('emits grouped entries after adding a provider name or second key', () => {
+  const existing = { apiKey: 'legacy-key', priority: 8, proxyUrl: 'http://provider-proxy' };
+  const namedForm = { ...buildNativeProviderFormInput('codex', existing), name: 'relay-a' };
+  const named = buildNativeProviderConfig('codex', namedForm, existing);
+  assert.equal(named.apiKey, 'legacy-key');
+  assert.deepEqual(named.apiKeyEntries, [{ apiKey: 'legacy-key' }]);
+
+  const multiForm = buildNativeProviderFormInput('codex', existing);
+  multiForm.apiKeyEntries.push({ apiKey: 'key-b', proxyUrl: 'http://key-proxy', priority: 0 });
+  const multi = buildNativeProviderConfig('codex', multiForm, existing);
+  assert.deepEqual(multi.apiKeyEntries, [
+    { apiKey: 'legacy-key' },
+    { apiKey: 'key-b', priority: 0, proxyUrl: 'http://key-proxy' },
+  ]);
+});
+
+test('rejects duplicate native provider secrets', () => {
+  assert.equal(
+    validateNativeProviderKeyEntries([
+      { apiKey: 'same-key', proxyUrl: '' },
+      { apiKey: ' same-key ', proxyUrl: '' },
+    ]),
+    'duplicate-api-key'
+  );
+});
+
+test('preserves Claude, Codex, and Gemini protocol fields through form conversion', () => {
+  const claude = {
+    apiKey: '',
+    name: 'claude-relay',
+    apiKeyEntries: [{ apiKey: 'claude-a' }],
+    cloak: { mode: 'auto', cacheUserId: true },
+    experimentalCchSigning: true,
+    rebuildMidSystemMessage: true,
+  };
+  const codex = {
+    apiKey: '',
+    name: 'codex-relay',
+    apiKeyEntries: [{ apiKey: 'codex-a' }],
+    websockets: true,
+  };
+  const gemini = {
+    apiKey: '',
+    name: 'gemini-relay',
+    apiKeyEntries: [{ apiKey: 'gemini-a' }],
+    disableCooling: true,
+    headers: { 'X-Test': 'kept' },
+  };
+
+  const claudeSaved = buildNativeProviderConfig(
+    'claude',
+    buildNativeProviderFormInput('claude', claude),
+    claude
+  );
+  const codexSaved = buildNativeProviderConfig(
+    'codex',
+    buildNativeProviderFormInput('codex', codex),
+    codex
+  );
+  const geminiSaved = buildNativeProviderConfig(
+    'gemini',
+    buildNativeProviderFormInput('gemini', gemini),
+    gemini
+  );
+
+  assert.deepEqual(claudeSaved.cloak, claude.cloak);
+  assert.equal(claudeSaved.experimentalCchSigning, true);
+  assert.equal(claudeSaved.rebuildMidSystemMessage, true);
+  assert.equal(codexSaved.websockets, true);
+  assert.equal(geminiSaved.disableCooling, true);
+  assert.deepEqual(geminiSaved.headers, { 'X-Test': 'kept' });
 });

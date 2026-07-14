@@ -1476,8 +1476,18 @@
       "validation": {
         "nameRequired": "Название обязательно",
         "apiKeyRequired": "Нужен хотя бы один API-ключ",
-        "baseUrlRequired": "Base URL обязателен"
-      }
+        "baseUrlRequired": "Base URL обязателен",
+        "duplicateApiKey": "API-ключи в одной группе провайдера должны быть уникальны"
+      },
+      "providerName": "Название провайдера",
+      "providerNameHint": "Необязательное имя группы ключей",
+      "keyPriority": "Приоритет ключа",
+      "inheritedValue": "Наследовать",
+      "inheritedPriorityHint": "Пустое значение наследует приоритет провайдера",
+      "inheritedProxyHint": "Пустое значение наследует прокси провайдера",
+      "multiKeyCount": "{{count}} ключей",
+      "rebuildMidSystemMessage": "Переносить промежуточные системные сообщения",
+      "rebuildMidSystemMessageHint": "Переносить системные сообщения в верхнее поле Claude system"
     },
     "delete": {
       "title": "Удалить ресурс",

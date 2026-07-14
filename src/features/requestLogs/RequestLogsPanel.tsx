@@ -45,7 +45,7 @@ const formatTime = (value?: string) => {
 const compactRequestPath = (value?: string) => {
   const raw = String(value ?? '').trim();
   if (!raw) return '—';
-  let pathname = raw;
+  let pathname: string;
   try {
     pathname =
       raw.startsWith('http://') || raw.startsWith('https://')

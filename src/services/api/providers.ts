@@ -5,6 +5,7 @@
 import { apiClient } from './client';
 import { isRecord } from '@/utils/helpers';
 import { normalizeOpenAIProvider, normalizeProviderKeyConfig } from './transformers';
+import { serializeNativeProviderPayload } from './nativeProviderContracts';
 import type {
   GeminiKeyConfig,
   OpenAIProviderConfig,
@@ -19,7 +20,9 @@ const serializeHeaders = (headers?: Record<string, string>) =>
 const RESPONSE_ONLY_FIELDS = ['auth-index'] as const;
 
 const PROVIDER_COMMON_KEY_FIELDS = [
+  'name',
   'api-key',
+  'api-key-entries',
   'priority',
   'prefix',
   'base-url',
@@ -36,6 +39,7 @@ const CLAUDE_KEY_FIELDS = [
   ...PROVIDER_COMMON_KEY_FIELDS,
   'cloak',
   'experimental-cch-signing',
+  'rebuild-mid-system-message',
 ] as const;
 const VERTEX_KEY_FIELDS = [
   'api-key',
@@ -65,6 +69,7 @@ const MODEL_ALIAS_FIELDS = ['name', 'alias', 'priority', 'test-model'] as const;
 const OPENAI_MODEL_ALIAS_FIELDS = [...MODEL_ALIAS_FIELDS, 'image', 'thinking'] as const;
 
 const API_KEY_ENTRY_FIELDS = ['api-key', 'proxy-url'] as const;
+const NATIVE_API_KEY_ENTRY_FIELDS = ['api-key', 'priority', 'proxy-url'] as const;
 
 const CLOAK_FIELDS = ['mode', 'strict-mode', 'sensitive-words', 'cache-user-id'] as const;
 
@@ -241,6 +246,16 @@ const mergeProviderKeyPayload = (
   knownFields: readonly string[]
 ) => {
   const next = mergeKnownFields(raw, payload, knownFields);
+  const rawApiKeyEntries = isRecord(raw) ? raw['api-key-entries'] : undefined;
+  const apiKeyEntries = payload['api-key-entries'];
+  if (Array.isArray(apiKeyEntries)) {
+    next['api-key-entries'] = mergeKnownRecordList(
+      rawApiKeyEntries,
+      apiKeyEntries.filter(isRecord),
+      NATIVE_API_KEY_ENTRY_FIELDS,
+      apiKeyEntryIdentity
+    );
+  }
   const models = mergeModelPayloads(raw, payload.models);
   if (models) next.models = models;
   if (isRecord(payload.cloak)) {
@@ -317,42 +332,8 @@ const serializeApiKeyEntry = (entry: ApiKeyEntry) => {
   return payload;
 };
 
-const serializeProviderKey = (config: ProviderKeyConfig) => {
-  const payload: Record<string, unknown> = { 'api-key': config.apiKey };
-  if (config.priority !== undefined) payload.priority = config.priority;
-  if (config.prefix?.trim()) payload.prefix = config.prefix.trim();
-  if (config.baseUrl) payload['base-url'] = config.baseUrl;
-  if (config.websockets !== undefined) payload.websockets = config.websockets;
-  if (config.proxyUrl) payload['proxy-url'] = config.proxyUrl;
-  if (config.disableCooling) payload['disable-cooling'] = true;
-  const headers = serializeHeaders(config.headers);
-  if (headers) payload.headers = headers;
-  const models = serializeModelAliases(config.models);
-  if (models && models.length) payload.models = models;
-  if (config.excludedModels && config.excludedModels.length) {
-    payload['excluded-models'] = config.excludedModels;
-  }
-  if (config.cloak) {
-    const cloakPayload: Record<string, unknown> = {};
-    const mode = config.cloak.mode?.trim();
-    if (mode) cloakPayload.mode = mode;
-    if (config.cloak.strictMode !== undefined)
-      cloakPayload['strict-mode'] = config.cloak.strictMode;
-    if (config.cloak.sensitiveWords && config.cloak.sensitiveWords.length) {
-      cloakPayload['sensitive-words'] = config.cloak.sensitiveWords;
-    }
-    if (config.cloak.cacheUserId) {
-      cloakPayload['cache-user-id'] = true;
-    }
-    if (Object.keys(cloakPayload).length) {
-      payload.cloak = cloakPayload;
-    }
-  }
-  if (config.experimentalCchSigning) {
-    payload['experimental-cch-signing'] = true;
-  }
-  return payload;
-};
+const serializeProviderKey = (config: ProviderKeyConfig) =>
+  serializeNativeProviderPayload(config);
 
 const serializeVertexModelAliases = (models?: ModelAlias[]) =>
   Array.isArray(models)
@@ -382,22 +363,8 @@ const serializeVertexKey = (config: ProviderKeyConfig) => {
   return payload;
 };
 
-const serializeGeminiKey = (config: GeminiKeyConfig) => {
-  const payload: Record<string, unknown> = { 'api-key': config.apiKey };
-  if (config.priority !== undefined) payload.priority = config.priority;
-  if (config.prefix?.trim()) payload.prefix = config.prefix.trim();
-  if (config.baseUrl) payload['base-url'] = config.baseUrl;
-  if (config.proxyUrl) payload['proxy-url'] = config.proxyUrl;
-  if (config.disableCooling) payload['disable-cooling'] = true;
-  const headers = serializeHeaders(config.headers);
-  if (headers) payload.headers = headers;
-  const models = serializeModelAliases(config.models);
-  if (models && models.length) payload.models = models;
-  if (config.excludedModels && config.excludedModels.length) {
-    payload['excluded-models'] = config.excludedModels;
-  }
-  return payload;
-};
+const serializeGeminiKey = (config: GeminiKeyConfig) =>
+  serializeNativeProviderPayload(config);
 
 const serializeOpenAIProvider = (provider: OpenAIProviderConfig) => {
   const payload: Record<string, unknown> = {

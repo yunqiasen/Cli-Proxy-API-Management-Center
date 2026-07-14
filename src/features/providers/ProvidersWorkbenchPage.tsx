@@ -65,6 +65,7 @@ const matchesFilter = (r: ProviderResource, normalized: string): boolean => {
     r.authIndex,
     r.apiKeyPreview,
     r.apiKey,
+    ...(r.credentialSearchTerms ?? []),
     r.baseUrl,
     r.proxyUrl,
     r.prefix,

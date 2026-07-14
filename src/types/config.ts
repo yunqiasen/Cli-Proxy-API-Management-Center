@@ -17,6 +17,7 @@ export interface Config {
   requestRetry?: number;
   quotaExceeded?: QuotaExceededConfig;
   requestLog?: boolean;
+  requestLogRetentionDays?: number;
   loggingToFile?: boolean;
   logsMaxTotalSizeMb?: number;
   wsAuth?: boolean;
@@ -38,6 +39,7 @@ export type RawConfigSection =
   | 'request-retry'
   | 'quota-exceeded'
   | 'request-log'
+  | 'request-log-retention-days'
   | 'logging-to-file'
   | 'logs-max-total-size-mb'
   | 'ws-auth'

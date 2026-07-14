@@ -214,6 +214,14 @@ export const normalizeConfigResponse = (raw: unknown): Config => {
   }
 
   config.requestLog = normalizeBoolean(raw['request-log']);
+  const requestLogRetentionDays = raw['request-log-retention-days'];
+  if (
+    typeof requestLogRetentionDays === 'number' &&
+    Number.isInteger(requestLogRetentionDays) &&
+    requestLogRetentionDays >= 0
+  ) {
+    config.requestLogRetentionDays = requestLogRetentionDays;
+  }
   config.loggingToFile = normalizeBoolean(raw['logging-to-file']);
   const logsMaxTotalSizeMb = raw['logs-max-total-size-mb'];
   if (typeof logsMaxTotalSizeMb === 'number' && Number.isFinite(logsMaxTotalSizeMb)) {

@@ -161,7 +161,10 @@
     "request_log_warning": "僅在需要排查問題時開啟，日常請保持關閉。",
     "ws_auth_enable": "啟用 /ws/* 驗證",
     "routing_strategy_round_robin": "round-robin（輪詢）",
-    "routing_strategy_fill_first": "fill-first（優先填充）"
+    "routing_strategy_fill_first": "fill-first（優先填充）",
+    "request_log_retention_days": "結構化日誌保留天數",
+    "request_log_retention_hint": "0 表示永久保留結構化請求日誌；原始日誌檔案輪替需獨立設定。",
+    "request_log_retention_invalid": "請輸入大於或等於 0 的整數。"
   },
   "auth_files": {
     "title": "驗證檔案管理",

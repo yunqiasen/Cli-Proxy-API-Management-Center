@@ -88,6 +88,9 @@ export const useConfigStore = create<ConfigState>((set, get) => ({
         case 'request-log':
           nextConfig.requestLog = value as Config['requestLog'];
           break;
+        case 'request-log-retention-days':
+          nextConfig.requestLogRetentionDays = value as Config['requestLogRetentionDays'];
+          break;
         case 'logging-to-file':
           nextConfig.loggingToFile = value as Config['loggingToFile'];
           break;

@@ -174,12 +174,12 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
   }, []);
 
   const pollRefreshJob = useCallback(
-    async (jobId: string) => {
+    async function poll(jobId: string) {
       try {
         const job = await quotaRefreshApi.getJob(jobId);
         setRefreshJob(job);
         if (job.status === 'running') {
-          window.setTimeout(() => void pollRefreshJob(jobId), 2000);
+          window.setTimeout(() => void poll(jobId), 2000);
           return;
         }
         showNotification(

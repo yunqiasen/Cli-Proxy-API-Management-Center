@@ -22,9 +22,9 @@ import {
   getOpenAIProviderRecentStatusData,
   getOpenAIProviderTotalStats,
   getOpenAIProviderUsageDetails,
-  getProviderRecentStatusData,
-  getProviderTotalStats,
-  getProviderUsageDetails,
+  getProviderApiKeysRecentStatusData,
+  getProviderApiKeysTotalStats,
+  getProviderApiKeysUsageDetails,
   type ProviderRecentUsageMap,
 } from '@/components/providers/utils';
 import type { OpenAIProviderConfig } from '@/types';
@@ -94,6 +94,9 @@ const isSponsorResource = (resource: ProviderResource): boolean =>
 const getUsageProvider = (resource: ProviderResource): string =>
   resource.brand === 'claudeApi' ? 'claude' : resource.brand;
 
+const getUsageApiKeys = (resource: ProviderResource): string[] =>
+  resource.apiKeys?.length ? resource.apiKeys : resource.apiKey ? [resource.apiKey] : [];
+
 const resolveStatusBarData = (
   resource: ProviderResource,
   usageByProvider: ProviderRecentUsageMap
@@ -101,10 +104,10 @@ const resolveStatusBarData = (
   if (resource.brand === 'openaiCompatibility') {
     return getOpenAIProviderRecentStatusData(resource.raw as OpenAIProviderConfig, usageByProvider);
   }
-  return getProviderRecentStatusData(
+  return getProviderApiKeysRecentStatusData(
     usageByProvider,
     getUsageProvider(resource),
-    resource.apiKey ?? undefined,
+    getUsageApiKeys(resource),
     resource.baseUrl ?? undefined
   );
 };
@@ -116,10 +119,10 @@ const resolveTotalStats = (
   if (resource.brand === 'openaiCompatibility') {
     return getOpenAIProviderTotalStats(resource.raw as OpenAIProviderConfig, usageByProvider);
   }
-  return getProviderTotalStats(
+  return getProviderApiKeysTotalStats(
     usageByProvider,
     getUsageProvider(resource),
-    resource.apiKey ?? undefined,
+    getUsageApiKeys(resource),
     resource.baseUrl ?? undefined
   );
 };
@@ -131,10 +134,10 @@ const resolveUsageDetails = (
   if (resource.brand === 'openaiCompatibility') {
     return getOpenAIProviderUsageDetails(resource.raw as OpenAIProviderConfig, usageByProvider);
   }
-  return getProviderUsageDetails(
+  return getProviderApiKeysUsageDetails(
     usageByProvider,
     getUsageProvider(resource),
-    resource.apiKey ?? undefined,
+    getUsageApiKeys(resource),
     resource.baseUrl ?? undefined
   );
 };

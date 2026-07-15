@@ -13,6 +13,7 @@ import {
   useThemeStore,
 } from '@/stores';
 import { configApi, versionApi } from '@/services/api';
+import { saveRequestLogSettings } from '@/services/api/requestLogRetention';
 import { useApiKeysForModels } from '@/hooks/useApiKeysForModels';
 import { formatDateTimeValue } from '@/utils/format';
 import { classifyModels } from '@/utils/models';
@@ -218,32 +219,32 @@ export function SystemPage() {
       return;
     }
 
-    const previousEnabled = requestLogEnabled;
-    const previousRetentionDays = requestLogRetentionDays;
-    const requestLogChanged = requestLogDraft !== requestLogEnabled;
-    const retentionChanged = parsedRequestLogRetentionDays !== requestLogRetentionDays;
     setRequestLogSaving(true);
-    if (requestLogChanged) updateConfigValue('request-log', requestLogDraft);
-    if (retentionChanged) {
-      updateConfigValue('request-log-retention-days', parsedRequestLogRetentionDays);
-    }
-
     try {
-      await Promise.all([
-        requestLogChanged ? configApi.updateRequestLog(requestLogDraft) : Promise.resolve(),
-        retentionChanged
-          ? configApi.updateRequestLogRetentionDays(parsedRequestLogRetentionDays)
-          : Promise.resolve(),
-      ]);
+      await saveRequestLogSettings(
+        { enabled: requestLogEnabled, retentionDays: requestLogRetentionDays },
+        { enabled: requestLogDraft, retentionDays: parsedRequestLogRetentionDays },
+        {
+          updateRequestLog: configApi.updateRequestLog,
+          updateRequestLogRetentionDays: configApi.updateRequestLogRetentionDays,
+          readServerSettings: async () => {
+            const [serverConfig, retentionDays] = await Promise.all([
+              configApi.getConfig(),
+              configApi.getRequestLogRetentionDays(),
+            ]);
+            return { enabled: serverConfig.requestLog ?? false, retentionDays };
+          },
+          applyServerSettings: ({ enabled, retentionDays }) => {
+            updateConfigValue('request-log', enabled);
+            updateConfigValue('request-log-retention-days', retentionDays);
+          },
+        }
+      );
       showNotification(t('notification.request_log_updated'), 'success');
       setRequestLogModalOpen(false);
     } catch (error: unknown) {
       const message =
         error instanceof Error ? error.message : typeof error === 'string' ? error : '';
-      if (requestLogChanged) updateConfigValue('request-log', previousEnabled);
-      if (retentionChanged) {
-        updateConfigValue('request-log-retention-days', previousRetentionDays);
-      }
       showNotification(
         `${t('notification.update_failed')}${message ? `: ${message}` : ''}`,
         'error'

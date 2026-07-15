@@ -5,6 +5,7 @@ import {
   serializeNativeProviderPayload,
 } from '../src/services/api/nativeProviderContracts.ts';
 import { buildNativeProviderResourceData } from '../src/features/providers/nativeProviderResource.ts';
+import { aggregateProviderUsageByApiKeys } from '../src/components/providers/providerUsageAggregation.ts';
 import {
   buildNativeProviderConfig,
   buildNativeProviderFormInput,
@@ -196,4 +197,48 @@ test('preserves Claude, Codex, and Gemini protocol fields through form conversio
   assert.equal(codexSaved.websockets, true);
   assert.equal(geminiSaved.disableCooling, true);
   assert.deepEqual(geminiSaved.headers, { 'X-Test': 'kept' });
+});
+
+test('aggregates every native provider key for totals, status, details, and recent sorting', () => {
+  const lookedUpKeys = [];
+  const usageByKey = new Map([
+    [
+      'key-a',
+      {
+        success: 2,
+        failed: 1,
+        recentRequests: [{ success: 1, failed: 1 }],
+        successDetails: [{ model: 'model-a', status: 200, count: 2 }],
+        failureDetails: [{ model: 'model-a', status: 500, count: 1, error: 'upstream-a' }],
+      },
+    ],
+    [
+      'key-b',
+      {
+        success: 5,
+        failed: 3,
+        recentRequests: [{ success: 4, failed: 2 }],
+        successDetails: [{ model: 'model-a', status: 200, count: 5 }],
+        failureDetails: [{ model: 'model-b', status: 429, count: 3, error: 'rate-limit' }],
+      },
+    ],
+  ]);
+
+  const summary = aggregateProviderUsageByApiKeys(['key-a', 'key-b'], (apiKey) => {
+    lookedUpKeys.push(apiKey);
+    return usageByKey.get(apiKey);
+  });
+
+  assert.deepEqual(lookedUpKeys, ['key-a', 'key-b']);
+  assert.deepEqual(summary.totalStats, { success: 7, failure: 4 });
+  assert.deepEqual(summary.recentWindowStats, { success: 5, failure: 3 });
+  assert.equal(summary.statusData.totalSuccess, 5);
+  assert.equal(summary.statusData.totalFailure, 3);
+  assert.deepEqual(summary.usageDetails.successDetails, [
+    { model: 'model-a', status: 200, count: 7 },
+  ]);
+  assert.deepEqual(summary.usageDetails.failureDetails, [
+    { model: 'model-b', status: 429, count: 3, error: 'rate-limit' },
+    { model: 'model-a', status: 500, count: 1, error: 'upstream-a' },
+  ]);
 });

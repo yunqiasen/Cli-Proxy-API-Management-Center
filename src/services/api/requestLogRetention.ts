@@ -18,3 +18,49 @@ export function parseRequestLogRetentionDaysResponse(value: unknown): number {
   }
   return days;
 }
+
+export interface RequestLogSettings {
+  enabled: boolean;
+  retentionDays: number;
+}
+
+export interface RequestLogSettingsSaveDependencies {
+  updateRequestLog: (enabled: boolean) => Promise<unknown>;
+  updateRequestLogRetentionDays: (days: number) => Promise<unknown>;
+  readServerSettings: () => Promise<RequestLogSettings>;
+  applyServerSettings: (settings: RequestLogSettings) => void;
+}
+
+export async function saveRequestLogSettings(
+  current: RequestLogSettings,
+  next: RequestLogSettings,
+  dependencies: RequestLogSettingsSaveDependencies
+): Promise<RequestLogSettings> {
+  const writes: Array<() => Promise<unknown>> = [];
+  if (current.enabled !== next.enabled) {
+    writes.push(() => dependencies.updateRequestLog(next.enabled));
+  }
+  if (current.retentionDays !== next.retentionDays) {
+    writes.push(() => dependencies.updateRequestLogRetentionDays(next.retentionDays));
+  }
+
+  const writeResults = await Promise.allSettled(
+    writes.map((write) => Promise.resolve().then(write))
+  );
+  const mutationFailure = writeResults.find(
+    (result): result is PromiseRejectedResult => result.status === 'rejected'
+  );
+
+  let serverSettings: RequestLogSettings;
+  try {
+    serverSettings = await dependencies.readServerSettings();
+  } catch (readError: unknown) {
+    throw mutationFailure?.reason ?? readError;
+  }
+
+  dependencies.applyServerSettings(serverSettings);
+  if (mutationFailure) {
+    throw mutationFailure.reason;
+  }
+  return serverSettings;
+}

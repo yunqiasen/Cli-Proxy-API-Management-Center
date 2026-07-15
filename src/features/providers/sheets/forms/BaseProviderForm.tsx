@@ -706,7 +706,7 @@ export function BaseProviderForm({
             mutating={mutating}
             statuses={connectivity.openaiStatuses}
             isTestingAny={connectivity.isTestingAny}
-            showConnectivity={brand === 'openaiCompatibility'}
+            showConnectivity={brand === 'openaiCompatibility' || isNativeProviderBrand(brand)}
             showPriority={isNativeProviderBrand(brand)}
             onUpdate={(idx, patch) =>
               updateField(
@@ -725,8 +725,16 @@ export function BaseProviderForm({
                 actualApiKeyEntries.filter((_, i) => i !== idx)
               )
             }
-            onTest={(idx) => void connectivity.runOpenAIKey(idx)}
-            onTestAll={() => void connectivity.runOpenAIAllKeys()}
+            onTest={(idx) =>
+              void (brand === 'openaiCompatibility'
+                ? connectivity.runOpenAIKey(idx)
+                : connectivity.runNativeKey(idx))
+            }
+            onTestAll={() =>
+              void (brand === 'openaiCompatibility'
+                ? connectivity.runOpenAIAllKeys()
+                : connectivity.runNativeAllKeys())
+            }
           />
         </Collapsible>
       ) : null}

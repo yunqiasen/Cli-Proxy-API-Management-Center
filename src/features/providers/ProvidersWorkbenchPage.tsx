@@ -21,6 +21,7 @@ import { APIKEY_FUN_DISPLAY_NAME } from './sponsor';
 import { isMultiProtocolSponsorBrand } from './sponsorDefinitions';
 import { isSponsorPartialMutationError } from './sponsorMutationRecovery';
 import { useProviderWorkbench } from './useProviderWorkbench';
+import { getNativeProviderUsageIdentity } from './nativeProviderUsageIdentity';
 import {
   getProviderFilterState,
   readProvidersWorkbenchUiState,
@@ -90,7 +91,7 @@ const getResourceRecentSuccess = (
     return getOpenAIProviderRecentWindowStats(resource.raw as OpenAIProviderConfig, usageByProvider)
       .success;
   }
-  const usageProvider = resource.brand === 'claudeApi' ? 'claude' : resource.brand;
+  const usageProvider = getNativeProviderUsageIdentity(resource.brand, resource.name);
   const apiKeys = resource.apiKeys?.length
     ? resource.apiKeys
     : resource.apiKey

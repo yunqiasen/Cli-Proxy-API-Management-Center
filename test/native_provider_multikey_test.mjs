@@ -5,6 +5,7 @@ import {
   serializeNativeProviderPayload,
 } from '../src/services/api/nativeProviderContracts.ts';
 import { buildNativeProviderResourceData } from '../src/features/providers/nativeProviderResource.ts';
+import { getNativeProviderUsageIdentity } from '../src/features/providers/nativeProviderUsageIdentity.ts';
 import { aggregateProviderUsageByApiKeys } from '../src/components/providers/providerUsageAggregation.ts';
 import {
   buildNativeProviderConfig,
@@ -140,6 +141,12 @@ test('emits grouped entries after adding a provider name or second key', () => {
     { apiKey: 'legacy-key' },
     { apiKey: 'key-b', priority: 0, proxyUrl: 'http://key-proxy' },
   ]);
+});
+
+test('uses the configured native provider name for usage lookups', () => {
+  assert.equal(getNativeProviderUsageIdentity('codex', 'AnyRouter'), 'AnyRouter');
+  assert.equal(getNativeProviderUsageIdentity('claude', '  Claude Relay  '), 'Claude Relay');
+  assert.equal(getNativeProviderUsageIdentity('gemini', ''), 'gemini');
 });
 
 test('rejects duplicate native provider secrets', () => {

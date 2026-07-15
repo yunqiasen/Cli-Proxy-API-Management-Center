@@ -27,6 +27,7 @@ import {
   getProviderApiKeysUsageDetails,
   type ProviderRecentUsageMap,
 } from '@/components/providers/utils';
+import { getNativeProviderUsageIdentity } from '../nativeProviderUsageIdentity';
 import type { OpenAIProviderConfig } from '@/types';
 import type {
   ApiKeyUsageFailureDetail,
@@ -92,7 +93,7 @@ const isSponsorResource = (resource: ProviderResource): boolean =>
   isMultiProtocolSponsorBrand(resource.brand);
 
 const getUsageProvider = (resource: ProviderResource): string =>
-  resource.brand === 'claudeApi' ? 'claude' : resource.brand;
+  getNativeProviderUsageIdentity(resource.brand, resource.name);
 
 const getUsageApiKeys = (resource: ProviderResource): string[] =>
   resource.apiKeys?.length ? resource.apiKeys : resource.apiKey ? [resource.apiKey] : [];

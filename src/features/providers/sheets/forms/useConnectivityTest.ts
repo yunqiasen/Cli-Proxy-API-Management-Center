@@ -81,6 +81,8 @@ export interface UseConnectivityTestResult {
   isTestingAny: boolean;
   runOpenAIKey: (idx: number) => Promise<boolean>;
   runOpenAIAllKeys: () => Promise<void>;
+  runNativeKey: (idx: number) => Promise<void>;
+  runNativeAllKeys: () => Promise<void>;
   runCodex: () => Promise<void>;
   runGemini: () => Promise<void>;
   runClaude: () => Promise<void>;
@@ -283,219 +285,288 @@ export function useConnectivityTest(
     await Promise.all(entries.map((_, idx) => runOpenAIKey(idx)));
   }, [apiKeyEntries, brand, runOpenAIKey]);
 
-  const runCodex = useCallback(async (): Promise<void> => {
-    if (brand !== 'codex') return;
+  const runCodex = useCallback(
+    async (entryIndex?: number): Promise<void> => {
+      if (brand !== 'codex') return;
 
-    const trimmedBase = baseUrl.trim();
-    if (!trimmedBase) {
-      setCodexStatus({ state: 'error', message: messages.baseUrlRequired });
-      return;
-    }
-
-    const endpoint = buildCodexResponsesEndpoint(trimmedBase);
-    if (!endpoint) {
-      setCodexStatus({ state: 'error', message: messages.endpointInvalid });
-      return;
-    }
-
-    const model = pickModel(testModel, models);
-    if (!model) {
-      setCodexStatus({ state: 'error', message: messages.modelRequired });
-      return;
-    }
-
-    const customHeaders = buildHeaderObject(formHeaders);
-    const explicitKey = (apiKey ?? '').trim();
-    const persistedKey = (fallbackApiKey ?? '').trim();
-    const hasAuthorization = hasHeader(customHeaders, 'authorization');
-    const resolvedKey = explicitKey || persistedKey;
-    const resolvedAuthIndex = (authIndex ?? '').trim() || undefined;
-
-    if (!resolvedKey && !hasAuthorization && !resolvedAuthIndex) {
-      setCodexStatus({ state: 'error', message: messages.apiKeyRequired });
-      return;
-    }
-
-    const headerObj: Record<string, string> = {
-      'Content-Type': 'application/json',
-      ...customHeaders,
-    };
-    if (!hasHeader(headerObj, 'authorization')) {
-      if (resolvedKey) {
-        headerObj.Authorization = `Bearer ${resolvedKey}`;
-      } else if (resolvedAuthIndex) {
-        headerObj.Authorization = 'Bearer $TOKEN$';
+      const trimmedBase = baseUrl.trim();
+      if (!trimmedBase) {
+        setCodexStatus({ state: 'error', message: messages.baseUrlRequired });
+        return;
       }
-    }
 
-    const connectivityRequest = createCodexConnectivityRequest(model, headerObj);
-
-    setCodexStatus({ state: 'loading', message: '' });
-    setInFlight((n) => n + 1);
-    try {
-      const result = await apiCallApi.request(
-        {
-          authIndex: resolvedAuthIndex,
-          method: 'POST',
-          url: endpoint,
-          header: connectivityRequest.headers,
-          data: JSON.stringify(connectivityRequest.body),
-        },
-        { timeout: DEFAULT_TIMEOUT_MS }
-      );
-      if (result.statusCode < 200 || result.statusCode >= 300) {
-        throw new Error(getApiCallErrorMessage(result));
+      const endpoint = buildCodexResponsesEndpoint(trimmedBase);
+      if (!endpoint) {
+        setCodexStatus({ state: 'error', message: messages.endpointInvalid });
+        return;
       }
-      setCodexStatus({ state: 'success', message: '' });
-    } catch (err) {
-      setCodexStatus({
-        state: 'error',
-        message: requestFailureMessage(err, messages),
-      });
-    } finally {
-      setInFlight((n) => n - 1);
-    }
-  }, [apiKey, authIndex, baseUrl, brand, fallbackApiKey, formHeaders, messages, models, testModel]);
 
-  const runGemini = useCallback(async (): Promise<void> => {
-    if (brand !== 'gemini') return;
-
-    const model = pickModel(testModel, models);
-    if (!model) {
-      setGeminiStatus({ state: 'error', message: messages.modelRequired });
-      return;
-    }
-
-    const endpoint = buildGeminiGenerateContentEndpoint(baseUrl ?? '', model);
-    if (!endpoint) {
-      setGeminiStatus({ state: 'error', message: messages.endpointInvalid });
-      return;
-    }
-
-    const customHeaders = buildHeaderObject(formHeaders);
-    const explicitKey = (apiKey ?? '').trim();
-    const persistedKey = (fallbackApiKey ?? '').trim();
-    const hasApiKeyHeader = hasHeader(customHeaders, 'x-goog-api-key');
-    const resolvedKey = explicitKey || persistedKey;
-    const resolvedAuthIndex = (authIndex ?? '').trim() || undefined;
-
-    if (!resolvedKey && !hasApiKeyHeader && !resolvedAuthIndex) {
-      setGeminiStatus({ state: 'error', message: messages.apiKeyRequired });
-      return;
-    }
-
-    const headerObj: Record<string, string> = {
-      'Content-Type': 'application/json',
-      ...customHeaders,
-    };
-    if (!hasHeader(headerObj, 'x-goog-api-key')) {
-      if (resolvedKey) {
-        headerObj['x-goog-api-key'] = resolvedKey;
-      } else if (resolvedAuthIndex) {
-        headerObj['x-goog-api-key'] = '$TOKEN$';
+      const model = pickModel(testModel, models);
+      if (!model) {
+        setCodexStatus({ state: 'error', message: messages.modelRequired });
+        return;
       }
-    }
 
-    setGeminiStatus({ state: 'loading', message: '' });
-    setInFlight((n) => n + 1);
-    try {
-      const result = await apiCallApi.request(
-        {
-          authIndex: resolvedAuthIndex,
-          method: 'POST',
-          url: endpoint,
-          header: headerObj,
-          data: JSON.stringify({
-            contents: [{ parts: [{ text: 'Hi' }] }],
-            generationConfig: { maxOutputTokens: 8 },
-          }),
-        },
-        { timeout: DEFAULT_TIMEOUT_MS }
-      );
-      if (result.statusCode < 200 || result.statusCode >= 300) {
-        throw new Error(getApiCallErrorMessage(result));
+      const customHeaders = buildHeaderObject(formHeaders);
+      const selectedEntry = entryIndex === undefined ? undefined : apiKeyEntries?.[entryIndex];
+      const explicitKey = (selectedEntry?.apiKey ?? apiKey ?? '').trim();
+      const persistedKey = (selectedEntry?.existingApiKey ?? fallbackApiKey ?? '').trim();
+      const hasAuthorization = hasHeader(customHeaders, 'authorization');
+      const resolvedKey = explicitKey || persistedKey;
+      const resolvedAuthIndex =
+        (selectedEntry?.authIndex ?? '').trim() || (authIndex ?? '').trim() || undefined;
+
+      if (!resolvedKey && !hasAuthorization && !resolvedAuthIndex) {
+        setCodexStatus({ state: 'error', message: messages.apiKeyRequired });
+        return;
       }
-      setGeminiStatus({ state: 'success', message: '' });
-    } catch (err) {
-      setGeminiStatus({
-        state: 'error',
-        message: requestFailureMessage(err, messages),
-      });
-    } finally {
-      setInFlight((n) => n - 1);
-    }
-  }, [apiKey, authIndex, baseUrl, brand, fallbackApiKey, formHeaders, messages, models, testModel]);
 
-  const runClaude = useCallback(async (): Promise<void> => {
-    if (brand !== 'claude' && brand !== 'claudeApi') return;
-
-    const endpoint = buildClaudeMessagesEndpoint(baseUrl ?? '');
-    if (!endpoint) {
-      setClaudeStatus({ state: 'error', message: messages.endpointInvalid });
-      return;
-    }
-    const model = pickModel(testModel, models);
-    if (!model) {
-      setClaudeStatus({ state: 'error', message: messages.modelRequired });
-      return;
-    }
-
-    const customHeaders = buildHeaderObject(formHeaders);
-    const explicitKey = (apiKey ?? '').trim();
-    const persistedKey = (fallbackApiKey ?? '').trim();
-    const headerKey = resolveBearerToken(customHeaders);
-    const hasApiKeyHeader = hasHeader(customHeaders, 'x-api-key');
-    const resolvedKey = explicitKey || persistedKey || headerKey;
-    const resolvedAuthIndex = (authIndex ?? '').trim() || undefined;
-
-    if (!resolvedKey && !hasApiKeyHeader && !resolvedAuthIndex) {
-      setClaudeStatus({ state: 'error', message: messages.apiKeyRequired });
-      return;
-    }
-
-    const headerObj: Record<string, string> = {
-      'Content-Type': 'application/json',
-      ...customHeaders,
-    };
-    if (!hasHeader(headerObj, 'anthropic-version')) {
-      headerObj['anthropic-version'] = DEFAULT_ANTHROPIC_VERSION;
-    }
-    if (!hasApiKeyHeader && resolvedKey) {
-      headerObj['x-api-key'] = resolvedKey;
-    } else if (!hasApiKeyHeader && resolvedAuthIndex) {
-      headerObj['x-api-key'] = '$TOKEN$';
-    }
-
-    setClaudeStatus({ state: 'loading', message: '' });
-    setInFlight((n) => n + 1);
-    try {
-      const result = await apiCallApi.request(
-        {
-          authIndex: resolvedAuthIndex,
-          method: 'POST',
-          url: endpoint,
-          header: headerObj,
-          data: JSON.stringify({
-            model,
-            max_tokens: 8,
-            messages: [{ role: 'user', content: 'Hi' }],
-          }),
-        },
-        { timeout: DEFAULT_TIMEOUT_MS }
-      );
-      if (result.statusCode < 200 || result.statusCode >= 300) {
-        throw new Error(getApiCallErrorMessage(result));
+      const headerObj: Record<string, string> = {
+        'Content-Type': 'application/json',
+        ...customHeaders,
+      };
+      if (!hasHeader(headerObj, 'authorization')) {
+        if (resolvedKey) {
+          headerObj.Authorization = `Bearer ${resolvedKey}`;
+        } else if (resolvedAuthIndex) {
+          headerObj.Authorization = 'Bearer $TOKEN$';
+        }
       }
-      setClaudeStatus({ state: 'success', message: '' });
-    } catch (err) {
-      setClaudeStatus({
-        state: 'error',
-        message: requestFailureMessage(err, messages),
-      });
-    } finally {
-      setInFlight((n) => n - 1);
-    }
-  }, [apiKey, authIndex, baseUrl, brand, fallbackApiKey, formHeaders, messages, models, testModel]);
+
+      const connectivityRequest = createCodexConnectivityRequest(model, headerObj);
+
+      setCodexStatus({ state: 'loading', message: '' });
+      setInFlight((n) => n + 1);
+      try {
+        const result = await apiCallApi.request(
+          {
+            authIndex: resolvedAuthIndex,
+            method: 'POST',
+            url: endpoint,
+            header: connectivityRequest.headers,
+            data: JSON.stringify(connectivityRequest.body),
+          },
+          { timeout: DEFAULT_TIMEOUT_MS }
+        );
+        if (result.statusCode < 200 || result.statusCode >= 300) {
+          throw new Error(getApiCallErrorMessage(result));
+        }
+        setCodexStatus({ state: 'success', message: '' });
+        if (entryIndex !== undefined)
+          updateOpenaiStatus(entryIndex, { state: 'success', message: '' });
+      } catch (err) {
+        const failure = { state: 'error' as const, message: requestFailureMessage(err, messages) };
+        setCodexStatus(failure);
+        if (entryIndex !== undefined) updateOpenaiStatus(entryIndex, failure);
+      } finally {
+        setInFlight((n) => n - 1);
+      }
+    },
+    [
+      apiKey,
+      apiKeyEntries,
+      authIndex,
+      baseUrl,
+      brand,
+      fallbackApiKey,
+      formHeaders,
+      messages,
+      models,
+      testModel,
+      updateOpenaiStatus,
+    ]
+  );
+
+  const runGemini = useCallback(
+    async (entryIndex?: number): Promise<void> => {
+      if (brand !== 'gemini') return;
+
+      const model = pickModel(testModel, models);
+      if (!model) {
+        setGeminiStatus({ state: 'error', message: messages.modelRequired });
+        return;
+      }
+
+      const endpoint = buildGeminiGenerateContentEndpoint(baseUrl ?? '', model);
+      if (!endpoint) {
+        setGeminiStatus({ state: 'error', message: messages.endpointInvalid });
+        return;
+      }
+
+      const customHeaders = buildHeaderObject(formHeaders);
+      const selectedEntry = entryIndex === undefined ? undefined : apiKeyEntries?.[entryIndex];
+      const explicitKey = (selectedEntry?.apiKey ?? apiKey ?? '').trim();
+      const persistedKey = (selectedEntry?.existingApiKey ?? fallbackApiKey ?? '').trim();
+      const hasApiKeyHeader = hasHeader(customHeaders, 'x-goog-api-key');
+      const resolvedKey = explicitKey || persistedKey;
+      const resolvedAuthIndex =
+        (selectedEntry?.authIndex ?? '').trim() || (authIndex ?? '').trim() || undefined;
+
+      if (!resolvedKey && !hasApiKeyHeader && !resolvedAuthIndex) {
+        setGeminiStatus({ state: 'error', message: messages.apiKeyRequired });
+        return;
+      }
+
+      const headerObj: Record<string, string> = {
+        'Content-Type': 'application/json',
+        ...customHeaders,
+      };
+      if (!hasHeader(headerObj, 'x-goog-api-key')) {
+        if (resolvedKey) {
+          headerObj['x-goog-api-key'] = resolvedKey;
+        } else if (resolvedAuthIndex) {
+          headerObj['x-goog-api-key'] = '$TOKEN$';
+        }
+      }
+
+      setGeminiStatus({ state: 'loading', message: '' });
+      setInFlight((n) => n + 1);
+      try {
+        const result = await apiCallApi.request(
+          {
+            authIndex: resolvedAuthIndex,
+            method: 'POST',
+            url: endpoint,
+            header: headerObj,
+            data: JSON.stringify({
+              contents: [{ parts: [{ text: 'Hi' }] }],
+              generationConfig: { maxOutputTokens: 8 },
+            }),
+          },
+          { timeout: DEFAULT_TIMEOUT_MS }
+        );
+        if (result.statusCode < 200 || result.statusCode >= 300) {
+          throw new Error(getApiCallErrorMessage(result));
+        }
+        setGeminiStatus({ state: 'success', message: '' });
+        if (entryIndex !== undefined)
+          updateOpenaiStatus(entryIndex, { state: 'success', message: '' });
+      } catch (err) {
+        const failure = { state: 'error' as const, message: requestFailureMessage(err, messages) };
+        setGeminiStatus(failure);
+        if (entryIndex !== undefined) updateOpenaiStatus(entryIndex, failure);
+      } finally {
+        setInFlight((n) => n - 1);
+      }
+    },
+    [
+      apiKey,
+      apiKeyEntries,
+      authIndex,
+      baseUrl,
+      brand,
+      fallbackApiKey,
+      formHeaders,
+      messages,
+      models,
+      testModel,
+      updateOpenaiStatus,
+    ]
+  );
+
+  const runClaude = useCallback(
+    async (entryIndex?: number): Promise<void> => {
+      if (brand !== 'claude' && brand !== 'claudeApi') return;
+
+      const endpoint = buildClaudeMessagesEndpoint(baseUrl ?? '');
+      if (!endpoint) {
+        setClaudeStatus({ state: 'error', message: messages.endpointInvalid });
+        return;
+      }
+      const model = pickModel(testModel, models);
+      if (!model) {
+        setClaudeStatus({ state: 'error', message: messages.modelRequired });
+        return;
+      }
+
+      const customHeaders = buildHeaderObject(formHeaders);
+      const selectedEntry = entryIndex === undefined ? undefined : apiKeyEntries?.[entryIndex];
+      const explicitKey = (selectedEntry?.apiKey ?? apiKey ?? '').trim();
+      const persistedKey = (selectedEntry?.existingApiKey ?? fallbackApiKey ?? '').trim();
+      const headerKey = resolveBearerToken(customHeaders);
+      const hasApiKeyHeader = hasHeader(customHeaders, 'x-api-key');
+      const resolvedKey = explicitKey || persistedKey || headerKey;
+      const resolvedAuthIndex =
+        (selectedEntry?.authIndex ?? '').trim() || (authIndex ?? '').trim() || undefined;
+
+      if (!resolvedKey && !hasApiKeyHeader && !resolvedAuthIndex) {
+        setClaudeStatus({ state: 'error', message: messages.apiKeyRequired });
+        return;
+      }
+
+      const headerObj: Record<string, string> = {
+        'Content-Type': 'application/json',
+        ...customHeaders,
+      };
+      if (!hasHeader(headerObj, 'anthropic-version')) {
+        headerObj['anthropic-version'] = DEFAULT_ANTHROPIC_VERSION;
+      }
+      if (!hasApiKeyHeader && resolvedKey) {
+        headerObj['x-api-key'] = resolvedKey;
+      } else if (!hasApiKeyHeader && resolvedAuthIndex) {
+        headerObj['x-api-key'] = '$TOKEN$';
+      }
+
+      setClaudeStatus({ state: 'loading', message: '' });
+      setInFlight((n) => n + 1);
+      try {
+        const result = await apiCallApi.request(
+          {
+            authIndex: resolvedAuthIndex,
+            method: 'POST',
+            url: endpoint,
+            header: headerObj,
+            data: JSON.stringify({
+              model,
+              max_tokens: 8,
+              messages: [{ role: 'user', content: 'Hi' }],
+            }),
+          },
+          { timeout: DEFAULT_TIMEOUT_MS }
+        );
+        if (result.statusCode < 200 || result.statusCode >= 300) {
+          throw new Error(getApiCallErrorMessage(result));
+        }
+        setClaudeStatus({ state: 'success', message: '' });
+        if (entryIndex !== undefined)
+          updateOpenaiStatus(entryIndex, { state: 'success', message: '' });
+      } catch (err) {
+        const failure = { state: 'error' as const, message: requestFailureMessage(err, messages) };
+        setClaudeStatus(failure);
+        if (entryIndex !== undefined) updateOpenaiStatus(entryIndex, failure);
+      } finally {
+        setInFlight((n) => n - 1);
+      }
+    },
+    [
+      apiKey,
+      apiKeyEntries,
+      authIndex,
+      baseUrl,
+      brand,
+      fallbackApiKey,
+      formHeaders,
+      messages,
+      models,
+      testModel,
+      updateOpenaiStatus,
+    ]
+  );
+
+  const runNativeKey = useCallback(
+    async (idx: number): Promise<void> => {
+      updateOpenaiStatus(idx, { state: 'loading', message: '' });
+      if (brand === 'codex') await runCodex(idx);
+      else if (brand === 'gemini') await runGemini(idx);
+      else if (brand === 'claude') await runClaude(idx);
+    },
+    [brand, runClaude, runCodex, runGemini, updateOpenaiStatus]
+  );
+
+  const runNativeAllKeys = useCallback(async (): Promise<void> => {
+    const entries = apiKeyEntries ?? [];
+    await Promise.all(entries.map((_, idx) => runNativeKey(idx)));
+  }, [apiKeyEntries, runNativeKey]);
 
   return {
     openaiStatuses,
@@ -505,6 +576,8 @@ export function useConnectivityTest(
     isTestingAny: inFlight > 0,
     runOpenAIKey,
     runOpenAIAllKeys,
+    runNativeKey,
+    runNativeAllKeys,
     runCodex,
     runGemini,
     runClaude,

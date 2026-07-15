@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type MouseEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/Button';
@@ -13,6 +13,13 @@ import { useAuthStore, useNotificationStore } from '@/stores';
 import { downloadBlob } from '@/utils/download';
 import { getErrorMessage } from '@/utils/helpers';
 import styles from './RequestLogsPanel.module.scss';
+import {
+  applyRequestLogRefreshError,
+  applyRequestLogRefreshSuccess,
+  beginRequestLogRefresh,
+  createRequestLogRefreshCoordinator,
+  createRequestLogRefreshState,
+} from './requestLogRefreshState';
 
 const PAGE_SIZE = 30;
 const AUTO_REFRESH_MS = 5000;
@@ -45,7 +52,7 @@ const formatTime = (value?: string) => {
 const compactRequestPath = (value?: string) => {
   const raw = String(value ?? '').trim();
   if (!raw) return '—';
-  let pathname = raw;
+  let pathname: string;
   try {
     pathname =
       raw.startsWith('http://') || raw.startsWith('https://')
@@ -176,12 +183,15 @@ export function RequestLogsPanel() {
   const { t } = useTranslation();
   const { showNotification } = useNotificationStore();
   const connectionStatus = useAuthStore((state) => state.connectionStatus);
-  const [items, setItems] = useState<RequestLogItem[]>([]);
-  const [total, setTotal] = useState(0);
+  const [refreshState, setRefreshState] = useState(() =>
+    createRequestLogRefreshState<RequestLogItem>()
+  );
+  const { items, total, loading, error } = refreshState;
   const [page, setPage] = useState(1);
   const [query, setQuery] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
+  const refreshCoordinatorRef = useRef(createRequestLogRefreshCoordinator());
+  const activeRequestRef = useRef<{ id: number; controller: AbortController } | null>(null);
   const [detail, setDetail] = useState<RequestLogDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [exportPages, setExportPages] = useState(1);
@@ -192,43 +202,68 @@ export function RequestLogsPanel() {
   const offset = (page - 1) * PAGE_SIZE;
 
   const load = useCallback(
-    async (silent = false) => {
+    async (silent = false, replaceActive = false) => {
       if (connectionStatus !== 'connected') return;
-      if (!silent) setLoading(true);
-      setError('');
+      const coordinator = refreshCoordinatorRef.current;
+      if (replaceActive && activeRequestRef.current) {
+        activeRequestRef.current.controller.abort();
+        coordinator.finish(activeRequestRef.current.id);
+        activeRequestRef.current = null;
+      }
+      const requestId = coordinator.tryStart();
+      if (requestId === null) return;
+
+      const controller = new AbortController();
+      activeRequestRef.current = { id: requestId, controller };
+      setRefreshState((state) => beginRequestLogRefresh(state, silent));
       try {
-        const data = await requestLogsApi.list({
-          q: query.trim() || undefined,
-          limit: PAGE_SIZE,
-          offset,
-        });
-        setItems(Array.isArray(data.items) ? data.items : []);
-        setTotal(Number(data.total) || 0);
+        const data = await requestLogsApi.list(
+          {
+            q: debouncedQuery.trim() || undefined,
+            limit: PAGE_SIZE,
+            offset,
+          },
+          { signal: controller.signal }
+        );
+        setRefreshState((state) => applyRequestLogRefreshSuccess(state, data));
       } catch (err: unknown) {
-        const message = getErrorMessage(err) || '加载请求日志失败';
-        setError(message);
-        if (!silent) {
-          setItems([]);
-          setTotal(0);
+        const canceled =
+          controller.signal.aborted ||
+          (typeof err === 'object' &&
+            err !== null &&
+            'code' in err &&
+            String((err as { code?: string }).code) === 'ERR_CANCELED');
+        if (!canceled) {
+          const message = getErrorMessage(err) || '加载请求日志失败';
+          setRefreshState((state) => applyRequestLogRefreshError(state, message));
         }
       } finally {
-        if (!silent) setLoading(false);
+        coordinator.finish(requestId);
+        if (activeRequestRef.current?.id === requestId) activeRequestRef.current = null;
       }
     },
-    [connectionStatus, offset, query]
+    [connectionStatus, debouncedQuery, offset]
   );
 
   useEffect(() => {
-    void load(false);
+    void load(false, true);
   }, [load]);
 
   useEffect(() => {
     if (!autoRefresh || connectionStatus !== 'connected') return undefined;
     const timer = window.setInterval(() => {
-      void load(true);
+      void load(true, false);
     }, AUTO_REFRESH_MS);
     return () => window.clearInterval(timer);
   }, [autoRefresh, connectionStatus, load]);
+
+  useEffect(
+    () => () => {
+      refreshCoordinatorRef.current.cancelSearch();
+      activeRequestRef.current?.controller.abort();
+    },
+    []
+  );
 
   const openDetail = async (item: RequestLogItem) => {
     setDetail(item as RequestLogDetail);
@@ -245,7 +280,7 @@ export function RequestLogsPanel() {
   const exportRows = async (format: 'csv' | 'jsonl') => {
     try {
       const response = await requestLogsApi.export({
-        q: query.trim() || undefined,
+        q: debouncedQuery.trim() || undefined,
         limit: PAGE_SIZE,
         offset,
         pages: exportPages,
@@ -340,8 +375,12 @@ export function RequestLogsPanel() {
           <Input
             value={query}
             onChange={(event) => {
-              setQuery(event.target.value);
-              setPage(1);
+              const nextQuery = event.target.value;
+              setQuery(nextQuery);
+              refreshCoordinatorRef.current.scheduleSearch(nextQuery, (value) => {
+                setPage(1);
+                setDebouncedQuery(value);
+              });
             }}
             placeholder="搜索时间、模型、工具、系统提示词、错误、提示词"
             rightElement={<IconSearch size={15} />}
@@ -363,13 +402,33 @@ export function RequestLogsPanel() {
           <Button variant="secondary" size="sm" onClick={() => void exportRows('jsonl')}>
             <IconDownload size={15} /> 导出 JSONL
           </Button>
-          <Button variant="secondary" size="sm" onClick={() => void load(false)} loading={loading}>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => void load(false, true)}
+            loading={loading}
+          >
             {!loading && <IconRefreshCw size={15} />} 刷新列表
           </Button>
           {renderPagination(true)}
         </div>
       }
     >
+      <div className={styles.syncStatus}>
+        <span>{refreshState.syncing ? '索引同步中' : '索引快照'}</span>
+        {refreshState.lastSyncedAt ? (
+          <span>最近同步：{formatTime(refreshState.lastSyncedAt)}</span>
+        ) : null}
+        {refreshState.retentionDays !== null ? (
+          <span>
+            结构化日志保留：
+            {refreshState.retentionDays === 0 ? '永久' : `${refreshState.retentionDays} 天`}
+          </span>
+        ) : null}
+        {refreshState.lastSyncError ? (
+          <span className={styles.syncError}>{refreshState.lastSyncError}</span>
+        ) : null}
+      </div>
       {error ? <div className="error-box">{error}</div> : null}
       {!loading && items.length === 0 ? (
         <EmptyState

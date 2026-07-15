@@ -7,7 +7,7 @@ import { useAuthStore, useNotificationStore } from '@/stores';
 import { useProviderRecentRequests } from '@/components/providers/hooks/useProviderRecentRequests';
 import {
   getOpenAIProviderRecentWindowStats,
-  getProviderRecentWindowStats,
+  getProviderApiKeysRecentWindowStats,
   type ProviderRecentUsageMap,
 } from '@/components/providers/utils';
 import type { OpenAIProviderConfig } from '@/types';
@@ -65,6 +65,7 @@ const matchesFilter = (r: ProviderResource, normalized: string): boolean => {
     r.authIndex,
     r.apiKeyPreview,
     r.apiKey,
+    ...(r.credentialSearchTerms ?? []),
     r.baseUrl,
     r.proxyUrl,
     r.prefix,
@@ -90,10 +91,15 @@ const getResourceRecentSuccess = (
       .success;
   }
   const usageProvider = resource.brand === 'claudeApi' ? 'claude' : resource.brand;
-  return getProviderRecentWindowStats(
+  const apiKeys = resource.apiKeys?.length
+    ? resource.apiKeys
+    : resource.apiKey
+      ? [resource.apiKey]
+      : [];
+  return getProviderApiKeysRecentWindowStats(
     usageByProvider,
     usageProvider,
-    resource.apiKey ?? undefined,
+    apiKeys,
     resource.baseUrl ?? undefined
   ).success;
 };

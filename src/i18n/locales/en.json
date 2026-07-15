@@ -161,7 +161,10 @@
     "request_log_warning": "Keep this off unless you need detailed troubleshooting.",
     "ws_auth_enable": "Require auth for /ws/*",
     "routing_strategy_round_robin": "round-robin (cycle)",
-    "routing_strategy_fill_first": "fill-first (prioritize)"
+    "routing_strategy_fill_first": "fill-first (prioritize)",
+    "request_log_retention_days": "Structured log retention (days)",
+    "request_log_retention_hint": "0 keeps structured request logs permanently. Raw log file rotation is configured separately.",
+    "request_log_retention_invalid": "Enter a non-negative whole number."
   },
   "auth_files": {
     "title": "Auth Files Management",
@@ -1498,8 +1501,18 @@
       "validation": {
         "nameRequired": "Name is required",
         "apiKeyRequired": "At least one API key is required",
-        "baseUrlRequired": "Base URL is required"
-      }
+        "baseUrlRequired": "Base URL is required",
+        "duplicateApiKey": "API keys in one provider group must be unique"
+      },
+      "providerName": "Provider name",
+      "providerNameHint": "Optional display name for this key group",
+      "keyPriority": "Key priority",
+      "inheritedValue": "Inherit",
+      "inheritedPriorityHint": "Blank inherits provider priority",
+      "inheritedProxyHint": "Blank inherits provider proxy",
+      "multiKeyCount": "{{count}} keys",
+      "rebuildMidSystemMessage": "Rebuild mid-conversation system messages",
+      "rebuildMidSystemMessageHint": "Move mid-conversation system messages into the top-level Claude system field"
     },
     "delete": {
       "title": "Delete resource",

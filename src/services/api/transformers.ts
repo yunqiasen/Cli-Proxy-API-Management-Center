@@ -1,6 +1,5 @@
 import type {
   ApiKeyEntry,
-  CloakConfig,
   GeminiKeyConfig,
   ModelAlias,
   OpenAIProviderConfig,
@@ -9,6 +8,7 @@ import type {
 import type { Config } from '@/types/config';
 import { buildHeaderObject } from '@/utils/headers';
 import { isRecord } from '@/utils/helpers';
+import { normalizeNativeProviderPayload } from './nativeProviderContracts';
 
 const normalizeBoolean = (value: unknown): boolean | undefined =>
   typeof value === 'boolean' ? value : undefined;
@@ -119,107 +119,11 @@ const normalizeApiKeyEntry = (entry: unknown): ApiKeyEntry | null => {
   return result;
 };
 
-const normalizeProviderKeyConfig = (item: unknown): ProviderKeyConfig | null => {
-  if (item === undefined || item === null) return null;
-  const record = isRecord(item) ? item : null;
-  const apiKey = record?.['api-key'] ?? (typeof item === 'string' ? item : '');
-  const trimmed = String(apiKey || '').trim();
-  if (!trimmed) return null;
+const normalizeProviderKeyConfig = (item: unknown): ProviderKeyConfig | null =>
+  normalizeNativeProviderPayload(item);
 
-  const config: ProviderKeyConfig = { apiKey: trimmed };
-  const priority = record?.priority;
-  if (priority !== undefined && priority !== null && String(priority).trim() !== '') {
-    const parsed = Number(priority);
-    if (Number.isFinite(parsed)) {
-      config.priority = parsed;
-    }
-  }
-  const prefix = normalizePrefix(record?.prefix);
-  if (prefix) config.prefix = prefix;
-  const baseUrl = record?.['base-url'];
-  const proxyUrl = record?.['proxy-url'];
-  if (baseUrl) config.baseUrl = String(baseUrl);
-  const websockets = normalizeBoolean(record?.websockets);
-  if (websockets !== undefined) config.websockets = websockets;
-  if (proxyUrl) config.proxyUrl = String(proxyUrl);
-  const disableCooling = normalizeBoolean(record?.['disable-cooling']);
-  if (disableCooling !== undefined) config.disableCooling = disableCooling;
-  const headers = normalizeHeaders(record?.headers);
-  if (headers) config.headers = headers;
-  const models = normalizeModelAliases(record?.models);
-  if (models.length) config.models = models;
-  const excludedModels = normalizeExcludedModels(record?.['excluded-models']);
-  if (excludedModels.length) config.excludedModels = excludedModels;
-  const authIndex = normalizeAuthIndex(record?.['auth-index']);
-  if (authIndex) config.authIndex = authIndex;
-
-  const cloakRaw = record?.cloak;
-  if (isRecord(cloakRaw)) {
-    const cloak: CloakConfig = {};
-    const mode = cloakRaw.mode;
-    if (typeof mode === 'string' && mode.trim()) {
-      cloak.mode = mode.trim();
-    }
-    const strictMode = normalizeBoolean(cloakRaw['strict-mode']);
-    if (strictMode !== undefined) {
-      cloak.strictMode = strictMode;
-    }
-    const sensitiveWords = normalizeExcludedModels(cloakRaw['sensitive-words']);
-    if (sensitiveWords.length) {
-      cloak.sensitiveWords = sensitiveWords;
-    }
-    const cacheUserId = normalizeBoolean(cloakRaw['cache-user-id']);
-    if (cacheUserId !== undefined) {
-      cloak.cacheUserId = cacheUserId;
-    }
-    if (Object.keys(cloak).length) {
-      config.cloak = cloak;
-    }
-  }
-  const experimentalCchSigning = normalizeBoolean(record?.['experimental-cch-signing']);
-  if (experimentalCchSigning !== undefined) {
-    config.experimentalCchSigning = experimentalCchSigning;
-  }
-
-  return config;
-};
-
-const normalizeGeminiKeyConfig = (item: unknown): GeminiKeyConfig | null => {
-  if (item === undefined || item === null) return null;
-  const record = isRecord(item) ? item : null;
-  let apiKey = record?.['api-key'];
-  if (!apiKey && typeof item === 'string') {
-    apiKey = item;
-  }
-  const trimmed = String(apiKey || '').trim();
-  if (!trimmed) return null;
-
-  const config: GeminiKeyConfig = { apiKey: trimmed };
-  const priority = record?.priority;
-  if (priority !== undefined && priority !== null && String(priority).trim() !== '') {
-    const parsed = Number(priority);
-    if (Number.isFinite(parsed)) {
-      config.priority = parsed;
-    }
-  }
-  const prefix = normalizePrefix(record?.prefix);
-  if (prefix) config.prefix = prefix;
-  const baseUrl = record?.['base-url'];
-  if (baseUrl) config.baseUrl = String(baseUrl);
-  const proxyUrl = record?.['proxy-url'];
-  if (proxyUrl) config.proxyUrl = String(proxyUrl);
-  const disableCooling = normalizeBoolean(record?.['disable-cooling']);
-  if (disableCooling !== undefined) config.disableCooling = disableCooling;
-  const models = normalizeModelAliases(record?.models);
-  if (models.length) config.models = models;
-  const headers = normalizeHeaders(record?.headers);
-  if (headers) config.headers = headers;
-  const excludedModels = normalizeExcludedModels(record?.['excluded-models']);
-  if (excludedModels.length) config.excludedModels = excludedModels;
-  const authIndex = normalizeAuthIndex(record?.['auth-index']);
-  if (authIndex) config.authIndex = authIndex;
-  return config;
-};
+const normalizeGeminiKeyConfig = (item: unknown): GeminiKeyConfig | null =>
+  normalizeNativeProviderPayload(item);
 
 const normalizeOpenAIProvider = (provider: unknown): OpenAIProviderConfig | null => {
   if (!isRecord(provider)) return null;
@@ -310,6 +214,14 @@ export const normalizeConfigResponse = (raw: unknown): Config => {
   }
 
   config.requestLog = normalizeBoolean(raw['request-log']);
+  const requestLogRetentionDays = raw['request-log-retention-days'];
+  if (
+    typeof requestLogRetentionDays === 'number' &&
+    Number.isInteger(requestLogRetentionDays) &&
+    requestLogRetentionDays >= 0
+  ) {
+    config.requestLogRetentionDays = requestLogRetentionDays;
+  }
   config.loggingToFile = normalizeBoolean(raw['logging-to-file']);
   const logsMaxTotalSizeMb = raw['logs-max-total-size-mb'];
   if (typeof logsMaxTotalSizeMb === 'number' && Number.isFinite(logsMaxTotalSizeMb)) {

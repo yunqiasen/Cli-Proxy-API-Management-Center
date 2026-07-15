@@ -160,7 +160,10 @@
     "request_log_warning": "Оставьте выключенным, если подробная диагностика не нужна.",
     "ws_auth_enable": "Требовать аутентификацию для /ws/*",
     "routing_strategy_round_robin": "round-robin (цикл)",
-    "routing_strategy_fill_first": "fill-first (приоритет)"
+    "routing_strategy_fill_first": "fill-first (приоритет)",
+    "request_log_retention_days": "Хранение структурированных логов (дни)",
+    "request_log_retention_hint": "0 хранит структурированные логи постоянно. Ротация исходных файлов настраивается отдельно.",
+    "request_log_retention_invalid": "Введите целое число не меньше 0."
   },
   "auth_files": {
     "title": "Управление файлами авторизации",
@@ -1476,8 +1479,18 @@
       "validation": {
         "nameRequired": "Название обязательно",
         "apiKeyRequired": "Нужен хотя бы один API-ключ",
-        "baseUrlRequired": "Base URL обязателен"
-      }
+        "baseUrlRequired": "Base URL обязателен",
+        "duplicateApiKey": "API-ключи в одной группе провайдера должны быть уникальны"
+      },
+      "providerName": "Название провайдера",
+      "providerNameHint": "Необязательное имя группы ключей",
+      "keyPriority": "Приоритет ключа",
+      "inheritedValue": "Наследовать",
+      "inheritedPriorityHint": "Пустое значение наследует приоритет провайдера",
+      "inheritedProxyHint": "Пустое значение наследует прокси провайдера",
+      "multiKeyCount": "{{count}} ключей",
+      "rebuildMidSystemMessage": "Переносить промежуточные системные сообщения",
+      "rebuildMidSystemMessageHint": "Переносить системные сообщения в верхнее поле Claude system"
     },
     "delete": {
       "title": "Удалить ресурс",

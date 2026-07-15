@@ -22,9 +22,9 @@ import {
   getOpenAIProviderRecentStatusData,
   getOpenAIProviderTotalStats,
   getOpenAIProviderUsageDetails,
-  getProviderRecentStatusData,
-  getProviderTotalStats,
-  getProviderUsageDetails,
+  getProviderApiKeysRecentStatusData,
+  getProviderApiKeysTotalStats,
+  getProviderApiKeysUsageDetails,
   type ProviderRecentUsageMap,
 } from '@/components/providers/utils';
 import type { OpenAIProviderConfig } from '@/types';
@@ -94,6 +94,9 @@ const isSponsorResource = (resource: ProviderResource): boolean =>
 const getUsageProvider = (resource: ProviderResource): string =>
   resource.brand === 'claudeApi' ? 'claude' : resource.brand;
 
+const getUsageApiKeys = (resource: ProviderResource): string[] =>
+  resource.apiKeys?.length ? resource.apiKeys : resource.apiKey ? [resource.apiKey] : [];
+
 const resolveStatusBarData = (
   resource: ProviderResource,
   usageByProvider: ProviderRecentUsageMap
@@ -101,10 +104,10 @@ const resolveStatusBarData = (
   if (resource.brand === 'openaiCompatibility') {
     return getOpenAIProviderRecentStatusData(resource.raw as OpenAIProviderConfig, usageByProvider);
   }
-  return getProviderRecentStatusData(
+  return getProviderApiKeysRecentStatusData(
     usageByProvider,
     getUsageProvider(resource),
-    resource.apiKey ?? undefined,
+    getUsageApiKeys(resource),
     resource.baseUrl ?? undefined
   );
 };
@@ -116,10 +119,10 @@ const resolveTotalStats = (
   if (resource.brand === 'openaiCompatibility') {
     return getOpenAIProviderTotalStats(resource.raw as OpenAIProviderConfig, usageByProvider);
   }
-  return getProviderTotalStats(
+  return getProviderApiKeysTotalStats(
     usageByProvider,
     getUsageProvider(resource),
-    resource.apiKey ?? undefined,
+    getUsageApiKeys(resource),
     resource.baseUrl ?? undefined
   );
 };
@@ -131,10 +134,10 @@ const resolveUsageDetails = (
   if (resource.brand === 'openaiCompatibility') {
     return getOpenAIProviderUsageDetails(resource.raw as OpenAIProviderConfig, usageByProvider);
   }
-  return getProviderUsageDetails(
+  return getProviderApiKeysUsageDetails(
     usageByProvider,
     getUsageProvider(resource),
-    resource.apiKey ?? undefined,
+    getUsageApiKeys(resource),
     resource.baseUrl ?? undefined
   );
 };
@@ -224,10 +227,11 @@ export function ProviderResourceTable({
         renderMetric('headers', t('providersPage.table.metrics.headers'), r.headerCount)
       );
     } else {
-      items.push(
-        renderMetric('models', t('providersPage.table.metrics.models'), r.modelCount),
-        renderMetric('headers', t('providersPage.table.metrics.headers'), r.headerCount)
-      );
+      items.push(renderMetric('models', t('providersPage.table.metrics.models'), r.modelCount));
+      if (r.apiKeyEntryCount > 0) {
+        items.push(renderMetric('keys', t('providersPage.table.metrics.keys'), r.apiKeyEntryCount));
+      }
+      items.push(renderMetric('headers', t('providersPage.table.metrics.headers'), r.headerCount));
       if (r.brand === 'codex' && r.flags.websockets) {
         items.push(renderFlagTag('ws', t('providersPage.table.websocketsTag')));
       }
@@ -395,10 +399,19 @@ export function ProviderResourceTable({
         </div>
       );
     }
+    const extraKeys = r.apiKeyEntryCount > 1 ? ` · +${r.apiKeyEntryCount - 1}` : '';
     return (
       <div className={styles.primaryCell}>
-        <span className={styles.primaryName}>{r.apiKeyPreview ?? '—'}</span>
-        {r.authIndex ? <span className={styles.primarySub}>auth: {r.authIndex}</span> : null}
+        <span className={styles.primaryName}>{r.name ?? r.apiKeyPreview ?? '—'}</span>
+        {r.name ? (
+          <span className={styles.primarySub}>{(r.apiKeyPreview ?? '—') + extraKeys}</span>
+        ) : r.apiKeyEntryCount > 1 ? (
+          <span className={styles.primarySub}>
+            {t('providersPage.form.multiKeyCount', { count: r.apiKeyEntryCount })}
+          </span>
+        ) : r.authIndex ? (
+          <span className={styles.primarySub}>auth: {r.authIndex}</span>
+        ) : null}
         {renderRoutingMeta(r)}
       </div>
     );

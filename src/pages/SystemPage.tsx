@@ -13,6 +13,7 @@ import {
   useThemeStore,
 } from '@/stores';
 import { configApi, versionApi } from '@/services/api';
+import { saveRequestLogSettings } from '@/services/api/requestLogRetention';
 import { useApiKeysForModels } from '@/hooks/useApiKeysForModels';
 import { formatDateTimeValue } from '@/utils/format';
 import { classifyModels } from '@/utils/models';
@@ -77,7 +78,6 @@ export function SystemPage() {
   const auth = useAuthStore();
   const config = useConfigStore((state) => state.config);
   const fetchConfig = useConfigStore((state) => state.fetchConfig);
-  const clearCache = useConfigStore((state) => state.clearCache);
   const updateConfigValue = useConfigStore((state) => state.updateConfigValue);
 
   const models = useModelsStore((state) => state.models);
@@ -91,6 +91,7 @@ export function SystemPage() {
   }>();
   const [requestLogModalOpen, setRequestLogModalOpen] = useState(false);
   const [requestLogDraft, setRequestLogDraft] = useState(false);
+  const [requestLogRetentionDraft, setRequestLogRetentionDraft] = useState('7');
   const [requestLogTouched, setRequestLogTouched] = useState(false);
   const [requestLogSaving, setRequestLogSaving] = useState(false);
   const [checkingVersion, setCheckingVersion] = useState(false);
@@ -105,7 +106,15 @@ export function SystemPage() {
   );
   const groupedModels = useMemo(() => classifyModels(models, { otherLabel }), [models, otherLabel]);
   const requestLogEnabled = config?.requestLog ?? false;
-  const requestLogDirty = requestLogDraft !== requestLogEnabled;
+  const requestLogRetentionDays = config?.requestLogRetentionDays ?? 7;
+  const parsedRequestLogRetentionDays = Number(requestLogRetentionDraft);
+  const requestLogRetentionValid =
+    requestLogRetentionDraft.trim() !== '' &&
+    Number.isInteger(parsedRequestLogRetentionDays) &&
+    parsedRequestLogRetentionDays >= 0;
+  const requestLogDirty =
+    requestLogDraft !== requestLogEnabled ||
+    requestLogRetentionDraft !== String(requestLogRetentionDays);
   const canEditRequestLog = auth.connectionStatus === 'connected' && Boolean(config);
 
   const appVersion = __APP_VERSION__ || t('system_info.version_unknown');
@@ -175,8 +184,9 @@ export function SystemPage() {
   const openRequestLogModal = useCallback(() => {
     setRequestLogTouched(false);
     setRequestLogDraft(requestLogEnabled);
+    setRequestLogRetentionDraft(String(requestLogRetentionDays));
     setRequestLogModalOpen(true);
-  }, [requestLogEnabled]);
+  }, [requestLogEnabled, requestLogRetentionDays]);
 
   const handleInfoVersionTap = useCallback(() => {
     versionTapCount.current += 1;
@@ -203,25 +213,38 @@ export function SystemPage() {
   }, []);
 
   const handleRequestLogSave = async () => {
-    if (!canEditRequestLog) return;
+    if (!canEditRequestLog || !requestLogRetentionValid) return;
     if (!requestLogDirty) {
       setRequestLogModalOpen(false);
       return;
     }
 
-    const previous = requestLogEnabled;
     setRequestLogSaving(true);
-    updateConfigValue('request-log', requestLogDraft);
-
     try {
-      await configApi.updateRequestLog(requestLogDraft);
-      clearCache('request-log');
+      await saveRequestLogSettings(
+        { enabled: requestLogEnabled, retentionDays: requestLogRetentionDays },
+        { enabled: requestLogDraft, retentionDays: parsedRequestLogRetentionDays },
+        {
+          updateRequestLog: configApi.updateRequestLog,
+          updateRequestLogRetentionDays: configApi.updateRequestLogRetentionDays,
+          readServerSettings: async () => {
+            const [serverConfig, retentionDays] = await Promise.all([
+              configApi.getConfig(),
+              configApi.getRequestLogRetentionDays(),
+            ]);
+            return { enabled: serverConfig.requestLog ?? false, retentionDays };
+          },
+          applyServerSettings: ({ enabled, retentionDays }) => {
+            updateConfigValue('request-log', enabled);
+            updateConfigValue('request-log-retention-days', retentionDays);
+          },
+        }
+      );
       showNotification(t('notification.request_log_updated'), 'success');
       setRequestLogModalOpen(false);
     } catch (error: unknown) {
       const message =
         error instanceof Error ? error.message : typeof error === 'string' ? error : '';
-      updateConfigValue('request-log', previous);
       showNotification(
         `${t('notification.update_failed')}${message ? `: ${message}` : ''}`,
         'error'
@@ -293,10 +316,21 @@ export function SystemPage() {
   }, [fetchConfig]);
 
   useEffect(() => {
+    if (auth.connectionStatus !== 'connected') return;
+    configApi
+      .getRequestLogRetentionDays()
+      .then((days) => updateConfigValue('request-log-retention-days', days))
+      .catch(() => {
+        // Older backends may not expose retention management yet.
+      });
+  }, [auth.connectionStatus, updateConfigValue]);
+
+  useEffect(() => {
     if (requestLogModalOpen && !requestLogTouched) {
       setRequestLogDraft(requestLogEnabled);
+      setRequestLogRetentionDraft(String(requestLogRetentionDays));
     }
-  }, [requestLogModalOpen, requestLogTouched, requestLogEnabled]);
+  }, [requestLogModalOpen, requestLogTouched, requestLogEnabled, requestLogRetentionDays]);
 
   useEffect(() => {
     return () => {
@@ -524,7 +558,7 @@ export function SystemPage() {
             <Button
               onClick={handleRequestLogSave}
               loading={requestLogSaving}
-              disabled={!canEditRequestLog || !requestLogDirty}
+              disabled={!canEditRequestLog || !requestLogDirty || !requestLogRetentionValid}
             >
               {t('common.save')}
             </Button>
@@ -543,6 +577,27 @@ export function SystemPage() {
               setRequestLogTouched(true);
             }}
           />
+          <label className="request-log-retention-field">
+            <span>{t('basic_settings.request_log_retention_days')}</span>
+            <input
+              className="input request-log-retention-input"
+              type="number"
+              min={0}
+              step={1}
+              value={requestLogRetentionDraft}
+              disabled={!canEditRequestLog || requestLogSaving}
+              onChange={(event) => {
+                setRequestLogRetentionDraft(event.target.value);
+                setRequestLogTouched(true);
+              }}
+            />
+            <small>{t('basic_settings.request_log_retention_hint')}</small>
+            {!requestLogRetentionValid ? (
+              <small className="request-log-retention-error">
+                {t('basic_settings.request_log_retention_invalid')}
+              </small>
+            ) : null}
+          </label>
         </div>
       </Modal>
     </div>

@@ -25,9 +25,9 @@ export const SORT_DIR_VALUES = ['asc', 'desc'] as const;
 export type SortDir = (typeof SORT_DIR_VALUES)[number];
 
 export type ProviderResourceSelector =
-  | { brand: 'gemini'; apiKey: string; baseUrl?: string; index: number }
-  | { brand: 'codex'; apiKey: string; baseUrl?: string; index: number }
-  | { brand: 'claude'; apiKey: string; baseUrl?: string; index: number }
+  | { brand: 'gemini'; name?: string; apiKey: string; baseUrl?: string; index: number }
+  | { brand: 'codex'; name?: string; apiKey: string; baseUrl?: string; index: number }
+  | { brand: 'claude'; name?: string; apiKey: string; baseUrl?: string; index: number }
   | { brand: 'claudeApi'; apiKey: string; baseUrl?: string; index: number }
   | { brand: 'vertex'; apiKey: string; baseUrl?: string; index: number }
   | { brand: 'openaiCompatibility'; name: string; index: number }
@@ -78,6 +78,11 @@ export interface ProviderResource {
   identifier: string;
   /** apiKey 脱敏预览,展示用 */
   apiKeyPreview: string | null;
+  /** 所有有效密钥的脱敏预览，原生多 Key Provider 可包含多个。 */
+  apiKeyPreviews?: string[];
+  /** 所有有效密钥，仅用于匹配用量与本地搜索。 */
+  apiKeys?: string[];
+  credentialSearchTerms?: string[];
   /** 用于 selector 的真实 apiKey;OpenAI 因为多密钥这里返回 null */
   apiKey: string | null;
   authIndex: string | null;
@@ -155,6 +160,7 @@ export interface SponsorKeyEntryInput {
 
 export interface ApiKeyEntryInput {
   apiKey: string;
+  priority?: number;
   existingApiKey?: string;
   proxyUrl: string;
   authIndex?: string;
@@ -189,6 +195,7 @@ export interface ProviderEntryFormInput {
   /** Claude 专属 */
   cloak?: CloakInput;
   experimentalCchSigning?: boolean;
+  rebuildMidSystemMessage?: boolean;
   /** OpenAI persists this; Gemini/Claude use it for one-off connectivity tests. */
   testModel?: string;
   apiKeyEntries?: ApiKeyEntryInput[];

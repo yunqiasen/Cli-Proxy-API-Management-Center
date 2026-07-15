@@ -26,6 +26,7 @@ import {
   getQiniuCloudProtocolUrls,
   resolveQiniuCloudBaseUrl,
 } from './qiniuCloud';
+import { buildNativeProviderResourceData } from './nativeProviderResource';
 import type {
   ProviderBrand,
   ProviderResource,
@@ -77,7 +78,8 @@ function providerKeyToResource(
   config: GeminiKeyConfig | ProviderKeyConfig,
   index: number
 ): ProviderResource {
-  const apiKey = config.apiKey ?? '';
+  const native = buildNativeProviderResourceData(config, index, maskApiKey);
+  const apiKey = native.apiKeys[0] ?? '';
   const disabled = hasDisableAllModelsRule(config.excludedModels);
   const excludedModels = stripDisableAllModelsRule(config.excludedModels);
   const flags: ProviderResource['flags'] = {};
@@ -92,20 +94,24 @@ function providerKeyToResource(
   const modelSearchTerms = collectModelSearchTerms(config.models);
   const selector: ProviderResourceSelector = {
     brand,
-    apiKey,
-    baseUrl: config.baseUrl,
     index,
+    ...(native.selector.name ? { name: native.selector.name } : {}),
+    ...(apiKey ? { apiKey } : {}),
+    baseUrl: config.baseUrl,
   } as ProviderResourceSelector;
 
   return {
-    id: buildId(brand, index, truncateForId(apiKey)),
+    id: buildId(brand, index, truncateForId(native.name || apiKey)),
     brand,
     originalIndex: index,
-    name: null,
-    identifier: maskApiKey(apiKey) || `#${index + 1}`,
-    apiKeyPreview: apiKey ? maskApiKey(apiKey) : null,
+    name: native.name,
+    identifier: native.identifier,
+    apiKeyPreview: native.keyPreviews[0] ?? null,
+    apiKeyPreviews: native.keyPreviews,
+    apiKeys: native.apiKeys,
+    credentialSearchTerms: native.searchTerms,
     apiKey: apiKey || null,
-    authIndex: config.authIndex ?? null,
+    authIndex: config.apiKeyEntries?.[0]?.authIndex ?? config.authIndex ?? null,
     baseUrl: config.baseUrl ?? null,
     proxyUrl: config.proxyUrl ?? null,
     prefix: config.prefix ?? null,
@@ -117,7 +123,7 @@ function providerKeyToResource(
     headerCount: countHeaders(config.headers),
     excludedModelCount: excludedModels.length,
     excludedModels,
-    apiKeyEntryCount: 0,
+    apiKeyEntryCount: native.keyCount,
     disabled,
     flags,
     selector,

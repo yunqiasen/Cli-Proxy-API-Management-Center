@@ -1,7 +1,6 @@
 import type { OpenAIProviderConfig } from '@/types';
 import {
   buildRecentRequestCompositeKey,
-  mergeRecentRequestBucketGroups,
   statusBarDataFromRecentRequests,
   sumRecentRequests,
   type ApiKeyUsageFailureDetail,
@@ -10,6 +9,7 @@ import {
   type RecentRequestUsageEntry,
   type StatusBarData,
 } from '@/utils/recentRequests';
+import { aggregateProviderUsageByApiKeys } from './providerUsageAggregation';
 
 const DISABLE_ALL_MODELS_RULE = '*';
 const DEFAULT_GEMINI_BASE_URL = 'https://generativelanguage.googleapis.com';
@@ -224,26 +224,6 @@ export function getProviderTotalStats(
   return { success: entry.success, failure: entry.failed };
 }
 
-const mergeSuccessDetails = (groups: ApiKeyUsageSuccessDetail[][]): ApiKeyUsageSuccessDetail[] => {
-  const merged = new Map<string, ApiKeyUsageSuccessDetail>();
-  groups.flat().forEach((item) => {
-    const key = `${item.model}|${item.status}`;
-    const current = merged.get(key);
-    merged.set(key, current ? { ...current, count: current.count + item.count } : { ...item });
-  });
-  return Array.from(merged.values()).sort((a, b) => b.count - a.count).slice(0, 10);
-};
-
-const mergeFailureDetails = (groups: ApiKeyUsageFailureDetail[][]): ApiKeyUsageFailureDetail[] => {
-  const merged = new Map<string, ApiKeyUsageFailureDetail>();
-  groups.flat().forEach((item) => {
-    const key = `${item.model}|${item.status}|${item.error}`;
-    const current = merged.get(key);
-    merged.set(key, current ? { ...current, count: current.count + item.count } : { ...item });
-  });
-  return Array.from(merged.values()).sort((a, b) => b.count - a.count).slice(0, 10);
-};
-
 export function getProviderUsageDetails(
   usageByProvider: ProviderRecentUsageMap,
   provider: string,
@@ -263,67 +243,88 @@ export function getProviderRecentWindowStats(
   return sumRecentRequests(getProviderRecentBuckets(usageByProvider, provider, apiKey, baseUrl));
 }
 
-const collectOpenAIProviderRecentBuckets = (
-  provider: OpenAIProviderConfig,
-  usageByProvider: ProviderRecentUsageMap
-): RecentRequestBucket[] => {
-  if (!provider.apiKeyEntries?.length) {
-    return [];
-  }
-
-  const groups = provider.apiKeyEntries.map((entry) =>
-    getProviderRecentBuckets(usageByProvider, provider.name, entry.apiKey, provider.baseUrl)
+const getProviderApiKeysUsageSummary = (
+  usageByProvider: ProviderRecentUsageMap,
+  provider: string,
+  apiKeys: readonly string[],
+  baseUrl?: string
+) =>
+  aggregateProviderUsageByApiKeys(apiKeys, (apiKey) =>
+    getProviderRecentUsageEntry(usageByProvider, provider, apiKey, baseUrl)
   );
 
-  return mergeRecentRequestBucketGroups(groups);
-};
+export function getProviderApiKeysRecentWindowStats(
+  usageByProvider: ProviderRecentUsageMap,
+  provider: string,
+  apiKeys: readonly string[],
+  baseUrl?: string
+): { success: number; failure: number } {
+  return getProviderApiKeysUsageSummary(usageByProvider, provider, apiKeys, baseUrl)
+    .recentWindowStats;
+}
+
+export function getProviderApiKeysTotalStats(
+  usageByProvider: ProviderRecentUsageMap,
+  provider: string,
+  apiKeys: readonly string[],
+  baseUrl?: string
+): { success: number; failure: number } {
+  return getProviderApiKeysUsageSummary(usageByProvider, provider, apiKeys, baseUrl).totalStats;
+}
+
+export function getProviderApiKeysUsageDetails(
+  usageByProvider: ProviderRecentUsageMap,
+  provider: string,
+  apiKeys: readonly string[],
+  baseUrl?: string
+): { successDetails: ApiKeyUsageSuccessDetail[]; failureDetails: ApiKeyUsageFailureDetail[] } {
+  return getProviderApiKeysUsageSummary(usageByProvider, provider, apiKeys, baseUrl).usageDetails;
+}
+
+export function getProviderApiKeysRecentStatusData(
+  usageByProvider: ProviderRecentUsageMap,
+  provider: string,
+  apiKeys: readonly string[],
+  baseUrl?: string
+): StatusBarData {
+  return getProviderApiKeysUsageSummary(usageByProvider, provider, apiKeys, baseUrl).statusData;
+}
+
+const getOpenAIProviderUsageSummary = (
+  provider: OpenAIProviderConfig,
+  usageByProvider: ProviderRecentUsageMap
+) =>
+  getProviderApiKeysUsageSummary(
+    usageByProvider,
+    provider.name,
+    (provider.apiKeyEntries || []).map((entry) => entry.apiKey),
+    provider.baseUrl
+  );
 
 export function getOpenAIProviderRecentWindowStats(
   provider: OpenAIProviderConfig,
   usageByProvider: ProviderRecentUsageMap
 ): { success: number; failure: number } {
-  return sumRecentRequests(collectOpenAIProviderRecentBuckets(provider, usageByProvider));
+  return getOpenAIProviderUsageSummary(provider, usageByProvider).recentWindowStats;
 }
 
 export function getOpenAIProviderTotalStats(
   provider: OpenAIProviderConfig,
   usageByProvider: ProviderRecentUsageMap
 ): { success: number; failure: number } {
-  return (provider.apiKeyEntries || []).reduce(
-    (total, entry) => {
-      const usageEntry = getProviderRecentUsageEntry(
-        usageByProvider,
-        provider.name,
-        entry.apiKey,
-        provider.baseUrl
-      );
-      return {
-        success: total.success + usageEntry.success,
-        failure: total.failure + usageEntry.failed,
-      };
-    },
-    { success: 0, failure: 0 }
-  );
+  return getOpenAIProviderUsageSummary(provider, usageByProvider).totalStats;
 }
 
 export function getOpenAIProviderUsageDetails(
   provider: OpenAIProviderConfig,
   usageByProvider: ProviderRecentUsageMap
 ): { successDetails: ApiKeyUsageSuccessDetail[]; failureDetails: ApiKeyUsageFailureDetail[] } {
-  const usageEntries = (provider.apiKeyEntries || []).map((entry) =>
-    getProviderRecentUsageEntry(usageByProvider, provider.name, entry.apiKey, provider.baseUrl)
-  );
-  return {
-    successDetails: mergeSuccessDetails(usageEntries.map((entry) => entry.successDetails)),
-    failureDetails: mergeFailureDetails(usageEntries.map((entry) => entry.failureDetails))
-  };
+  return getOpenAIProviderUsageSummary(provider, usageByProvider).usageDetails;
 }
 
 export function getOpenAIProviderRecentStatusData(
   provider: OpenAIProviderConfig,
   usageByProvider: ProviderRecentUsageMap
 ): StatusBarData {
-  return statusBarDataFromRecentRequests(
-    collectOpenAIProviderRecentBuckets(provider, usageByProvider)
-  );
+  return getOpenAIProviderUsageSummary(provider, usageByProvider).statusData;
 }

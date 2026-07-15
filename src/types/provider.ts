@@ -18,6 +18,13 @@ export interface ApiKeyEntry {
   authIndex?: string;
 }
 
+export interface NativeApiKeyEntry {
+  apiKey: string;
+  priority?: number;
+  proxyUrl?: string;
+  authIndex?: string;
+}
+
 export interface CloakConfig {
   mode?: string;
   strictMode?: boolean;
@@ -26,7 +33,9 @@ export interface CloakConfig {
 }
 
 export interface GeminiKeyConfig {
+  name?: string;
   apiKey: string;
+  apiKeyEntries?: NativeApiKeyEntry[];
   priority?: number;
   prefix?: string;
   baseUrl?: string;
@@ -39,7 +48,9 @@ export interface GeminiKeyConfig {
 }
 
 export interface ProviderKeyConfig {
+  name?: string;
   apiKey: string;
+  apiKeyEntries?: NativeApiKeyEntry[];
   priority?: number;
   prefix?: string;
   baseUrl?: string;
@@ -51,6 +62,7 @@ export interface ProviderKeyConfig {
   disableCooling?: boolean;
   cloak?: CloakConfig;
   experimentalCchSigning?: boolean;
+  rebuildMidSystemMessage?: boolean;
   authIndex?: string;
 }
 

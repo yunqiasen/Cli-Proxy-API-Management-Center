@@ -649,3 +649,27 @@ textarea {
 .hint {
   color: var(--text-secondary);
 }
+
+.request-log-retention-field {
+  display: grid;
+  width: min(100%, 420px);
+  gap: $spacing-xs;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 600;
+
+  .request-log-retention-input {
+    width: 140px;
+  }
+
+  small {
+    color: var(--muted-foreground);
+    font-size: 12px;
+    font-weight: 400;
+    line-height: 1.5;
+  }
+
+  .request-log-retention-error {
+    color: var(--failure-badge-text);
+  }
+}

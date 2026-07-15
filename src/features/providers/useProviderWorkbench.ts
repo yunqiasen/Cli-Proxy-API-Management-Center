@@ -60,6 +60,7 @@ import {
 } from './qiniuCloud';
 import { getSponsorProviderDefinition, type SponsorProtocolUrls } from './sponsorDefinitions';
 import { runSponsorMutationWithRecovery } from './sponsorMutationRecovery';
+import { buildNativeProviderConfig } from './nativeProviderForm';
 
 export interface UseProviderWorkbenchResult {
   connected: boolean;
@@ -639,15 +640,15 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
       try {
         if (brand === 'gemini') {
           await providersApi.createGeminiKey(
-            buildProviderKeyConfig('gemini', input) as GeminiKeyConfig
+            buildNativeProviderConfig('gemini', input) as GeminiKeyConfig
           );
         } else if (brand === 'codex') {
           await providersApi.createCodexConfig(
-            buildProviderKeyConfig('codex', input) as ProviderKeyConfig
+            buildNativeProviderConfig('codex', input) as ProviderKeyConfig
           );
         } else if (brand === 'claude') {
           await providersApi.createClaudeConfig(
-            buildProviderKeyConfig('claude', input) as ProviderKeyConfig
+            buildNativeProviderConfig('claude', input) as ProviderKeyConfig
           );
         } else if (brand === 'claudeApi') {
           await providersApi.createClaudeConfig(buildClaudeApiConfig(input));
@@ -681,24 +682,21 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
         const selector = resource.selector;
         if (brand === 'gemini' && selector.brand === 'gemini') {
           const existing = resource.raw as GeminiKeyConfig;
-          await providersApi.updateGeminiKey(
-            selector.apiKey,
-            selector.baseUrl,
-            buildProviderKeyConfig('gemini', input, existing) as GeminiKeyConfig
+          await providersApi.updateGeminiKeyAtIndex(
+            selector.index,
+            buildNativeProviderConfig('gemini', input, existing) as GeminiKeyConfig
           );
         } else if (brand === 'codex' && selector.brand === 'codex') {
           const existing = resource.raw as ProviderKeyConfig;
-          await providersApi.updateCodexConfig(
-            selector.apiKey,
-            selector.baseUrl,
-            buildProviderKeyConfig('codex', input, existing) as ProviderKeyConfig
+          await providersApi.updateCodexConfigAtIndex(
+            selector.index,
+            buildNativeProviderConfig('codex', input, existing) as ProviderKeyConfig
           );
         } else if (brand === 'claude' && selector.brand === 'claude') {
           const existing = resource.raw as ProviderKeyConfig;
-          await providersApi.updateClaudeConfig(
-            selector.apiKey,
-            selector.baseUrl,
-            buildProviderKeyConfig('claude', input, existing) as ProviderKeyConfig
+          await providersApi.updateClaudeConfigAtIndex(
+            selector.index,
+            buildNativeProviderConfig('claude', input, existing) as ProviderKeyConfig
           );
         } else if (brand === 'claudeApi' && selector.brand === 'claudeApi') {
           await providersApi.updateClaudeConfig(
@@ -741,15 +739,15 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
       try {
         const sel = resource.selector;
         if (sel.brand === 'gemini') {
-          await providersApi.deleteGeminiKey(sel.apiKey, sel.baseUrl);
+          await providersApi.deleteGeminiKeyAtIndex(sel.index);
           const next = (config?.geminiApiKeys ?? []).filter((_, i) => i !== sel.index);
           updateConfigValue('gemini-api-key', next);
         } else if (sel.brand === 'codex') {
-          await providersApi.deleteCodexConfig(sel.apiKey, sel.baseUrl);
+          await providersApi.deleteCodexConfigAtIndex(sel.index);
           const next = (config?.codexApiKeys ?? []).filter((_, i) => i !== sel.index);
           updateConfigValue('codex-api-key', next);
         } else if (sel.brand === 'claude') {
-          await providersApi.deleteClaudeConfig(sel.apiKey, sel.baseUrl);
+          await providersApi.deleteClaudeConfigAtIndex(sel.index);
           const next = (config?.claudeApiKeys ?? []).filter((_, i) => i !== sel.index);
           updateConfigValue('claude-api-key', next);
         } else if (sel.brand === 'claudeApi') {
@@ -807,7 +805,7 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
           const excluded = disabled
             ? withDisableAllModelsRule(current.excludedModels)
             : withoutDisableAllModelsRule(current.excludedModels);
-          await providersApi.updateGeminiKey(selector.apiKey, selector.baseUrl, {
+          await providersApi.updateGeminiKeyAtIndex(selector.index, {
             ...current,
             excludedModels: excluded,
           });
@@ -823,9 +821,9 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
             : withoutDisableAllModelsRule(current.excludedModels);
           const next = { ...current, excludedModels: excluded };
           if (selector.brand === 'codex') {
-            await providersApi.updateCodexConfig(selector.apiKey, selector.baseUrl, next);
+            await providersApi.updateCodexConfigAtIndex(selector.index, next);
           } else if (selector.brand === 'claude' || selector.brand === 'claudeApi') {
-            await providersApi.updateClaudeConfig(selector.apiKey, selector.baseUrl, next);
+            await providersApi.updateClaudeConfigAtIndex(selector.index, next);
           } else if (selector.brand === 'vertex') {
             await providersApi.updateVertexConfig(selector.apiKey, selector.baseUrl, next);
           }

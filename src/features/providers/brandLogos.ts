@@ -13,6 +13,9 @@ import xaiLightLogo from '@/assets/icons/grok.svg';
 import xaiDarkLogo from '@/assets/icons/grok-dark.svg';
 import kimiLightLogo from '@/assets/icons/kimi-light.svg';
 import kimiDarkLogo from '@/assets/icons/kimi-dark.svg';
+import imageProviderLogo from '@/assets/icons/image-provider.svg';
+import videoProviderLogo from '@/assets/icons/video-provider.svg';
+import audioProviderLogo from '@/assets/icons/audio-provider.svg';
 import type { ProviderBrand } from './types';
 
 export interface ProviderBrandLogo {
@@ -36,6 +39,9 @@ export const PROVIDER_LOGOS: Record<ProviderBrand, ProviderBrandLogo> = {
   code0: { src: code0Logo },
   fennoAI: { src: fennoAILogo, transparent: true },
   qiniuCloud: { src: qiniuCloudLogo, transparent: true },
+  image: { src: imageProviderLogo },
+  video: { src: videoProviderLogo },
+  audio: { src: audioProviderLogo },
   kimi: {
     src: kimiDarkLogo,
     darkSrc: kimiLightLogo,

@@ -12,6 +12,8 @@ export interface ApiCallRequest {
   url: string;
   header?: Record<string, string>;
   data?: string;
+  /** Base64-encoded raw request body for multipart or binary probes. */
+  dataBase64?: string;
 }
 
 export interface ApiCallResult<T = unknown> {

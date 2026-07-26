@@ -9,6 +9,7 @@ import { isMultiProtocolSponsorBrand } from '../sponsorDefinitions';
 import type { ProviderBrand, ProviderEntryFormInput, ProviderResource } from '../types';
 import type { UseProviderWorkbenchResult } from '../useProviderWorkbench';
 import { BaseProviderForm } from './forms/BaseProviderForm';
+import { MediaProviderForm } from './forms/MediaProviderForm';
 import { ResourceDetailView } from './ResourceDetailView';
 import { SponsorProviderForm } from './forms/SponsorProviderForm';
 import styles from './forms/sharedForm.module.scss';
@@ -31,8 +32,8 @@ interface ProviderSheetProps {
   onClose: () => void;
   onSwitchToEdit: () => void;
   workbench: UseProviderWorkbenchResult;
-  onCreated: () => void;
-  onUpdated: () => void;
+  onCreated: () => void | Promise<void>;
+  onUpdated: () => void | Promise<void>;
   mutationDisabled?: boolean;
   usageByProvider?: ProviderRecentUsageMap;
   ref?: Ref<ProviderSheetHandle>;
@@ -113,7 +114,7 @@ export function ProviderSheet({
       setSubmitting(true);
       try {
         await workbench.createProvider(state.brand, input);
-        onCreated();
+        await onCreated();
       } finally {
         setSubmitting(false);
       }
@@ -127,7 +128,7 @@ export function ProviderSheet({
       setSubmitting(true);
       try {
         await workbench.updateProvider(state.resource, input);
-        onUpdated();
+        await onUpdated();
       } finally {
         setSubmitting(false);
       }
@@ -143,6 +144,20 @@ export function ProviderSheet({
       return <ResourceDetailView resource={state.resource} usageByProvider={usageByProvider} />;
     }
     const formKey = `${state.brand}:${state.resource?.id ?? 'new'}:${state.mode}`;
+    if (state.brand === 'image' || state.brand === 'video' || state.brand === 'audio') {
+      return (
+        <MediaProviderForm
+          key={formKey}
+          brand={state.brand}
+          resource={state.resource}
+          mode={state.mode}
+          mutating={formMutating}
+          formId={formId}
+          onSubmit={state.mode === 'create' ? handleCreate : handleUpdate}
+          onDirtyChange={handleDirtyChange}
+        />
+      );
+    }
     if (isMultiProtocolSponsorBrand(state.brand)) {
       return (
         <SponsorProviderForm
@@ -254,7 +269,11 @@ export function ProviderSheet({
                       ? '/ai-providers/qiniu'
                       : state.brand === 'kimi'
                         ? '/ai-providers/kimi'
-                        : `/ai-providers/${state.brand}`,
+                        : state.brand === 'image' ||
+                            state.brand === 'video' ||
+                            state.brand === 'audio'
+                          ? `/media-providers/${state.brand}`
+                          : `/ai-providers/${state.brand}`,
       })}
       footer={footer}
       closeDisabled={submitting}

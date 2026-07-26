@@ -54,10 +54,12 @@ export function aggregateProviderUsageByApiKeys(
   apiKeys: readonly string[],
   resolveUsageEntry: (apiKey: string) => RecentRequestUsageEntry | undefined
 ): AggregatedProviderUsage {
-  const entries = apiKeys
-    .map((apiKey) => apiKey.trim())
-    .filter(Boolean)
-    .map((apiKey) => resolveUsageEntry(apiKey) ?? EMPTY_USAGE_ENTRY);
+  const entries = apiKeys.map((apiKey) => {
+    // An empty key is a real credential slot for public media endpoints.
+    // Keep it so the provider-level usage bucket (`baseUrl|`) is included.
+    const normalizedApiKey = apiKey.trim();
+    return resolveUsageEntry(normalizedApiKey) ?? EMPTY_USAGE_ENTRY;
+  });
   const recentRequests = mergeRecentRequestBucketGroups(
     entries.map((entry) => entry.recentRequests)
   );

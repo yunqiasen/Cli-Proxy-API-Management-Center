@@ -86,3 +86,64 @@ export interface OpenAIProviderConfig {
   sourceIndex?: number;
   [key: string]: unknown;
 }
+
+export type MediaKind = 'image' | 'video' | 'audio';
+export type MediaRequestFormat = 'json' | 'multipart' | 'binary';
+export type MediaModelMode = 'required' | 'optional' | 'none';
+export type MediaResponseFormat = 'passthrough' | 'json-url' | 'json-base64' | 'binary';
+
+export interface MediaApiKeyEntry {
+  apiKey: string;
+  priority?: number;
+  proxyUrl?: string;
+  authIndex?: string;
+}
+
+export interface MediaModelConfig {
+  name: string;
+  alias?: string;
+  displayName?: string;
+  forceMapping?: boolean;
+  capabilities: string[];
+}
+
+export interface MediaAsyncOperationConfig {
+  taskIdPath: string;
+  pollMethod?: string;
+  pollPath: string;
+  statusPath: string;
+  successValues: string[];
+  failureValues?: string[];
+  resultPath?: string;
+  pollInterval?: string;
+}
+
+export interface MediaOperationConfig {
+  name: string;
+  capability?: string;
+  method: string;
+  path: string;
+  requestFormat: MediaRequestFormat;
+  modelMode: MediaModelMode;
+  model?: string;
+  responseFormat: MediaResponseFormat;
+  resultPath?: string;
+  async?: MediaAsyncOperationConfig;
+}
+
+export interface MediaProviderConfig {
+  name: string;
+  kind: MediaKind;
+  baseUrl: string;
+  priority?: number;
+  disabled?: boolean;
+  disableCooling?: boolean;
+  prefix?: string;
+  apiKeyEntries: MediaApiKeyEntry[];
+  headers?: Record<string, string>;
+  models?: MediaModelConfig[];
+  operations?: MediaOperationConfig[];
+  authIndex?: string;
+  sourceIndex?: number;
+  [key: string]: unknown;
+}

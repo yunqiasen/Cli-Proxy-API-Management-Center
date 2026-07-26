@@ -28,6 +28,7 @@ import {
   type CodexProbeStatus,
 } from './codexProviderProbe';
 import { createResourceLeaseRegistry } from './requestGeneration';
+import { completeProviderMutation } from './providerMutationLifecycle';
 import {
   getProviderFilterState,
   readProvidersWorkbenchUiState,
@@ -102,7 +103,9 @@ const getResourceRecentSuccess = (
     ? resource.apiKeys
     : resource.apiKey
       ? [resource.apiKey]
-      : [];
+      : resource.brand === 'image' || resource.brand === 'video' || resource.brand === 'audio'
+        ? ['']
+        : [];
   return getProviderApiKeysRecentWindowStats(
     usageByProvider,
     usageProvider,
@@ -423,7 +426,9 @@ export function ProvidersWorkbenchPage({ fixedBrand }: ProvidersWorkbenchPagePro
       ? quickStartResource
         ? APIKEY_FUN_DISPLAY_NAME
         : t('nav.quick_start')
-      : undefined;
+      : fixedBrand
+        ? t(`providersPage.providerNames.${fixedBrand}`)
+        : undefined;
   const errorBanner = workbench.errorMessage ? (
     <div className="error-box">{workbench.errorMessage}</div>
   ) : null;
@@ -466,7 +471,9 @@ export function ProvidersWorkbenchPage({ fixedBrand }: ProvidersWorkbenchPagePro
         onConfirm: async () => {
           try {
             await workbench.deleteProvider(resource);
-            showNotification(t('providersPage.toast.deleted'), 'success');
+            await completeProviderMutation(refreshRecentRequests, () => {
+              showNotification(t('providersPage.toast.deleted'), 'success');
+            });
           } catch (err) {
             if (isSponsorPartialMutationError(err)) {
               showNotification(t('providersPage.sponsor.partialMutationWarning'), 'warning');
@@ -478,17 +485,19 @@ export function ProvidersWorkbenchPage({ fixedBrand }: ProvidersWorkbenchPagePro
         },
       });
     },
-    [showConfirmation, showNotification, t, workbench]
+    [refreshRecentRequests, showConfirmation, showNotification, t, workbench]
   );
 
   const handleToggleDisabled = useCallback(
     async (resource: ProviderResource, disabled: boolean) => {
       try {
         await workbench.toggleDisabled(resource, disabled);
-        showNotification(
-          disabled ? t('providersPage.toast.disabled') : t('providersPage.toast.enabled'),
-          'success'
-        );
+        await completeProviderMutation(refreshRecentRequests, () => {
+          showNotification(
+            disabled ? t('providersPage.toast.disabled') : t('providersPage.toast.enabled'),
+            'success'
+          );
+        });
       } catch (err) {
         if (isSponsorPartialMutationError(err)) {
           showNotification(t('providersPage.sponsor.partialMutationWarning'), 'warning');
@@ -498,18 +507,22 @@ export function ProvidersWorkbenchPage({ fixedBrand }: ProvidersWorkbenchPagePro
         showNotification(`${t('providersPage.toast.toggleFailed')}: ${msg}`, 'error');
       }
     },
-    [showNotification, t, workbench]
+    [refreshRecentRequests, showNotification, t, workbench]
   );
 
-  const handleCreated = useCallback(() => {
-    showNotification(t('providersPage.toast.created'), 'success');
-    closeSheet();
-  }, [closeSheet, showNotification, t]);
+  const handleCreated = useCallback(async () => {
+    await completeProviderMutation(refreshRecentRequests, () => {
+      showNotification(t('providersPage.toast.created'), 'success');
+      closeSheet();
+    });
+  }, [closeSheet, refreshRecentRequests, showNotification, t]);
 
-  const handleUpdated = useCallback(() => {
-    showNotification(t('providersPage.toast.updated'), 'success');
-    closeSheet();
-  }, [closeSheet, showNotification, t]);
+  const handleUpdated = useCallback(async () => {
+    await completeProviderMutation(refreshRecentRequests, () => {
+      showNotification(t('providersPage.toast.updated'), 'success');
+      closeSheet();
+    });
+  }, [closeSheet, refreshRecentRequests, showNotification, t]);
 
   // 加载状态
   if (!workbench.snapshot && workbench.isPending) {
@@ -537,7 +550,7 @@ export function ProvidersWorkbenchPage({ fixedBrand }: ProvidersWorkbenchPagePro
           onRefresh={() => void handleRefresh()}
           onNew={() => {}}
           isNewDisabled
-          showNewAction={!fixedBrand}
+          showNewAction={fixedBrand !== 'apikeyFun'}
           showSummary={fixedBrand !== 'apikeyFun'}
         />
         {errorBanner}
@@ -555,7 +568,7 @@ export function ProvidersWorkbenchPage({ fixedBrand }: ProvidersWorkbenchPagePro
         updatedAtLabel={updatedAtLabel}
         isFetching={workbench.isFetching}
         isNewDisabled={disableMutations}
-        showNewAction={!fixedBrand}
+        showNewAction={fixedBrand !== 'apikeyFun'}
         showSummary={fixedBrand !== 'apikeyFun'}
         newLabel={t('providersPage.actions.new')}
         variant={fixedBrand === 'apikeyFun' ? 'quickStart' : undefined}
@@ -616,7 +629,7 @@ export function ProvidersWorkbenchPage({ fixedBrand }: ProvidersWorkbenchPagePro
         )}
       </div>
 
-      {!fixedBrand ? (
+      {fixedBrand !== 'apikeyFun' ? (
         <ProviderSheet
           ref={sheetRef}
           state={sheetState}

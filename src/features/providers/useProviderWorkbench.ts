@@ -7,7 +7,14 @@ import {
   withDisableAllModelsRule,
   withoutDisableAllModelsRule,
 } from '@/components/providers/utils';
-import type { GeminiKeyConfig, ModelAlias, OpenAIProviderConfig, ProviderKeyConfig } from '@/types';
+import type {
+  GeminiKeyConfig,
+  ModelAlias,
+  OpenAIProviderConfig,
+  ProviderKeyConfig,
+  MediaProviderConfig,
+  MediaOperationConfig,
+} from '@/types';
 import {
   apiKeyFunToResource,
   claudeApiToResource,
@@ -20,6 +27,7 @@ import {
   openaiToResource,
   qiniuCloudToResource,
   kimiToResource,
+  mediaToResource,
   vertexToResource,
   xaiToResource,
 } from './adapters';
@@ -27,6 +35,7 @@ import { PROVIDER_BRAND_ORDER } from './descriptors';
 import type {
   ProviderBrand,
   ProviderEntryFormInput,
+  MediaOperationInput,
   ProviderGroup,
   ProviderResource,
   ProviderSnapshot,
@@ -197,6 +206,171 @@ const buildClaudeApiConfig = (
     },
     existing
   ) as ProviderKeyConfig;
+
+const splitMediaText = (value: string): string[] =>
+  value
+    .split(/[\n,]+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+const emptyMediaOperation = (): MediaOperationInput => ({
+  name: '',
+  capability: '',
+  method: 'POST',
+  path: '',
+  requestFormat: 'json',
+  modelMode: 'optional',
+  model: '',
+  responseFormat: 'passthrough',
+  resultPath: '',
+  asyncEnabled: false,
+  taskIdPath: '',
+  pollMethod: 'GET',
+  pollPath: '',
+  statusPath: '',
+  successValuesText: 'completed',
+  failureValuesText: 'failed',
+  asyncResultPath: '',
+  pollInterval: '3s',
+});
+
+const buildMediaProviderFormInput = (
+  brand: 'image' | 'video' | 'audio',
+  config?: MediaProviderConfig | null
+): ProviderEntryFormInput => ({
+  apiKey: '',
+  name: config?.name ?? '',
+  baseUrl: config?.baseUrl ?? '',
+  proxyUrl: config?.apiKeyEntries?.[0]?.proxyUrl ?? '',
+  prefix: config?.prefix ?? '',
+  disabled: config?.disabled === true,
+  disableCooling: config?.disableCooling === true,
+  priority: config?.priority,
+  mediaKind: brand,
+  headers: config?.headers
+    ? Object.entries(config.headers).map(([key, value]) => ({ key, value: String(value) }))
+    : [{ key: '', value: '' }],
+  excludedModelsText: '',
+  models: config?.models?.length
+    ? config.models.map((model) => ({
+        name: model.name,
+        alias: model.alias ?? '',
+        displayName: model.displayName ?? '',
+        forceMapping: model.forceMapping === true,
+        capabilities: [...(model.capabilities ?? [])],
+      }))
+    : [{ name: '', alias: '', capabilities: [] }],
+  operations: config?.operations?.length
+    ? config.operations.map((operation) => ({
+        name: operation.name,
+        capability: operation.capability ?? '',
+        method: operation.method,
+        path: operation.path,
+        requestFormat: operation.requestFormat,
+        modelMode: operation.modelMode,
+        model: operation.model ?? '',
+        responseFormat: operation.responseFormat,
+        resultPath: operation.resultPath ?? '',
+        asyncEnabled: Boolean(operation.async),
+        taskIdPath: operation.async?.taskIdPath ?? '',
+        pollMethod: operation.async?.pollMethod ?? 'GET',
+        pollPath: operation.async?.pollPath ?? '',
+        statusPath: operation.async?.statusPath ?? '',
+        successValuesText: operation.async?.successValues?.join('\n') ?? 'completed',
+        failureValuesText: operation.async?.failureValues?.join('\n') ?? 'failed',
+        asyncResultPath: operation.async?.resultPath ?? '',
+        pollInterval: operation.async?.pollInterval ?? '3s',
+      }))
+    : [emptyMediaOperation()],
+  apiKeyEntries: config?.apiKeyEntries?.length
+    ? config.apiKeyEntries.map((entry) => ({
+        apiKey: '',
+        existingApiKey: entry.apiKey,
+        priority: entry.priority,
+        proxyUrl: entry.proxyUrl ?? '',
+        authIndex: entry.authIndex,
+      }))
+    : [{ apiKey: '', proxyUrl: '', authIndex: config?.authIndex }],
+  testModel: '',
+  cloak: undefined,
+});
+
+const buildMediaProviderConfig = (
+  brand: 'image' | 'video' | 'audio',
+  input: ProviderEntryFormInput,
+  existing?: MediaProviderConfig | null
+): MediaProviderConfig => {
+  const apiKeyEntries = (input.apiKeyEntries ?? [])
+    .map((entry, index) => ({
+      apiKey:
+        entry.apiKey.trim() ||
+        entry.existingApiKey?.trim() ||
+        existing?.apiKeyEntries?.[index]?.apiKey?.trim() ||
+        '',
+      priority: entry.priority,
+      proxyUrl: entry.proxyUrl.trim() || undefined,
+      authIndex: entry.authIndex,
+    }))
+    .filter((entry) => entry.apiKey);
+  const headers = headersFromEntries(input.headers);
+  const models = (input.models ?? [])
+    .map((model) => ({
+      name: model.name.trim(),
+      alias: model.alias?.trim() || undefined,
+      displayName: model.displayName?.trim() || undefined,
+      forceMapping: model.forceMapping === true || undefined,
+      capabilities: (model.capabilities ?? []).map((item) => item.trim()).filter(Boolean),
+    }))
+    .filter((model) => model.name);
+  const operations = (input.operations ?? [])
+    .map((operation) => {
+      const result: MediaOperationConfig = {
+        name: operation.name.trim(),
+        capability: operation.capability.trim() || undefined,
+        method: operation.method.trim().toUpperCase() || 'POST',
+        path: operation.path.trim(),
+        requestFormat: operation.requestFormat,
+        modelMode: operation.modelMode,
+        model: operation.modelMode === 'none' ? undefined : operation.model.trim() || undefined,
+        responseFormat: operation.responseFormat,
+        resultPath: operation.resultPath.trim() || undefined,
+      };
+      if (operation.asyncEnabled) {
+        result.async = {
+          taskIdPath: operation.taskIdPath.trim(),
+          pollMethod: operation.pollMethod.trim().toUpperCase() || 'GET',
+          pollPath: operation.pollPath.trim(),
+          statusPath: operation.statusPath.trim(),
+          successValues: splitMediaText(operation.successValuesText),
+          failureValues: splitMediaText(operation.failureValuesText),
+          resultPath: operation.asyncResultPath.trim() || undefined,
+          pollInterval: operation.pollInterval.trim() || undefined,
+        };
+      }
+      return result;
+    })
+    .filter((operation) => operation.name && operation.path);
+  const providerAuthIndex =
+    apiKeyEntries.length === 0
+      ? input.apiKeyEntries?.find((entry) => entry.authIndex?.trim())?.authIndex?.trim() ||
+        existing?.authIndex
+      : undefined;
+  return {
+    ...(existing ?? {}),
+    name: input.name.trim(),
+    kind: brand,
+    baseUrl: input.baseUrl.trim(),
+    priority: input.priority,
+    disabled: input.disabled,
+    disableCooling: input.disableCooling === true,
+    prefix: input.prefix.trim() || undefined,
+    authIndex: providerAuthIndex,
+    apiKeyEntries,
+    headers: Object.keys(headers).length ? headers : undefined,
+    models: models.length ? models : undefined,
+    operations: operations.length ? operations : undefined,
+  };
+};
 
 const buildOpenAIConfig = (
   input: ProviderEntryFormInput,
@@ -385,10 +559,11 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
     setIsFetching(true);
     setErrorMessage(null);
     try {
-      const [configResult, vertexResult, openaiResult] = await Promise.allSettled([
+      const [configResult, vertexResult, openaiResult, mediaResult] = await Promise.allSettled([
         fetchConfig(true),
         providersApi.getVertexConfigs(),
         providersApi.getOpenAIProviders(),
+        providersApi.getMediaProviders(),
       ]);
       if (configResult.status !== 'fulfilled') {
         throw configResult.reason;
@@ -398,6 +573,9 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
       }
       if (openaiResult.status === 'fulfilled') {
         updateConfigValue('openai-compatibility', openaiResult.value || []);
+      }
+      if (mediaResult.status === 'fulfilled') {
+        updateConfigValue('media-providers', mediaResult.value || []);
       }
       setFetchedAt(new Date().toISOString());
     } catch (err) {
@@ -505,6 +683,13 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
             },
             []
           );
+          break;
+        case 'image':
+        case 'video':
+        case 'audio':
+          resources = (config.mediaProviders ?? [])
+            .filter((item) => item.kind === brand)
+            .map((item, index) => mediaToResource(item, item.sourceIndex ?? index, brand));
           break;
         case 'apikeyFun': {
           const sponsorResource = apiKeyFunToResource(buildApiKeyFunRaw(config));
@@ -686,6 +871,8 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
           );
         } else if (brand === 'openaiCompatibility') {
           await providersApi.createOpenAIProvider(buildOpenAIConfig(input));
+        } else if (brand === 'image' || brand === 'video' || brand === 'audio') {
+          await providersApi.createMediaProvider(buildMediaProviderConfig(brand, input));
         } else if (
           brand === 'apikeyFun' ||
           brand === 'code0' ||
@@ -760,6 +947,12 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
             selector.index,
             buildOpenAIConfig(input, resource.raw as OpenAIProviderConfig)
           );
+        } else if (brand === 'image' || brand === 'video' || brand === 'audio') {
+          if (selector.brand !== brand) throw new Error('Media provider selector mismatch');
+          await providersApi.updateMediaProvider(
+            selector.index,
+            buildMediaProviderConfig(brand, input, resource.raw as MediaProviderConfig)
+          );
         } else if (
           brand === 'apikeyFun' ||
           brand === 'code0' ||
@@ -816,6 +1009,10 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
             (item, index) => (item.sourceIndex ?? index) !== sel.index
           );
           updateConfigValue('openai-compatibility', next);
+        } else if (sel.brand === 'image' || sel.brand === 'video' || sel.brand === 'audio') {
+          await providersApi.deleteMediaProvider(sel.index);
+          const next = (config?.mediaProviders ?? []).filter((_item, index) => index !== sel.index);
+          updateConfigValue('media-providers', next);
         } else if (
           sel.brand === 'apikeyFun' ||
           sel.brand === 'code0' ||
@@ -897,6 +1094,19 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
           }
         } else if (brand === 'openaiCompatibility' && selector.brand === 'openaiCompatibility') {
           await providersApi.updateOpenAIProviderDisabled(selector.index, disabled);
+        } else if (brand === 'image' || brand === 'video' || brand === 'audio') {
+          if (selector.brand !== brand) throw new Error('Media provider selector mismatch');
+          await providersApi.updateMediaProvider(
+            selector.index,
+            buildMediaProviderConfig(
+              brand,
+              {
+                ...buildMediaProviderFormInput(brand, resource.raw as MediaProviderConfig),
+                disabled,
+              },
+              resource.raw as MediaProviderConfig
+            )
+          );
         } else if (
           brand === 'apikeyFun' ||
           brand === 'code0' ||

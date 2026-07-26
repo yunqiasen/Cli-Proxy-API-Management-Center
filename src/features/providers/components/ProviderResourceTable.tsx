@@ -101,8 +101,13 @@ const isSponsorResource = (resource: ProviderResource): boolean =>
 const getUsageProvider = (resource: ProviderResource): string =>
   getNativeProviderUsageIdentity(resource.brand, resource.name);
 
-const getUsageApiKeys = (resource: ProviderResource): string[] =>
-  resource.apiKeys?.length ? resource.apiKeys : resource.apiKey ? [resource.apiKey] : [];
+const getUsageApiKeys = (resource: ProviderResource): string[] => {
+  if (resource.apiKeys?.length) return resource.apiKeys;
+  if (resource.apiKey) return [resource.apiKey];
+  return resource.brand === 'image' || resource.brand === 'video' || resource.brand === 'audio'
+    ? ['']
+    : [];
+};
 
 const resolveStatusBarData = (
   resource: ProviderResource,
@@ -230,7 +235,22 @@ export function ProviderResourceTable({
       });
       return <div className={styles.metricsCell}>{items}</div>;
     }
-    if (r.brand === 'openaiCompatibility') {
+    if (r.brand === 'image' || r.brand === 'video' || r.brand === 'audio') {
+      items.push(
+        renderMetric('models', t('providersPage.table.metrics.models'), r.modelCount),
+        renderMetric(
+          'operations',
+          t('providersPage.table.metrics.operations'),
+          r.operationCount ?? 0
+        ),
+        renderMetric('keys', t('providersPage.table.metrics.keys'), r.apiKeyEntryCount)
+      );
+      (r.mediaCapabilities ?? []).slice(0, 3).forEach((capability) => {
+        items.push(
+          renderFlagTag(`cap-${capability}`, t(`providersPage.media.capabilityNames.${capability}`))
+        );
+      });
+    } else if (r.brand === 'openaiCompatibility') {
       items.push(
         renderMetric('models', t('providersPage.table.metrics.models'), r.modelCount),
         renderMetric('keys', t('providersPage.table.metrics.keys'), r.apiKeyEntryCount),

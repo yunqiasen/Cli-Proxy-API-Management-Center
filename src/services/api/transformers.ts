@@ -4,12 +4,14 @@ import type {
   ModelAlias,
   OpenAIProviderConfig,
   ProviderKeyConfig,
+  MediaProviderConfig,
 } from '@/types';
 import type { Config } from '@/types/config';
 import { buildHeaderObject } from '@/utils/headers';
 import { isRecord } from '@/utils/helpers';
 import { readCredentialWeight } from '@/utils/credentialWeight';
 import { normalizeNativeProviderPayload } from './nativeProviderContracts';
+import { normalizeMediaProviderPayload } from './mediaProviderContracts';
 
 const normalizeBoolean = (value: unknown): boolean | undefined =>
   typeof value === 'boolean' ? value : undefined;
@@ -137,6 +139,8 @@ const normalizeProviderKeyConfig = (item: unknown): ProviderKeyConfig | null =>
 
 const normalizeGeminiKeyConfig = (item: unknown): GeminiKeyConfig | null =>
   applyNativeProviderWeight(item, normalizeNativeProviderPayload(item));
+
+export const normalizeMediaProvider = normalizeMediaProviderPayload;
 
 const normalizeOpenAIProvider = (
   provider: unknown,
@@ -308,6 +312,13 @@ export const normalizeConfigResponse = (raw: unknown): Config => {
     config.openaiCompatibility = openaiList
       .map((item, index) => normalizeOpenAIProvider(item, index))
       .filter(Boolean) as OpenAIProviderConfig[];
+  }
+
+  const mediaList = raw['media-providers'];
+  if (Array.isArray(mediaList)) {
+    config.mediaProviders = mediaList
+      .map((item, index) => normalizeMediaProvider(item, index))
+      .filter(Boolean) as MediaProviderConfig[];
   }
 
   const oauthExcluded = normalizeOauthExcluded(raw['oauth-excluded-models']);

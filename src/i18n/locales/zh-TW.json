@@ -106,7 +106,11 @@
     "plugin_store": "插件商店",
     "config_management": "設定面板",
     "logs": "記錄檢視",
-    "system_info": "中心資訊"
+    "system_info": "中心資訊",
+    "media_providers": "媒體供應商",
+    "image_providers": "圖片供應商",
+    "video_providers": "影片供應商",
+    "audio_providers": "音訊供應商"
   },
   "nav_groups": {
     "operate": "運行",
@@ -126,7 +130,11 @@
     "plugin_store": "探索並安裝插件",
     "logs": "請求追蹤與排查",
     "config_management": "閘道基礎設定",
-    "system_info": "運行與診斷資訊"
+    "system_info": "運行與診斷資訊",
+    "media_providers": "圖片、影片與音訊中轉",
+    "image_providers": "生圖、編輯、放大與去背",
+    "video_providers": "影片生成與處理",
+    "audio_providers": "語音、音樂、複製與變聲"
   },
   "dashboard": {
     "hero_verdict_good": "運行平穩",
@@ -1438,7 +1446,10 @@
       "code0": "Code0",
       "fennoAI": "FennoAI",
       "qiniuCloud": "七牛雲",
-      "kimi": "Kimi"
+      "kimi": "Kimi",
+      "image": "圖片供應商",
+      "video": "影片供應商",
+      "audio": "音訊供應商"
     },
     "table": {
       "key": "金鑰",
@@ -1450,7 +1461,8 @@
       "metrics": {
         "models": "模型",
         "keys": "金鑰",
-        "headers": "請求標頭"
+        "headers": "請求標頭",
+        "operations": "功能"
       },
       "websocketsTag": "WebSockets",
       "cloakTag": "Cloak",
@@ -1685,6 +1697,62 @@
     },
     "modelCatalog": {
       "notLoaded": "未載入"
+    },
+    "media": {
+      "providerName": "供應商名稱",
+      "baseUrlHint": "此供應商共用的上游位址",
+      "testProvider": "測試目前供應商",
+      "operationsSection": "功能與介面",
+      "operationUntitled": "未命名功能",
+      "operationName": "功能名稱",
+      "capability": "能力類型",
+      "method": "請求方法",
+      "path": "介面路徑",
+      "requestFormat": "請求格式",
+      "modelMode": "模型模式",
+      "modelRequired": "必須填寫模型",
+      "modelOptional": "模型可選",
+      "modelNone": "無需模型",
+      "fixedModel": "固定上游模型",
+      "fixedModelPlaceholder": "可選；填寫後覆蓋請求模型",
+      "responseFormat": "回應格式",
+      "resultPath": "結果 JSON 路徑",
+      "asyncEnabled": "非同步提交並輪詢",
+      "asyncHint": "提交任務後使用同一個 Key 輪詢",
+      "taskIdPath": "任務 ID 路徑",
+      "pollPath": "輪詢路徑",
+      "statusPath": "狀態路徑",
+      "pollMethod": "輪詢方法",
+      "pollInterval": "輪詢間隔",
+      "successValues": "成功狀態值",
+      "failureValues": "失敗狀態值",
+      "asyncResultPath": "非同步結果路徑",
+      "addOperation": "新增功能介面",
+      "removeOperation": "刪除功能介面",
+      "capabilities": "模型能力",
+      "capabilityOptional": "不限固定能力",
+      "validation": {
+        "operationNameRequired": "第 {{index}} 個功能需要填寫名稱。",
+        "operationPathRequired": "第 {{index}} 個功能需要填寫介面路徑。",
+        "operationCapabilityInvalid": "第 {{index}} 個功能的能力類型不符合目前供應商分類。",
+        "operationModelRequired": "第 {{index}} 個功能需要固定模型或至少設定一個可用模型。",
+        "operationResultPathRequired": "第 {{index}} 個功能需要填寫結果 JSON 路徑。",
+        "operationAsyncIncomplete": "第 {{index}} 個功能的任務 ID、輪詢路徑、狀態路徑和成功狀態值都必須填寫。"
+      },
+      "capabilityNames": {
+        "generate": "生成",
+        "edit": "編輯",
+        "upscale": "放大",
+        "super-resolution": "超解析",
+        "remove-background": "去背",
+        "text-to-video": "文字生成影片",
+        "image-to-video": "圖片生成影片",
+        "remove-watermark": "去浮水印",
+        "speech": "語音生成",
+        "music": "音樂生成",
+        "clone": "聲音複製",
+        "voice-convert": "變聲"
+      }
     }
   }
 }

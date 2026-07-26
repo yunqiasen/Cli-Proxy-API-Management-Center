@@ -6,12 +6,15 @@ import { apiClient } from './client';
 import { isRecord } from '@/utils/helpers';
 import { normalizeOpenAIProvider, normalizeProviderKeyConfig } from './transformers';
 import { serializeNativeProviderPayload } from './nativeProviderContracts';
+import { serializeMediaProviderPayload } from './mediaProviderContracts';
+import { normalizeMediaProviderPayload } from './mediaProviderContracts';
 import type {
   GeminiKeyConfig,
   OpenAIProviderConfig,
   ProviderKeyConfig,
   ApiKeyEntry,
   ModelAlias,
+  MediaProviderConfig,
 } from '@/types';
 
 const serializeHeaders = (headers?: Record<string, string>) =>
@@ -398,6 +401,25 @@ const serializeOpenAIProvider = (provider: OpenAIProviderConfig) => {
   return payload;
 };
 
+const extractMediaProviders = (data: unknown): MediaProviderConfig[] => {
+  const list = extractArrayPayload(data, 'media-providers');
+  return list
+    .map((item, index) => normalizeMediaProviderPayload(item, index))
+    .filter(Boolean) as MediaProviderConfig[];
+};
+
+const mutateMediaProviderList = async (
+  mutate: (items: MediaProviderConfig[]) => MediaProviderConfig[]
+): Promise<void> => {
+  const current = extractMediaProviders(await apiClient.get('/media-providers'));
+  await apiClient.put(
+    '/media-providers',
+    mutate(current).map((provider) =>
+      serializeMediaProviderPayload(provider, { includeAuthIndexes: true })
+    )
+  );
+};
+
 export const providersApi = {
   createGeminiKey: (config: GeminiKeyConfig) =>
     mutateLatestProviderList('gemini-api-key', (latestItems) =>
@@ -611,4 +633,28 @@ export const providersApi = {
 
   deleteOpenAIProvider: (index: number) =>
     apiClient.delete(`/openai-compatibility?index=${encodeURIComponent(String(index))}`),
+
+  async getMediaProviders(): Promise<MediaProviderConfig[]> {
+    return extractMediaProviders(await apiClient.get('/media-providers'));
+  },
+
+  createMediaProvider: (provider: MediaProviderConfig) =>
+    mutateMediaProviderList((items) => [...items, provider]),
+
+  updateMediaProvider: (index: number, provider: MediaProviderConfig) =>
+    apiClient.patch('/media-providers', {
+      index,
+      value: serializeMediaProviderPayload(provider, { includeAuthIndexes: true }),
+    }),
+
+  putMediaProviders: (providers: MediaProviderConfig[]) =>
+    apiClient.put(
+      '/media-providers',
+      providers.map((provider) =>
+        serializeMediaProviderPayload(provider, { includeAuthIndexes: true })
+      )
+    ),
+
+  deleteMediaProvider: (index: number) =>
+    apiClient.delete(`/media-providers?index=${encodeURIComponent(String(index))}`),
 };

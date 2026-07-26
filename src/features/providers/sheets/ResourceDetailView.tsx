@@ -2,7 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { Collapsible } from '@/components/ui/Collapsible';
 import { IconCheck, IconX } from '@/components/ui/icons';
 import { getProviderTotalStats, type ProviderRecentUsageMap } from '@/components/providers/utils';
-import type { OpenAIProviderConfig } from '@/types';
+import type { OpenAIProviderConfig, MediaProviderConfig } from '@/types';
 import { maskApiKey } from '@/utils/format';
 import {
   getSponsorProviderDefinition,
@@ -118,7 +118,12 @@ export function ResourceDetailView({ resource, usageByProvider }: ResourceDetail
 
   const openaiConfig =
     resource.brand === 'openaiCompatibility' ? (resource.raw as OpenAIProviderConfig) : null;
-  const apiKeyEntries = openaiConfig?.apiKeyEntries ?? [];
+  const mediaConfig =
+    resource.brand === 'image' || resource.brand === 'video' || resource.brand === 'audio'
+      ? (resource.raw as MediaProviderConfig)
+      : null;
+  const providerConfig = openaiConfig ?? mediaConfig;
+  const apiKeyEntries = providerConfig?.apiKeyEntries ?? [];
 
   return (
     <div>
@@ -135,7 +140,7 @@ export function ResourceDetailView({ resource, usageByProvider }: ResourceDetail
         ))}
       </dl>
 
-      {openaiConfig && apiKeyEntries.length > 0 ? (
+      {providerConfig && apiKeyEntries.length > 0 ? (
         <div className={styles.apiKeyEntriesSection}>
           <div className={styles.apiKeyEntriesLabel}>
             {t('providersPage.form.apiKeyEntriesSection')}: {apiKeyEntries.length}
@@ -145,9 +150,9 @@ export function ResourceDetailView({ resource, usageByProvider }: ResourceDetail
               const entryStats = usageByProvider
                 ? getProviderTotalStats(
                     usageByProvider,
-                    openaiConfig.name,
+                    providerConfig.name,
                     entry.apiKey,
-                    openaiConfig.baseUrl
+                    providerConfig.baseUrl
                   )
                 : { success: 0, failure: 0 };
               return (

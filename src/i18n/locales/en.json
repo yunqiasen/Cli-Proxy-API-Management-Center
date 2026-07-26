@@ -106,7 +106,11 @@
     "plugin_store": "Plugin Store",
     "config_management": "Config Panel",
     "logs": "Logs Viewer",
-    "system_info": "Management Center Info"
+    "system_info": "Management Center Info",
+    "media_providers": "Media Providers",
+    "image_providers": "Image Providers",
+    "video_providers": "Video Providers",
+    "audio_providers": "Audio Providers"
   },
   "nav_groups": {
     "operate": "Operate",
@@ -126,7 +130,11 @@
     "plugin_store": "Discover & install plugins",
     "logs": "Request tracing",
     "config_management": "Gateway configuration",
-    "system_info": "Runtime & diagnostics"
+    "system_info": "Runtime & diagnostics",
+    "media_providers": "Image, video & audio routing",
+    "image_providers": "Generation, editing & enhancement",
+    "video_providers": "Generation & processing",
+    "audio_providers": "Speech, music & voice"
   },
   "dashboard": {
     "hero_verdict_good": "All systems steady",
@@ -1412,7 +1420,10 @@
       "code0": "Code0",
       "fennoAI": "FennoAI",
       "qiniuCloud": "Qiniu Cloud",
-      "kimi": "Kimi"
+      "kimi": "Kimi",
+      "image": "Image Providers",
+      "video": "Video Providers",
+      "audio": "Audio Providers"
     },
     "table": {
       "key": "Key",
@@ -1424,7 +1435,8 @@
       "metrics": {
         "models": "Models",
         "keys": "Keys",
-        "headers": "Headers"
+        "headers": "Headers",
+        "operations": "Operations"
       },
       "websocketsTag": "WebSockets",
       "cloakTag": "Cloak",
@@ -1659,6 +1671,62 @@
     },
     "modelCatalog": {
       "notLoaded": "Not loaded"
+    },
+    "media": {
+      "providerName": "Provider name",
+      "baseUrlHint": "Base endpoint shared by this provider",
+      "testProvider": "Test current provider",
+      "operationsSection": "Operations and endpoints",
+      "operationUntitled": "Untitled operation",
+      "operationName": "Operation name",
+      "capability": "Capability",
+      "method": "HTTP method",
+      "path": "Endpoint path",
+      "requestFormat": "Request format",
+      "modelMode": "Model mode",
+      "modelRequired": "Model required",
+      "modelOptional": "Model optional",
+      "modelNone": "No model",
+      "fixedModel": "Fixed upstream model",
+      "fixedModelPlaceholder": "Optional; overrides the requested model",
+      "responseFormat": "Response format",
+      "resultPath": "Result JSON path",
+      "asyncEnabled": "Submit and poll asynchronously",
+      "asyncHint": "Submit once, then poll the task endpoint with the same key",
+      "taskIdPath": "Task ID path",
+      "pollPath": "Poll path",
+      "statusPath": "Status path",
+      "pollMethod": "Poll method",
+      "pollInterval": "Poll interval",
+      "successValues": "Success values",
+      "failureValues": "Failure values",
+      "asyncResultPath": "Async result path",
+      "addOperation": "Add operation",
+      "removeOperation": "Remove operation",
+      "capabilities": "Model capabilities",
+      "capabilityOptional": "No fixed capability",
+      "validation": {
+        "operationNameRequired": "Operation {{index}} needs a name.",
+        "operationPathRequired": "Operation {{index}} needs an endpoint path.",
+        "operationCapabilityInvalid": "Operation {{index}} uses a capability that is not valid for this provider category.",
+        "operationModelRequired": "Operation {{index}} needs a fixed model or at least one compatible configured model.",
+        "operationResultPathRequired": "Operation {{index}} needs a result JSON path.",
+        "operationAsyncIncomplete": "Operation {{index}} needs task ID path, poll path, status path, and at least one success value."
+      },
+      "capabilityNames": {
+        "generate": "Generate",
+        "edit": "Edit",
+        "upscale": "Upscale",
+        "super-resolution": "Super resolution",
+        "remove-background": "Remove background",
+        "text-to-video": "Text to video",
+        "image-to-video": "Image to video",
+        "remove-watermark": "Remove watermark",
+        "speech": "Speech",
+        "music": "Music",
+        "clone": "Voice clone",
+        "voice-convert": "Voice conversion"
+      }
     }
   }
 }

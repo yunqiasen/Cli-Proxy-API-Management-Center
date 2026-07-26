@@ -106,7 +106,11 @@
     "plugin_store": "插件商店",
     "config_management": "配置面板",
     "logs": "日志查看",
-    "system_info": "中心信息"
+    "system_info": "中心信息",
+    "media_providers": "媒体供应商",
+    "image_providers": "图片供应商",
+    "video_providers": "视频供应商",
+    "audio_providers": "音频供应商"
   },
   "nav_groups": {
     "operate": "运行",
@@ -126,7 +130,11 @@
     "plugin_store": "发现并安装插件",
     "logs": "请求追踪与排查",
     "config_management": "网关基础配置",
-    "system_info": "运行与诊断信息"
+    "system_info": "运行与诊断信息",
+    "media_providers": "图片、视频和音频中转",
+    "image_providers": "生图、编辑、放大与去背景",
+    "video_providers": "视频生成与处理",
+    "audio_providers": "语音、音乐、克隆与变声"
   },
   "dashboard": {
     "hero_verdict_good": "运行平稳",
@@ -1412,7 +1420,10 @@
       "code0": "Code0",
       "fennoAI": "FennoAI",
       "qiniuCloud": "七牛云",
-      "kimi": "Kimi"
+      "kimi": "Kimi",
+      "image": "图片供应商",
+      "video": "视频供应商",
+      "audio": "音频供应商"
     },
     "table": {
       "key": "密钥",
@@ -1424,7 +1435,8 @@
       "metrics": {
         "models": "模型",
         "keys": "密钥",
-        "headers": "请求头"
+        "headers": "请求头",
+        "operations": "功能"
       },
       "websocketsTag": "WebSockets",
       "cloakTag": "Cloak",
@@ -1659,6 +1671,62 @@
     },
     "modelCatalog": {
       "notLoaded": "未加载"
+    },
+    "media": {
+      "providerName": "供应商名称",
+      "baseUrlHint": "该供应商共用的上游地址",
+      "testProvider": "测试当前供应商",
+      "operationsSection": "功能与接口",
+      "operationUntitled": "未命名功能",
+      "operationName": "功能名称",
+      "capability": "能力类型",
+      "method": "请求方法",
+      "path": "接口路径",
+      "requestFormat": "请求格式",
+      "modelMode": "模型模式",
+      "modelRequired": "必须填写模型",
+      "modelOptional": "模型可选",
+      "modelNone": "无需模型",
+      "fixedModel": "固定上游模型",
+      "fixedModelPlaceholder": "可选；填写后覆盖请求中的模型",
+      "responseFormat": "响应格式",
+      "resultPath": "结果 JSON 路径",
+      "asyncEnabled": "异步提交并轮询",
+      "asyncHint": "提交任务后，使用同一个 Key 轮询任务接口",
+      "taskIdPath": "任务 ID 路径",
+      "pollPath": "轮询路径",
+      "statusPath": "状态路径",
+      "pollMethod": "轮询方法",
+      "pollInterval": "轮询间隔",
+      "successValues": "成功状态值",
+      "failureValues": "失败状态值",
+      "asyncResultPath": "异步结果路径",
+      "addOperation": "添加功能接口",
+      "removeOperation": "删除功能接口",
+      "capabilities": "模型能力",
+      "capabilityOptional": "不限于固定能力",
+      "validation": {
+        "operationNameRequired": "第 {{index}} 个功能需要填写名称。",
+        "operationPathRequired": "第 {{index}} 个功能需要填写接口路径。",
+        "operationCapabilityInvalid": "第 {{index}} 个功能的能力类型与当前供应商分类不匹配。",
+        "operationModelRequired": "第 {{index}} 个功能需要固定模型或至少配置一个可用模型。",
+        "operationResultPathRequired": "第 {{index}} 个功能需要填写结果 JSON 路径。",
+        "operationAsyncIncomplete": "第 {{index}} 个功能的异步任务 ID、轮询路径、状态路径和成功状态值都必须填写。"
+      },
+      "capabilityNames": {
+        "generate": "生成",
+        "edit": "编辑",
+        "upscale": "放大",
+        "super-resolution": "超分",
+        "remove-background": "去背景",
+        "text-to-video": "文生视频",
+        "image-to-video": "图生视频",
+        "remove-watermark": "去水印",
+        "speech": "语音生成",
+        "music": "音乐生成",
+        "clone": "声音克隆",
+        "voice-convert": "变声"
+      }
     }
   }
 }

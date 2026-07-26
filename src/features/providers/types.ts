@@ -2,7 +2,7 @@
  * AI 提供商 Workbench 视图模型(归一化各 brand 的异构 config)
  */
 
-import type { GeminiKeyConfig, OpenAIProviderConfig, ProviderKeyConfig } from '@/types';
+import type { GeminiKeyConfig, OpenAIProviderConfig, ProviderKeyConfig, MediaKind } from '@/types';
 
 export type ProviderBrand =
   | 'gemini'
@@ -17,7 +17,10 @@ export type ProviderBrand =
   | 'code0'
   | 'fennoAI'
   | 'qiniuCloud'
-  | 'kimi';
+  | 'kimi'
+  | 'image'
+  | 'video'
+  | 'audio';
 
 export type SponsorProviderBrand = 'apikeyFun' | 'code0' | 'fennoAI' | 'qiniuCloud' | 'kimi';
 
@@ -36,6 +39,7 @@ export type ProviderResourceSelector =
   | { brand: 'claudeApi'; apiKey: string; baseUrl?: string; index: number }
   | { brand: 'vertex'; apiKey: string; baseUrl?: string; index: number }
   | { brand: 'openaiCompatibility'; name: string; index: number }
+  | { brand: 'image' | 'video' | 'audio'; name: string; kind: MediaKind; index: number }
   | {
       brand: 'apikeyFun';
       openaiIndices: number[];
@@ -119,6 +123,10 @@ export interface ProviderResource {
   disabled: boolean;
   /** 额外能力旗标 */
   flags: ProviderResourceFlags;
+  /** Media provider metadata used by the dedicated forms and table. */
+  mediaKind?: MediaKind;
+  mediaCapabilities?: string[];
+  operationCount?: number;
   /** 删除/更新使用的 selector */
   selector: ProviderResourceSelector;
   /** 原始 raw config,Sheet 表单初始化用 */
@@ -153,6 +161,9 @@ export interface ModelEntryInput {
   testModel?: string;
   image?: boolean;
   thinkingJson?: string;
+  displayName?: string;
+  forceMapping?: boolean;
+  capabilities?: string[];
 }
 
 export type SponsorProtocol = 'openai' | 'codex' | 'claude' | 'gemini';
@@ -187,6 +198,27 @@ export interface CloakInput {
   cacheUserId: boolean;
 }
 
+export interface MediaOperationInput {
+  name: string;
+  capability: string;
+  method: string;
+  path: string;
+  requestFormat: 'json' | 'multipart' | 'binary';
+  modelMode: 'required' | 'optional' | 'none';
+  model: string;
+  responseFormat: 'passthrough' | 'json-url' | 'json-base64' | 'binary';
+  resultPath: string;
+  asyncEnabled: boolean;
+  taskIdPath: string;
+  pollMethod: string;
+  pollPath: string;
+  statusPath: string;
+  successValuesText: string;
+  failureValuesText: string;
+  asyncResultPath: string;
+  pollInterval: string;
+}
+
 export interface ProviderEntryFormInput {
   /** OpenAI 创建时只在 apiKeyEntries 中传 */
   apiKey: string;
@@ -216,4 +248,6 @@ export interface ProviderEntryFormInput {
   apiKeyEntries?: ApiKeyEntryInput[];
   /** APIKEY.FUN stores one grouped key per platform protocol. */
   sponsorKeyEntries?: SponsorKeyEntryInput[];
+  mediaKind?: MediaKind;
+  operations?: MediaOperationInput[];
 }

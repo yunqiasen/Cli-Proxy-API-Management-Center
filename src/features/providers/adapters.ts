@@ -1,4 +1,9 @@
-import type { GeminiKeyConfig, OpenAIProviderConfig, ProviderKeyConfig } from '@/types';
+import type {
+  GeminiKeyConfig,
+  OpenAIProviderConfig,
+  ProviderKeyConfig,
+  MediaProviderConfig,
+} from '@/types';
 import { hasDisableAllModelsRule, stripDisableAllModelsRule } from '@/components/providers/utils';
 import { maskApiKey } from '@/utils/format';
 import {
@@ -172,6 +177,63 @@ export function claudeApiToResource(config: ProviderKeyConfig, index: number): P
 
 export function vertexToResource(config: ProviderKeyConfig, index: number): ProviderResource {
   return providerKeyToResource('vertex', config, index);
+}
+
+export function mediaToResource(
+  config: MediaProviderConfig,
+  index: number,
+  brand: 'image' | 'video' | 'audio' = config.kind
+): ProviderResource {
+  const entries = config.apiKeyEntries ?? [];
+  const apiKeys = entries.map((entry) => entry.apiKey).filter(Boolean);
+  const keyPreviews = apiKeys.map(maskApiKey);
+  const models = config.models ?? [];
+  const modelSearchTerms = collectModelSearchTerms(models);
+  const modelDisplays = models
+    .map((model) => model.alias?.trim() || model.displayName?.trim() || model.name.trim())
+    .filter(Boolean)
+    .filter((value, idx, list) => list.indexOf(value) === idx);
+  const capabilities = Array.from(
+    new Set(
+      models
+        .flatMap((model) => model.capabilities ?? [])
+        .map((value) => value.trim())
+        .filter(Boolean)
+    )
+  );
+  const priority = normalizePriority(config.priority);
+  return {
+    id: buildId(brand, index, config.name),
+    brand,
+    originalIndex: config.sourceIndex ?? index,
+    name: config.name.trim() || null,
+    identifier: config.name.trim() || `#${index + 1}`,
+    apiKeyPreview: keyPreviews[0] ?? null,
+    apiKeyPreviews: keyPreviews,
+    apiKeys,
+    credentialSearchTerms: [...apiKeys, ...keyPreviews],
+    apiKey: apiKeys[0] ?? null,
+    authIndex: entries[0]?.authIndex ?? config.authIndex ?? null,
+    baseUrl: config.baseUrl ?? null,
+    proxyUrl: entries[0]?.proxyUrl ?? null,
+    prefix: config.prefix ?? null,
+    modelCount: models.length,
+    models: modelSearchTerms,
+    modelDisplays,
+    modelSearchTerms,
+    priority,
+    headerCount: countHeaders(config.headers),
+    excludedModelCount: 0,
+    excludedModels: [],
+    apiKeyEntryCount: entries.length,
+    disabled: config.disabled === true,
+    flags: {},
+    mediaKind: config.kind,
+    mediaCapabilities: capabilities,
+    operationCount: config.operations?.length ?? 0,
+    selector: { brand, name: config.name, kind: config.kind, index: config.sourceIndex ?? index },
+    raw: config,
+  };
 }
 
 export function openaiToResource(config: OpenAIProviderConfig, index: number): ProviderResource {

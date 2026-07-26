@@ -10,6 +10,9 @@ interface ModelEntriesEditorProps {
   models: ModelEntryInput[];
   /** OpenAI-compatible entries expose image/thinking options behind a per-row expander. */
   extendedOptions: boolean;
+  /** Media entries expose capability checkboxes behind the same row expander. */
+  mediaCapabilities?: ReadonlyArray<string>;
+  capabilityLabels?: Record<string, string>;
   mutating: boolean;
   removeDisabled: boolean;
   onUpdate: (idx: number, patch: Partial<ModelEntryInput>) => void;
@@ -20,6 +23,8 @@ interface ModelEntriesEditorProps {
 export function ModelEntriesEditor({
   models,
   extendedOptions,
+  mediaCapabilities,
+  capabilityLabels,
   mutating,
   removeDisabled,
   onUpdate,
@@ -51,7 +56,8 @@ export function ModelEntriesEditor({
   return (
     <>
       {visible.map((entry, idx) => {
-        const expanded = extendedOptions && expandedIdx === idx;
+        const hasMediaOptions = Boolean(mediaCapabilities?.length);
+        const expanded = (extendedOptions || hasMediaOptions) && expandedIdx === idx;
         const hasThinking = (entry.thinkingJson ?? '').trim().length > 0;
         return (
           <div key={idx} className={styles.modelEntry}>
@@ -81,7 +87,7 @@ export function ModelEntriesEditor({
                     {t('providersPage.form.modelBadgeThinking')}
                   </span>
                 ) : null}
-                {extendedOptions ? (
+                {extendedOptions || hasMediaOptions ? (
                   <button
                     type="button"
                     className={styles.entryCardIconBtn}
@@ -113,36 +119,66 @@ export function ModelEntriesEditor({
             </div>
             {expanded ? (
               <div className={styles.modelEntryDetails}>
-                <label className={styles.checkboxRow}>
-                  <input
-                    type="checkbox"
-                    className={styles.checkboxBox}
-                    checked={entry.image === true}
-                    disabled={mutating}
-                    onChange={(e) => onUpdate(idx, { image: e.target.checked })}
-                  />
-                  <span className={styles.checkboxText}>
-                    <span>{t('providersPage.form.modelImage')}</span>
-                    <small>{t('providersPage.form.modelImageHint')}</small>
-                  </span>
-                </label>
-                <div className={styles.field}>
-                  <label className={styles.label}>
-                    {t('providersPage.form.thinkingConfig')}
-                    <span className={styles.labelHint}>
-                      {' '}
-                      · {t('providersPage.form.thinkingConfigHint')}
-                    </span>
-                  </label>
-                  <textarea
-                    className={styles.textarea}
-                    rows={4}
-                    value={entry.thinkingJson ?? ''}
-                    onChange={(e) => onUpdate(idx, { thinkingJson: e.target.value })}
-                    disabled={mutating}
-                    placeholder={'{"levels":["low","medium","high"]}'}
-                  />
-                </div>
+                {hasMediaOptions ? (
+                  <div className={styles.field}>
+                    <span className={styles.label}>{t('providersPage.media.capabilities')}</span>
+                    <div className={styles.checkboxGrid}>
+                      {(mediaCapabilities ?? []).map((capability) => (
+                        <label key={capability} className={styles.checkboxRow}>
+                          <input
+                            type="checkbox"
+                            className={styles.checkboxBox}
+                            checked={(entry.capabilities ?? []).includes(capability)}
+                            disabled={mutating}
+                            onChange={(event) => {
+                              const current = new Set(entry.capabilities ?? []);
+                              if (event.target.checked) current.add(capability);
+                              else current.delete(capability);
+                              onUpdate(idx, { capabilities: Array.from(current) });
+                            }}
+                          />
+                          <span className={styles.checkboxText}>
+                            <span>{capabilityLabels?.[capability] ?? capability}</span>
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+                {extendedOptions ? (
+                  <>
+                    <label className={styles.checkboxRow}>
+                      <input
+                        type="checkbox"
+                        className={styles.checkboxBox}
+                        checked={entry.image === true}
+                        disabled={mutating}
+                        onChange={(e) => onUpdate(idx, { image: e.target.checked })}
+                      />
+                      <span className={styles.checkboxText}>
+                        <span>{t('providersPage.form.modelImage')}</span>
+                        <small>{t('providersPage.form.modelImageHint')}</small>
+                      </span>
+                    </label>
+                    <div className={styles.field}>
+                      <label className={styles.label}>
+                        {t('providersPage.form.thinkingConfig')}
+                        <span className={styles.labelHint}>
+                          {' '}
+                          · {t('providersPage.form.thinkingConfigHint')}
+                        </span>
+                      </label>
+                      <textarea
+                        className={styles.textarea}
+                        rows={4}
+                        value={entry.thinkingJson ?? ''}
+                        onChange={(e) => onUpdate(idx, { thinkingJson: e.target.value })}
+                        disabled={mutating}
+                        placeholder={'{"levels":["low","medium","high"]}'}
+                      />
+                    </div>
+                  </>
+                ) : null}
               </div>
             ) : null}
           </div>

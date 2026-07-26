@@ -615,6 +615,33 @@ export function MainLayout() {
           icon: sidebarIcons.aiProviders,
         },
         {
+          kind: 'drawer',
+          id: 'media-providers',
+          label: t('nav.media_providers'),
+          meta: t('nav_meta.media_providers'),
+          icon: sidebarIcons.aiProviders,
+          children: [
+            {
+              path: '/media-providers/image',
+              labelKey: 'nav.image_providers',
+              metaKey: 'nav_meta.image_providers',
+              icon: <span className="nav-sub-dot" aria-hidden="true" />,
+            },
+            {
+              path: '/media-providers/video',
+              labelKey: 'nav.video_providers',
+              metaKey: 'nav_meta.video_providers',
+              icon: <span className="nav-sub-dot" aria-hidden="true" />,
+            },
+            {
+              path: '/media-providers/audio',
+              labelKey: 'nav.audio_providers',
+              metaKey: 'nav_meta.audio_providers',
+              icon: <span className="nav-sub-dot" aria-hidden="true" />,
+            },
+          ],
+        },
+        {
           path: '/auth-files',
           labelKey: 'nav.auth_files',
           metaKey: 'nav_meta.auth_files',

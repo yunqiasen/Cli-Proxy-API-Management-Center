@@ -287,7 +287,7 @@ export function useConnectivityTest(
 
   const runCodex = useCallback(
     async (entryIndex?: number): Promise<void> => {
-      if (brand !== 'codex') return;
+      if (brand !== 'codex' && brand !== 'xai') return;
 
       const trimmedBase = baseUrl.trim();
       if (!trimmedBase) {

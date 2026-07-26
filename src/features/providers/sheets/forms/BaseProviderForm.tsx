@@ -51,6 +51,7 @@ const emptyApiKeyEntry = (): ApiKeyEntryInput => ({
   apiKey: '',
   proxyUrl: '',
 });
+const XAI_API_BASE_URL = 'https://api.x.ai/v1';
 
 const stripDisableAllRule = (list?: string[]): string[] =>
   (list ?? []).filter((s) => s.trim() !== '*');
@@ -80,7 +81,8 @@ function buildInitialForm(
     return {
       apiKey: '',
       name: '',
-      baseUrl: brand === 'claudeApi' ? CLAUDE_API_BASE_URL : '',
+      baseUrl:
+        brand === 'claudeApi' ? CLAUDE_API_BASE_URL : brand === 'xai' ? XAI_API_BASE_URL : '',
       proxyUrl: '',
       prefix: '',
       disabled: false,
@@ -89,12 +91,15 @@ function buildInitialForm(
       models: [emptyModel()],
       headers: [emptyHeader()],
       excludedModelsText: '',
-      websockets: undefined,
+      websockets: brand === 'xai' ? false : undefined,
       cloak: isClaudeLikeBrand(brand)
         ? { mode: '', strictMode: false, sensitiveWordsText: '', cacheUserId: false }
         : undefined,
       experimentalCchSigning: isClaudeLikeBrand(brand) ? false : undefined,
-      testModel: brand === 'openaiCompatibility' || isClaudeLikeBrand(brand) ? '' : undefined,
+      testModel:
+        brand === 'openaiCompatibility' || brand === 'xai' || isClaudeLikeBrand(brand)
+          ? ''
+          : undefined,
       apiKeyEntries: brand === 'openaiCompatibility' ? [emptyApiKeyEntry()] : undefined,
     };
   }
@@ -165,7 +170,7 @@ function buildInitialForm(
       ? Object.entries(cfg.headers).map(([k, v]) => ({ key: k, value: String(v) }))
       : [emptyHeader()],
     excludedModelsText: excludedList.join('\n'),
-    websockets: undefined,
+    websockets: brand === 'xai' ? (cfg as ProviderKeyConfig).websockets === true : undefined,
     cloak: isClaudeLikeBrand(brand)
       ? {
           mode: (cfg as ProviderKeyConfig).cloak?.mode ?? '',
@@ -177,7 +182,7 @@ function buildInitialForm(
     experimentalCchSigning: isClaudeLikeBrand(brand)
       ? (cfg as ProviderKeyConfig).experimentalCchSigning === true
       : undefined,
-    testModel: isClaudeLikeBrand(brand) ? '' : undefined,
+    testModel: brand === 'xai' || isClaudeLikeBrand(brand) ? '' : undefined,
   };
 }
 
@@ -422,11 +427,12 @@ export function BaseProviderForm({
   const supportsDisableCooling =
     brand === 'gemini' ||
     brand === 'codex' ||
+    brand === 'xai' ||
     isClaudeLikeBrand(brand) ||
     brand === 'openaiCompatibility';
   const supportsOpenAIModelOptions = brand === 'openaiCompatibility';
   const singleConnectivity =
-    brand === 'codex'
+    brand === 'codex' || brand === 'xai'
       ? { status: connectivity.codexStatus, run: connectivity.runCodex }
       : brand === 'gemini'
         ? { status: connectivity.geminiStatus, run: connectivity.runGemini }
@@ -599,7 +605,10 @@ export function BaseProviderForm({
           <div className={styles.field}>
             <label className={styles.label} htmlFor={`${fid}-testModel`}>
               {t('providersPage.form.testModel')}
-              {brand === 'codex' || isClaudeLikeBrand(brand) || brand === 'gemini' ? (
+              {brand === 'codex' ||
+              brand === 'xai' ||
+              isClaudeLikeBrand(brand) ||
+              brand === 'gemini' ? (
                 <span className={styles.labelHint}>
                   {' '}
                   · {t('providersPage.form.testModelClaudeHint')}

@@ -223,16 +223,6 @@ function toKimiUsageRow(
 export function buildKimiQuotaRows(payload: KimiUsagePayload): KimiQuotaRow[] {
   const rows: KimiQuotaRow[] = [];
 
-  const usage = payload.usage;
-  if (usage && typeof usage === 'object') {
-    const summary = toKimiUsageRow(usage as Record<string, unknown>, {
-      labelKey: 'kimi_quota.weekly_limit',
-    });
-    if (summary) {
-      rows.push({ id: 'summary', ...summary });
-    }
-  }
-
   const limits = payload.limits;
   if (Array.isArray(limits)) {
     limits.forEach((item, idx) => {
@@ -248,6 +238,16 @@ export function buildKimiQuotaRows(payload: KimiUsagePayload): KimiQuotaRow[] {
         rows.push({ id: `limit-${idx}`, ...row });
       }
     });
+  }
+
+  const usage = payload.usage;
+  if (usage && typeof usage === 'object') {
+    const summary = toKimiUsageRow(usage as Record<string, unknown>, {
+      labelKey: 'kimi_quota.weekly_limit',
+    });
+    if (summary) {
+      rows.push({ id: 'summary', ...summary });
+    }
   }
 
   return rows;
@@ -285,6 +285,8 @@ function normalizeXaiProductUsage(
 }
 
 const emptyXaiBillingSummary = (): XaiBillingSummary => ({
+  mode: 'billing',
+  source: 'cli-chat-proxy',
   periodType: 'unknown',
   usagePercent: null,
   productUsage: [],
@@ -391,6 +393,8 @@ export function mergeXaiBillingSummaries(
   if (!fallback) return primary;
 
   return {
+    mode: 'billing',
+    source: 'cli-chat-proxy',
     periodType: primary.periodType !== 'unknown' ? primary.periodType : fallback.periodType,
     usagePercent: primary.usagePercent ?? fallback.usagePercent,
     periodStart: primary.periodStart ?? fallback.periodStart,

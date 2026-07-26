@@ -18,7 +18,9 @@ import {
   geminiToResource,
   openaiToResource,
   qiniuCloudToResource,
+  kimiToResource,
   vertexToResource,
+  xaiToResource,
 } from './adapters';
 import { PROVIDER_BRAND_ORDER } from './descriptors';
 import type {
@@ -45,12 +47,7 @@ import {
   isCode0GeminiProvider,
   isCode0OpenAIProvider,
 } from './code0';
-import {
-  buildFennoAIRaw,
-  isFennoAIClaudeProvider,
-  isFennoAICodexProvider,
-  isFennoAIOpenAIProvider,
-} from './fennoAI';
+import { buildFennoAIRaw, isFennoAIClaudeProvider, isFennoAICodexProvider } from './fennoAI';
 import {
   buildQiniuCloudRaw,
   isQiniuCloudClaudeProvider,
@@ -58,6 +55,7 @@ import {
   isQiniuCloudGeminiProvider,
   isQiniuCloudOpenAIProvider,
 } from './qiniuCloud';
+import { buildKimiRaw, isKimiClaudeProvider, isKimiOpenAIProvider } from './kimi';
 import { getSponsorProviderDefinition, type SponsorProtocolUrls } from './sponsorDefinitions';
 import { runSponsorMutationWithRecovery } from './sponsorMutationRecovery';
 import { buildNativeProviderConfig } from './nativeProviderForm';
@@ -148,7 +146,7 @@ const buildModelAliases = (
     .filter((m) => m.name);
 
 const buildProviderKeyConfig = (
-  brand: 'gemini' | 'codex' | 'claude' | 'vertex',
+  brand: 'gemini' | 'codex' | 'xai' | 'claude' | 'vertex',
   input: ProviderEntryFormInput,
   existing?: ProviderKeyConfig | GeminiKeyConfig | null
 ): ProviderKeyConfig | GeminiKeyConfig => {
@@ -168,7 +166,7 @@ const buildProviderKeyConfig = (
     disableCooling: input.disableCooling === true,
     authIndex: existing?.authIndex,
   };
-  if (brand === 'codex' && input.websockets !== undefined) {
+  if ((brand === 'codex' || brand === 'xai') && input.websockets !== undefined) {
     next.websockets = input.websockets;
   }
   if (brand === 'claude' && input.cloak) {
@@ -446,6 +444,9 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
             return out;
           }, []);
           break;
+        case 'xai':
+          resources = (config.xaiApiKeys ?? []).map((item, index) => xaiToResource(item, index));
+          break;
         case 'claude':
           resources = (config.claudeApiKeys ?? []).reduce<ProviderResource[]>(
             (out, item, index) => {
@@ -454,6 +455,7 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
                 !isCode0ClaudeProvider(item) &&
                 !isFennoAIClaudeProvider(item) &&
                 !isQiniuCloudClaudeProvider(item) &&
+                !isKimiClaudeProvider(item) &&
                 !isClaudeApiProvider(item)
               ) {
                 out.push(claudeToResource(item, index));
@@ -483,8 +485,8 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
               if (
                 !isApiKeyFunOpenAIProvider(item) &&
                 !isCode0OpenAIProvider(item) &&
-                !isFennoAIOpenAIProvider(item) &&
-                !isQiniuCloudOpenAIProvider(item)
+                !isQiniuCloudOpenAIProvider(item) &&
+                !isKimiOpenAIProvider(item)
               ) {
                 out.push(openaiToResource(item, index));
               }
@@ -513,6 +515,11 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
           resources = sponsorResource ? [sponsorResource] : [];
           break;
         }
+        case 'kimi': {
+          const sponsorResource = kimiToResource(buildKimiRaw(config));
+          resources = sponsorResource ? [sponsorResource] : [];
+          break;
+        }
       }
       return {
         id: brand,
@@ -537,7 +544,9 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
             ? buildCode0Raw(config)
             : brand === 'fennoAI'
               ? buildFennoAIRaw(config)
-              : buildQiniuCloudRaw(config);
+              : brand === 'qiniuCloud'
+                ? buildQiniuCloudRaw(config)
+                : buildKimiRaw(config);
       const entries = normalizeSponsorKeyEntries(input.sponsorKeyEntries);
       const openaiEntry = entries.find((entry) => entry.protocol === 'openai');
       const claudeEntry = entries.find((entry) => entry.protocol === 'claude');
@@ -628,7 +637,7 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
           await providersApi.createOpenAIProvider(next);
         }
       } else if (currentOpenAI) {
-        await providersApi.deleteOpenAIProvidersByName(currentOpenAI.config.name);
+        await providersApi.deleteOpenAIProvider(currentOpenAI.index);
       }
     },
     [config]
@@ -646,6 +655,10 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
           await providersApi.createCodexConfig(
             buildNativeProviderConfig('codex', input) as ProviderKeyConfig
           );
+        } else if (brand === 'xai') {
+          await providersApi.createXAIConfig(
+            buildProviderKeyConfig('xai', input) as ProviderKeyConfig
+          );
         } else if (brand === 'claude') {
           await providersApi.createClaudeConfig(
             buildNativeProviderConfig('claude', input) as ProviderKeyConfig
@@ -662,7 +675,8 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
           brand === 'apikeyFun' ||
           brand === 'code0' ||
           brand === 'fennoAI' ||
-          brand === 'qiniuCloud'
+          brand === 'qiniuCloud' ||
+          brand === 'kimi'
         ) {
           await runSponsorMutationWithRecovery(() => persistSponsorConfig(brand, input), refetch);
         }
@@ -691,6 +705,13 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
           await providersApi.updateCodexConfigAtIndex(
             selector.index,
             buildNativeProviderConfig('codex', input, existing) as ProviderKeyConfig
+          );
+        } else if (brand === 'xai' && selector.brand === 'xai') {
+          const existing = resource.raw as ProviderKeyConfig;
+          await providersApi.updateXAIConfig(
+            selector.apiKey,
+            selector.baseUrl,
+            buildProviderKeyConfig('xai', input, existing) as ProviderKeyConfig
           );
         } else if (brand === 'claude' && selector.brand === 'claude') {
           const existing = resource.raw as ProviderKeyConfig;
@@ -721,7 +742,8 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
           brand === 'apikeyFun' ||
           brand === 'code0' ||
           brand === 'fennoAI' ||
-          brand === 'qiniuCloud'
+          brand === 'qiniuCloud' ||
+          brand === 'kimi'
         ) {
           await runSponsorMutationWithRecovery(() => persistSponsorConfig(brand, input), refetch);
         }
@@ -746,6 +768,10 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
           await providersApi.deleteCodexConfigAtIndex(sel.index);
           const next = (config?.codexApiKeys ?? []).filter((_, i) => i !== sel.index);
           updateConfigValue('codex-api-key', next);
+        } else if (sel.brand === 'xai') {
+          await providersApi.deleteXAIConfig(sel.apiKey, sel.baseUrl);
+          const next = (config?.xaiApiKeys ?? []).filter((_, i) => i !== sel.index);
+          updateConfigValue('xai-api-key', next);
         } else if (sel.brand === 'claude') {
           await providersApi.deleteClaudeConfigAtIndex(sel.index);
           const next = (config?.claudeApiKeys ?? []).filter((_, i) => i !== sel.index);
@@ -760,13 +786,16 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
           updateConfigValue('vertex-api-key', next);
         } else if (sel.brand === 'openaiCompatibility') {
           await providersApi.deleteOpenAIProvider(sel.index);
-          const next = (config?.openaiCompatibility ?? []).filter((_, i) => i !== sel.index);
+          const next = (config?.openaiCompatibility ?? []).filter(
+            (item, index) => (item.sourceIndex ?? index) !== sel.index
+          );
           updateConfigValue('openai-compatibility', next);
         } else if (
           sel.brand === 'apikeyFun' ||
           sel.brand === 'code0' ||
           sel.brand === 'fennoAI' ||
-          sel.brand === 'qiniuCloud'
+          sel.brand === 'qiniuCloud' ||
+          sel.brand === 'kimi'
         ) {
           await runSponsorMutationWithRecovery(async () => {
             const raw = resource.raw as SponsorProviderRaw;
@@ -779,10 +808,11 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
             for (const item of raw.claude) {
               await providersApi.deleteClaudeConfig(item.config.apiKey, item.config.baseUrl);
             }
-            const openAINames = new Set(raw.openai.map((item) => item.config.name));
-            for (const name of openAINames) {
-              const item = raw.openai.find((candidate) => candidate.config.name === name);
-              if (item) await providersApi.deleteOpenAIProvidersByName(name);
+            const openAIIndices = raw.openai
+              .map((item) => item.index)
+              .sort((left, right) => right - left);
+            for (const index of openAIIndices) {
+              await providersApi.deleteOpenAIProvider(index);
             }
           }, refetch);
         }
@@ -811,6 +841,7 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
           });
         } else if (
           (brand === 'codex' && selector.brand === 'codex') ||
+          (brand === 'xai' && selector.brand === 'xai') ||
           (brand === 'claude' && selector.brand === 'claude') ||
           (brand === 'claudeApi' && selector.brand === 'claudeApi') ||
           (brand === 'vertex' && selector.brand === 'vertex')
@@ -822,6 +853,8 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
           const next = { ...current, excludedModels: excluded };
           if (selector.brand === 'codex') {
             await providersApi.updateCodexConfigAtIndex(selector.index, next);
+          } else if (selector.brand === 'xai') {
+            await providersApi.updateXAIConfig(selector.apiKey, selector.baseUrl, next);
           } else if (selector.brand === 'claude' || selector.brand === 'claudeApi') {
             await providersApi.updateClaudeConfigAtIndex(selector.index, next);
           } else if (selector.brand === 'vertex') {
@@ -833,7 +866,8 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
           brand === 'apikeyFun' ||
           brand === 'code0' ||
           brand === 'fennoAI' ||
-          brand === 'qiniuCloud'
+          brand === 'qiniuCloud' ||
+          brand === 'kimi'
         ) {
           await runSponsorMutationWithRecovery(
             () => toggleSponsorConfig(resource.raw as SponsorProviderRaw, disabled),

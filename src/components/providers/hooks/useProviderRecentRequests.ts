@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useInterval } from '@/hooks/useInterval';
 import { apiKeyUsageApi } from '@/services/api';
+import { useAuthStore } from '@/stores';
 import {
   normalizeRecentRequestUsageEntry,
   type ApiKeyUsageResponse,
@@ -9,11 +10,11 @@ import {
 import {
   PROVIDER_RECENT_REQUESTS_STALE_TIME_MS,
   beginProviderRecentRequestsLoad,
-  createInFlightRequestDeduper,
   createProviderRecentRequestsCacheState,
   failProviderRecentRequestsLoad,
   isProviderRecentRequestsCacheFresh,
   resolveProviderRecentRequestsLoad,
+  type ProviderRecentRequestsCacheState,
 } from './providerRecentRequestsCache';
 
 export type ProviderRecentRequests = Map<string, Map<string, RecentRequestUsageEntry>>;
@@ -24,9 +25,43 @@ export type UseProviderRecentRequestsOptions = {
 
 const EMPTY_USAGE_BY_PROVIDER: ProviderRecentRequests = new Map();
 
-let cacheState =
-  createProviderRecentRequestsCacheState<ProviderRecentRequests>(EMPTY_USAGE_BY_PROVIDER);
-const requestDeduper = createInFlightRequestDeduper<ProviderRecentRequests>();
+type ProviderRecentRequestsCache = {
+  cachedUsageByProvider: ProviderRecentRequests;
+  cachedAt: number;
+  inFlightRequest: Promise<ProviderRecentRequests> | null;
+  state: ProviderRecentRequestsCacheState<ProviderRecentRequests>;
+};
+
+const createProviderRecentRequestsCache = (): ProviderRecentRequestsCache => {
+  const state = createProviderRecentRequestsCacheState<ProviderRecentRequests>(
+    EMPTY_USAGE_BY_PROVIDER
+  );
+  return {
+    cachedUsageByProvider: state.data,
+    cachedAt: state.cachedAt,
+    inFlightRequest: null,
+    state,
+  };
+};
+
+export const createProviderRecentRequestsCacheController = () => {
+  let currentApiBase = '';
+  let currentManagementKey = '';
+  let currentCache = createProviderRecentRequestsCache();
+
+  return {
+    forScope(apiBase: string, managementKey: string): ProviderRecentRequestsCache {
+      if (apiBase !== currentApiBase || managementKey !== currentManagementKey) {
+        currentApiBase = apiBase;
+        currentManagementKey = managementKey;
+        currentCache = createProviderRecentRequestsCache();
+      }
+      return currentCache;
+    },
+  };
+};
+
+const providerRecentRequestsCacheController = createProviderRecentRequestsCacheController();
 
 const normalizeProviderKey = (value: unknown): string =>
   String(value ?? '')
@@ -52,59 +87,107 @@ const normalizeApiKeyUsageResponse = (payload: ApiKeyUsageResponse): ProviderRec
   return usageByProvider;
 };
 
-const fetchProviderRecentRequests = (): Promise<ProviderRecentRequests> => {
-  const currentRequest = requestDeduper.current();
-  if (currentRequest) return currentRequest;
+const syncCacheStateFromLegacyFields = (cache: ProviderRecentRequestsCache) => {
+  if (cache.state.data === cache.cachedUsageByProvider && cache.state.cachedAt === cache.cachedAt) {
+    return;
+  }
+  cache.state = {
+    ...cache.state,
+    data: cache.cachedUsageByProvider,
+    cachedAt: cache.cachedAt,
+    hasLoaded: cache.cachedAt > 0,
+  };
+};
 
-  const started = beginProviderRecentRequestsLoad(cacheState);
-  cacheState = started.state;
-  return requestDeduper.run(async () => {
+const syncLegacyFieldsFromCacheState = (cache: ProviderRecentRequestsCache) => {
+  cache.cachedUsageByProvider = cache.state.data;
+  cache.cachedAt = cache.state.cachedAt;
+};
+
+const fetchProviderRecentRequests = (
+  cache: ProviderRecentRequestsCache
+): Promise<ProviderRecentRequests> => {
+  if (cache.inFlightRequest) return cache.inFlightRequest;
+
+  syncCacheStateFromLegacyFields(cache);
+  const started = beginProviderRecentRequestsLoad(cache.state);
+  cache.state = started.state;
+  syncLegacyFieldsFromCacheState(cache);
+
+  const request = (async () => {
     try {
       const payload = await apiKeyUsageApi.getUsage();
       const normalized = normalizeApiKeyUsageResponse(payload);
-      cacheState = resolveProviderRecentRequestsLoad(
-        cacheState,
+      cache.state = resolveProviderRecentRequestsLoad(
+        cache.state,
         started.requestId,
         normalized,
         Date.now()
       );
-      return cacheState.data;
+      syncLegacyFieldsFromCacheState(cache);
+      return cache.state.data;
     } catch (error) {
-      cacheState = failProviderRecentRequestsLoad(
-        cacheState,
+      cache.state = failProviderRecentRequestsLoad(
+        cache.state,
         started.requestId,
         error instanceof Error ? error.message : String(error)
       );
+      syncLegacyFieldsFromCacheState(cache);
       throw error;
     }
+  })();
+
+  const tracked = request.finally(() => {
+    if (cache.inFlightRequest === tracked) {
+      cache.inFlightRequest = null;
+    }
   });
+  cache.inFlightRequest = tracked;
+  return tracked;
 };
 
 export function useProviderRecentRequests(options: UseProviderRecentRequestsOptions = {}) {
   const enabled = options.enabled ?? true;
-  const [viewState, setViewState] = useState(cacheState);
+  const apiBase = useAuthStore((state) => state.apiBase);
+  const managementKey = useAuthStore((state) => state.managementKey);
+  const cache = useMemo(
+    () => providerRecentRequestsCacheController.forScope(apiBase, managementKey),
+    [apiBase, managementKey]
+  );
+  const [viewState, setViewState] = useState<{
+    cache: ProviderRecentRequestsCache;
+    state: ProviderRecentRequestsCacheState<ProviderRecentRequests>;
+  }>(() => ({ cache, state: cache.state }));
+
+  const setCurrentViewState = useCallback(
+    (state: ProviderRecentRequestsCacheState<ProviderRecentRequests>) => {
+      setViewState({ cache, state });
+    },
+    [cache]
+  );
 
   const loadRecentRequests = useCallback(
     async (loadOptions: { force?: boolean } = {}) => {
       if (!enabled) return EMPTY_USAGE_BY_PROVIDER;
 
-      const hasFreshCache = isProviderRecentRequestsCacheFresh(cacheState.cachedAt, Date.now());
+      syncCacheStateFromLegacyFields(cache);
+      const hasFreshCache = isProviderRecentRequestsCacheFresh(cache.cachedAt, Date.now());
       if (!loadOptions.force && hasFreshCache) {
-        setViewState(cacheState);
-        return cacheState.data;
+        setCurrentViewState(cache.state);
+        return cache.state.data;
       }
 
-      const request = fetchProviderRecentRequests();
-      setViewState(cacheState);
+      const request = fetchProviderRecentRequests(cache);
+      setCurrentViewState(cache.state);
       try {
         await request;
       } catch {
-        // The cache transition retains the last committed snapshot.
+        // Keep the last committed snapshot and expose the error through the cache state.
       }
-      setViewState(cacheState);
-      return cacheState.data;
+      setCurrentViewState(cache.state);
+      return cache.state.data;
     },
-    [enabled]
+    [cache, enabled, setCurrentViewState]
   );
 
   const refreshRecentRequests = useCallback(
@@ -114,24 +197,26 @@ export function useProviderRecentRequests(options: UseProviderRecentRequestsOpti
 
   useEffect(() => {
     if (!enabled) {
-      setViewState(createProviderRecentRequestsCacheState(EMPTY_USAGE_BY_PROVIDER));
+      setCurrentViewState(createProviderRecentRequestsCacheState(EMPTY_USAGE_BY_PROVIDER));
       return;
     }
-    void loadRecentRequests();
-  }, [enabled, loadRecentRequests]);
+    void loadRecentRequests().catch(() => {});
+  }, [cache, enabled, loadRecentRequests, setCurrentViewState]);
 
   useInterval(
     () => {
-      void refreshRecentRequests();
+      void refreshRecentRequests().catch(() => {});
     },
     enabled ? PROVIDER_RECENT_REQUESTS_STALE_TIME_MS : null
   );
 
+  const currentState = viewState.cache === cache ? viewState.state : cache.state;
+
   return {
-    usageByProvider: enabled ? viewState.data : EMPTY_USAGE_BY_PROVIDER,
-    hasLoaded: enabled ? viewState.hasLoaded : false,
-    isLoading: enabled ? viewState.isLoading || !viewState.hasLoaded : false,
-    error: enabled ? viewState.error : null,
+    usageByProvider: enabled ? currentState.data : EMPTY_USAGE_BY_PROVIDER,
+    hasLoaded: enabled ? currentState.hasLoaded : false,
+    isLoading: enabled ? currentState.isLoading || !currentState.hasLoaded : false,
+    error: enabled ? currentState.error : null,
     loadRecentRequests,
     refreshRecentRequests,
   };

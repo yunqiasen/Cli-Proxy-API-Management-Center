@@ -131,7 +131,7 @@
   "dashboard": {
     "current_config": "目前設定",
     "management_keys": "管理金鑰",
-    "provider_keys_detail": "G:{{gemini}} C:{{codex}} Cl:{{claude}} V:{{vertex}} O:{{openai}}",
+    "provider_keys_detail": "G:{{gemini}} C:{{codex}} X:{{xai}} Cl:{{claude}} V:{{vertex}} O:{{openai}}",
     "oauth_credentials": "OAuth 憑證",
     "edit_settings": "編輯設定",
     "routing_strategy": "路由策略",
@@ -181,6 +181,9 @@
     "health_status_warning": "警告",
     "health_status_disabled": "已停用",
     "download_button": "下載",
+    "manual_refresh_button": "重新整理 OAuth 憑證",
+    "manual_refresh_requested": "已提交「{{name}}」的憑證重新整理請求",
+    "manual_refresh_failed": "提交「{{name}}」的憑證重新整理請求失敗：{{message}}",
     "delete_button": "刪除",
     "delete_confirm": "確定要刪除檔案",
     "delete_all_confirm": "確定要刪除所有驗證檔案嗎？此操作無法還原！",
@@ -445,6 +448,8 @@
     "plan_label": "方案",
     "plan_supergrok": "SuperGrok",
     "plan_supergrok_heavy": "SuperGrok Heavy",
+    "plan_paid": "付費",
+    "paid_health": "付費 API 對話可用。xAI 暫不為此 OAuth 憑證提供配額總量資料。",
     "pay_as_you_go_label": "按量付費",
     "pay_as_you_go_enabled": "已啟用，封頂 {{cap}}",
     "pay_as_you_go_disabled": "未啟用"
@@ -566,6 +571,10 @@
     "upgrade_required_desc": "目前伺服器版本不支援 OAuth 模型別名功能，請升級到最新版本的 CPA（CLI Proxy API）後重試。"
   },
   "auth_login": {
+    "recommended_provider_section": "推薦提供商",
+    "recommended_provider_badge": "推薦提供商",
+    "other_oauth_providers": "其他 OAuth 提供商",
+    "other_login_methods": "其他登入方式",
     "codex_oauth_title": "Codex OAuth",
     "codex_oauth_button": "開始 Codex 登入",
     "codex_oauth_hint": "透過 OAuth 流程登入 Codex 服務，自動取得並儲存驗證檔案。",
@@ -600,8 +609,9 @@
     "antigravity_oauth_start_error": "啟動 Antigravity OAuth 失敗:",
     "antigravity_oauth_polling_error": "檢查驗證狀態失敗:",
     "kimi_oauth_title": "Kimi OAuth",
-    "kimi_oauth_button": "開始 Kimi 登入",
-    "kimi_oauth_hint": "透過裝置授權流程登入 Kimi 服務，自動取得並儲存驗證檔案。",
+    "kimi_oauth_button": "使用 Kimi 登入",
+    "kimi_sign_up_button": "立即註冊",
+    "kimi_oauth_hint": "透過裝置授權快速登入 Kimi，完成後將自動取得並儲存驗證檔案。",
     "kimi_oauth_url_label": "授權連結:",
     "kimi_open_link": "開啟連結",
     "kimi_copy_link": "複製連結",
@@ -699,9 +709,6 @@
   },
   "logs": {
     "title": "記錄檢視",
-    "runtime_unknown": "目前執行端：識別中",
-    "runtime_cpa": "目前執行端：CPA",
-    "runtime_home": "目前執行端：Home",
     "refresh_button": "重新整理記錄",
     "clear_button": "清空記錄",
     "fullscreen_button": "全螢幕顯示",
@@ -709,7 +716,6 @@
     "download_button": "下載記錄",
     "error_logs_modal_title": "錯誤請求記錄",
     "error_logs_description": "請選擇要開啟或下載的錯誤請求記錄檔案（僅在關閉請求記錄時產生）。",
-    "error_logs_home_unavailable": "Home 模式下請在記錄內容頁查看資料庫記錄，錯誤請求記錄清單僅適用於 CPA 檔案記錄。",
     "error_logs_request_log_enabled": "目前已開啟請求記錄，按介面約定錯誤請求記錄清單會始終為空。關閉請求記錄後再重新整理即可查看。",
     "error_logs_empty": "暫無錯誤請求記錄檔案",
     "error_logs_load_error": "載入錯誤記錄清單失敗",
@@ -733,7 +739,6 @@
     "file_logging_required": "目前記錄介面需要先開啟「記錄到檔案」後才能讀取檔案記錄。",
     "file_logging_required_title": "需要開啟檔案記錄",
     "file_logging_required_desc": "目前記錄介面會讀取本機記錄檔。請在設定中開啟 logging-to-file 後再重新整理查看。",
-    "home_clear_unavailable": "Home 記錄來自資料庫查詢，目前不支援從這裡清空。",
     "log_content": "記錄內容",
     "loading": "正在載入記錄...",
     "load_error": "載入記錄失敗",
@@ -934,9 +939,7 @@
           "timeout": "Timeout",
           "stabilize_device": "穩定設備指紋",
           "stabilize_device_desc": "固定 OS/Arch，並按憑證/API Key 穩定軟體指紋",
-          "beta_features": "Beta Features",
-          "codex_identity_confuse": "Codex 身分混淆",
-          "codex_identity_confuse_desc": "在 fill-first 或會話黏性路由下，按所選驗證重映射 Codex prompt_cache_key 與安裝身分"
+          "beta_features": "Beta Features"
         },
         "network": {
           "title": "網路設定",
@@ -1322,7 +1325,11 @@
   },
   "sidebar": {
     "toggle_expand": "展開側邊欄",
-    "toggle_collapse": "收起側邊欄"
+    "toggle_collapse": "收起側邊欄",
+    "expand": "展開",
+    "collapse": "收起",
+    "subtitle": "CLI Proxy API 管理控制台",
+    "auth_files_count": "驗證檔案：{{count}} 個"
   },
   "footer": {
     "api_version": "CLI Proxy API 版本",
@@ -1357,6 +1364,7 @@
     "providerNames": {
       "gemini": "Gemini",
       "codex": "Codex",
+      "xai": "xAI",
       "claude": "Claude",
       "claudeApi": "ClaudeAPI",
       "vertex": "Vertex",
@@ -1364,7 +1372,8 @@
       "apikeyFun": "APIKEY.FUN",
       "code0": "Code0",
       "fennoAI": "FennoAI",
-      "qiniuCloud": "七牛雲"
+      "qiniuCloud": "七牛雲",
+      "kimi": "Kimi"
     },
     "table": {
       "key": "金鑰",

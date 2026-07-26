@@ -233,7 +233,7 @@ export function ProviderResourceTable({
         items.push(renderMetric('keys', t('providersPage.table.metrics.keys'), r.apiKeyEntryCount));
       }
       items.push(renderMetric('headers', t('providersPage.table.metrics.headers'), r.headerCount));
-      if (r.brand === 'codex' && r.flags.websockets) {
+      if ((r.brand === 'codex' || r.brand === 'xai') && r.flags.websockets) {
         items.push(renderFlagTag('ws', t('providersPage.table.websocketsTag')));
       }
       if (r.brand === 'claude' && r.flags.cloakEnabled) {

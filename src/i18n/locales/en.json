@@ -1544,6 +1544,11 @@
     "connectivity": {
       "test": "Test",
       "testAll": "Test all",
+      "simulate": "Simulate test",
+      "simulateAll": "Simulate all providers",
+      "simulating": "Simulating",
+      "simulatingAll": "Simulating all providers…",
+      "simulateResult": "Simulated {{success}}/{{total}}",
       "success": "Reachable",
       "baseUrlRequired": "Base URL is required",
       "endpointInvalid": "Endpoint URL is invalid",

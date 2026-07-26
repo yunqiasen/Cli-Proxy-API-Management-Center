@@ -1570,6 +1570,11 @@
     "connectivity": {
       "test": "測試",
       "testAll": "全部測試",
+      "simulate": "模擬測試",
+      "simulateAll": "模擬全部供應商",
+      "simulating": "模擬中",
+      "simulatingAll": "正在模擬全部供應商…",
+      "simulateResult": "模擬 {{success}}/{{total}}",
       "success": "連通",
       "baseUrlRequired": "服務位址必填",
       "endpointInvalid": "服務位址不合法",

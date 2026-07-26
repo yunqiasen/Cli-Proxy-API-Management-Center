@@ -1544,6 +1544,11 @@
     "connectivity": {
       "test": "测试",
       "testAll": "全部测试",
+      "simulate": "模拟测试",
+      "simulateAll": "模拟全部供应商",
+      "simulating": "模拟中",
+      "simulatingAll": "正在模拟全部供应商…",
+      "simulateResult": "模拟 {{success}}/{{total}}",
       "success": "连通",
       "baseUrlRequired": "服务地址必填",
       "endpointInvalid": "服务地址不合法",

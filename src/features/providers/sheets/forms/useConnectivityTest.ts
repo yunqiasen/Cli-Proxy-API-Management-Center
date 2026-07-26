@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { apiCallApi, getApiCallErrorMessage } from '@/services/api';
 import {
-  buildCodexResponsesEndpoint,
   buildClaudeMessagesEndpoint,
   buildGeminiGenerateContentEndpoint,
   buildOpenAIChatCompletionsEndpoint,
@@ -9,7 +8,11 @@ import {
 import { buildHeaderObject, hasHeader } from '@/utils/headers';
 import { getErrorMessage } from '@/utils/helpers';
 import type { ApiKeyEntryInput, ModelEntryInput, ProviderBrand } from '../../types';
-import { createCodexConnectivityRequest } from './codexConnectivityRequest';
+import {
+  getCodexProbeEntryIndices,
+  simulateCodexProvider,
+} from '../../codexProviderProbe';
+import { createRequestGeneration } from '../../requestGeneration';
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 const DEFAULT_ANTHROPIC_VERSION = '2023-06-01';
@@ -83,7 +86,7 @@ export interface UseConnectivityTestResult {
   runOpenAIAllKeys: () => Promise<void>;
   runNativeKey: (idx: number) => Promise<void>;
   runNativeAllKeys: () => Promise<void>;
-  runCodex: () => Promise<void>;
+  runCodex: (entryIndex?: number, testAll?: boolean) => Promise<void>;
   runGemini: () => Promise<void>;
   runClaude: () => Promise<void>;
 }
@@ -113,6 +116,7 @@ export function useConnectivityTest(
   const [geminiStatus, setGeminiStatus] = useState<ConnectivityStatus>(IDLE);
   const [claudeStatus, setClaudeStatus] = useState<ConnectivityStatus>(IDLE);
   const [inFlight, setInFlight] = useState(0);
+  const requestGenerationRef = useRef(createRequestGeneration());
 
   const entrySignatures = useMemo(
     () =>
@@ -129,10 +133,13 @@ export function useConnectivityTest(
 
   const lastEntrySignaturesRef = useRef<string[]>(entrySignatures);
   useEffect(() => {
+    requestGenerationRef.current.invalidate();
     const prev = lastEntrySignaturesRef.current;
     const curr = entrySignatures;
     lastEntrySignaturesRef.current = curr;
 
+    const entriesChanged =
+      prev.length !== curr.length || curr.some((entry, index) => entry !== prev[index]);
     setOpenaiStatuses((statuses) => {
       const nextLen = curr.length;
       let mutated = statuses.length !== nextLen;
@@ -146,12 +153,18 @@ export function useConnectivityTest(
       }
       return mutated ? next : statuses;
     });
+    if (entriesChanged) {
+      setCodexStatus(IDLE);
+      setGeminiStatus(IDLE);
+      setClaudeStatus(IDLE);
+    }
   }, [entrySignatures]);
 
   const signature = useMemo(() => {
     const h = formHeaders.map((it) => `${it.key}:${it.value}`).join('|');
     const m = models.map((it) => `${it.name}:${it.alias ?? ''}`).join('|');
     return [
+      brand,
       baseUrl,
       (testModel ?? '').trim(),
       apiKey ?? '',
@@ -160,11 +173,12 @@ export function useConnectivityTest(
       h,
       m,
     ].join('||');
-  }, [apiKey, authIndex, baseUrl, fallbackApiKey, testModel, formHeaders, models]);
+  }, [apiKey, authIndex, baseUrl, brand, fallbackApiKey, testModel, formHeaders, models]);
 
   const lastSignatureRef = useRef(signature);
   useEffect(() => {
     if (lastSignatureRef.current === signature) return;
+    requestGenerationRef.current.invalidate();
     lastSignatureRef.current = signature;
     setOpenaiStatuses((prev) => prev.map(() => IDLE));
     setCodexStatus(IDLE);
@@ -184,6 +198,7 @@ export function useConnectivityTest(
     async (idx: number): Promise<boolean> => {
       if (brand !== 'openaiCompatibility') return false;
 
+      const generation = requestGenerationRef.current.begin();
       const trimmedBase = baseUrl.trim();
       if (!trimmedBase) {
         updateOpenaiStatus(idx, {
@@ -253,13 +268,16 @@ export function useConnectivityTest(
         if (result.statusCode < 200 || result.statusCode >= 300) {
           throw new Error(getApiCallErrorMessage(result));
         }
+        if (!requestGenerationRef.current.isCurrent(generation)) return false;
         updateOpenaiStatus(idx, { state: 'success', message: '' });
         return true;
       } catch (err) {
-        updateOpenaiStatus(idx, {
-          state: 'error',
-          message: requestFailureMessage(err, messages),
-        });
+        if (requestGenerationRef.current.isCurrent(generation)) {
+          updateOpenaiStatus(idx, {
+            state: 'error',
+            message: requestFailureMessage(err, messages),
+          });
+        }
         return false;
       } finally {
         setInFlight((n) => n - 1);
@@ -286,78 +304,78 @@ export function useConnectivityTest(
   }, [apiKeyEntries, brand, runOpenAIKey]);
 
   const runCodex = useCallback(
-    async (entryIndex?: number): Promise<void> => {
+    async (entryIndex?: number, testAll = false): Promise<void> => {
       if (brand !== 'codex' && brand !== 'xai') return;
 
-      const trimmedBase = baseUrl.trim();
-      if (!trimmedBase) {
-        setCodexStatus({ state: 'error', message: messages.baseUrlRequired });
-        return;
-      }
-
-      const endpoint = buildCodexResponsesEndpoint(trimmedBase);
-      if (!endpoint) {
-        setCodexStatus({ state: 'error', message: messages.endpointInvalid });
-        return;
-      }
-
-      const model = pickModel(testModel, models);
-      if (!model) {
-        setCodexStatus({ state: 'error', message: messages.modelRequired });
-        return;
-      }
-
-      const customHeaders = buildHeaderObject(formHeaders);
-      const selectedEntry = entryIndex === undefined ? undefined : apiKeyEntries?.[entryIndex];
-      const explicitKey = (selectedEntry?.apiKey ?? apiKey ?? '').trim();
-      const persistedKey = (selectedEntry?.existingApiKey ?? fallbackApiKey ?? '').trim();
-      const hasAuthorization = hasHeader(customHeaders, 'authorization');
-      const resolvedKey = explicitKey || persistedKey;
-      const resolvedAuthIndex =
-        (selectedEntry?.authIndex ?? '').trim() || (authIndex ?? '').trim() || undefined;
-
-      if (!resolvedKey && !hasAuthorization && !resolvedAuthIndex) {
-        setCodexStatus({ state: 'error', message: messages.apiKeyRequired });
-        return;
-      }
-
-      const headerObj: Record<string, string> = {
-        'Content-Type': 'application/json',
-        ...customHeaders,
-      };
-      if (!hasHeader(headerObj, 'authorization')) {
-        if (resolvedKey) {
-          headerObj.Authorization = `Bearer ${resolvedKey}`;
-        } else if (resolvedAuthIndex) {
-          headerObj.Authorization = 'Bearer $TOKEN$';
-        }
-      }
-
-      const connectivityRequest = createCodexConnectivityRequest(model, headerObj);
+      const generation = requestGenerationRef.current.begin();
+      const normalizedEntries = (apiKeyEntries ?? []).map((entry, index) => ({
+        apiKey:
+          (entry.apiKey ?? '').trim() ||
+          (entry.existingApiKey ?? '').trim() ||
+          (index === 0 ? (fallbackApiKey ?? '').trim() : ''),
+        priority: entry.priority,
+        proxyUrl: entry.proxyUrl?.trim() || undefined,
+        authIndex: entry.authIndex?.trim() || (index === 0 ? authIndex?.trim() : '') || undefined,
+      }));
+      const legacyKey = (apiKey ?? '').trim() || (fallbackApiKey ?? '').trim();
+      const selectedIndices = getCodexProbeEntryIndices(entryIndex, testAll);
 
       setCodexStatus({ state: 'loading', message: '' });
+      if (testAll) {
+        (apiKeyEntries ?? []).forEach((_, index) =>
+          updateOpenaiStatus(index, { state: 'loading', message: '' })
+        );
+      } else if (entryIndex !== undefined) {
+        updateOpenaiStatus(entryIndex, { state: 'loading', message: '' });
+      }
       setInFlight((n) => n + 1);
       try {
-        const result = await apiCallApi.request(
+        const result = await simulateCodexProvider(
           {
-            authIndex: resolvedAuthIndex,
-            method: 'POST',
-            url: endpoint,
-            header: connectivityRequest.headers,
-            data: JSON.stringify(connectivityRequest.body),
+            apiKey: legacyKey,
+            apiKeyEntries: normalizedEntries.length ? normalizedEntries : undefined,
+            baseUrl,
+            headers: buildHeaderObject(formHeaders),
+            models: models.map((model) => ({
+              name: model.name,
+              alias: model.alias,
+              priority: model.priority,
+              testModel: model.testModel,
+            })),
+            authIndex: authIndex?.trim() || undefined,
           },
-          { timeout: DEFAULT_TIMEOUT_MS }
+          messages,
+          {
+            entryIndices: selectedIndices,
+            model: (testModel ?? '').trim() || undefined,
+            timeoutMs: DEFAULT_TIMEOUT_MS,
+          }
         );
-        if (result.statusCode < 200 || result.statusCode >= 300) {
-          throw new Error(getApiCallErrorMessage(result));
+        const status: ConnectivityStatus = {
+          state: result.state,
+          message: result.message,
+        };
+        if (!requestGenerationRef.current.isCurrent(generation)) return;
+        setCodexStatus(status);
+        if (testAll) {
+          result.entries.forEach((entry) =>
+            updateOpenaiStatus(entry.index, { state: entry.state, message: entry.message })
+          );
+        } else if (entryIndex !== undefined) {
+          updateOpenaiStatus(entryIndex, status);
         }
-        setCodexStatus({ state: 'success', message: '' });
-        if (entryIndex !== undefined)
-          updateOpenaiStatus(entryIndex, { state: 'success', message: '' });
-      } catch (err) {
-        const failure = { state: 'error' as const, message: requestFailureMessage(err, messages) };
-        setCodexStatus(failure);
-        if (entryIndex !== undefined) updateOpenaiStatus(entryIndex, failure);
+      } catch (error) {
+        if (!requestGenerationRef.current.isCurrent(generation)) return;
+        const status: ConnectivityStatus = {
+          state: 'error',
+          message: requestFailureMessage(error, messages),
+        };
+        setCodexStatus(status);
+        if (testAll) {
+          (apiKeyEntries ?? []).forEach((_, index) => updateOpenaiStatus(index, status));
+        } else if (entryIndex !== undefined) {
+          updateOpenaiStatus(entryIndex, status);
+        }
       } finally {
         setInFlight((n) => n - 1);
       }
@@ -381,6 +399,7 @@ export function useConnectivityTest(
     async (entryIndex?: number): Promise<void> => {
       if (brand !== 'gemini') return;
 
+      const generation = requestGenerationRef.current.begin();
       const model = pickModel(testModel, models);
       if (!model) {
         setGeminiStatus({ state: 'error', message: messages.modelRequired });
@@ -438,10 +457,12 @@ export function useConnectivityTest(
         if (result.statusCode < 200 || result.statusCode >= 300) {
           throw new Error(getApiCallErrorMessage(result));
         }
+        if (!requestGenerationRef.current.isCurrent(generation)) return;
         setGeminiStatus({ state: 'success', message: '' });
         if (entryIndex !== undefined)
           updateOpenaiStatus(entryIndex, { state: 'success', message: '' });
       } catch (err) {
+        if (!requestGenerationRef.current.isCurrent(generation)) return;
         const failure = { state: 'error' as const, message: requestFailureMessage(err, messages) };
         setGeminiStatus(failure);
         if (entryIndex !== undefined) updateOpenaiStatus(entryIndex, failure);
@@ -468,6 +489,7 @@ export function useConnectivityTest(
     async (entryIndex?: number): Promise<void> => {
       if (brand !== 'claude' && brand !== 'claudeApi') return;
 
+      const generation = requestGenerationRef.current.begin();
       const endpoint = buildClaudeMessagesEndpoint(baseUrl ?? '');
       if (!endpoint) {
         setClaudeStatus({ state: 'error', message: messages.endpointInvalid });
@@ -527,10 +549,12 @@ export function useConnectivityTest(
         if (result.statusCode < 200 || result.statusCode >= 300) {
           throw new Error(getApiCallErrorMessage(result));
         }
+        if (!requestGenerationRef.current.isCurrent(generation)) return;
         setClaudeStatus({ state: 'success', message: '' });
         if (entryIndex !== undefined)
           updateOpenaiStatus(entryIndex, { state: 'success', message: '' });
       } catch (err) {
+        if (!requestGenerationRef.current.isCurrent(generation)) return;
         const failure = { state: 'error' as const, message: requestFailureMessage(err, messages) };
         setClaudeStatus(failure);
         if (entryIndex !== undefined) updateOpenaiStatus(entryIndex, failure);
@@ -556,7 +580,7 @@ export function useConnectivityTest(
   const runNativeKey = useCallback(
     async (idx: number): Promise<void> => {
       updateOpenaiStatus(idx, { state: 'loading', message: '' });
-      if (brand === 'codex') await runCodex(idx);
+      if (brand === 'codex' || brand === 'xai') await runCodex(idx);
       else if (brand === 'gemini') await runGemini(idx);
       else if (brand === 'claude') await runClaude(idx);
     },
@@ -564,9 +588,13 @@ export function useConnectivityTest(
   );
 
   const runNativeAllKeys = useCallback(async (): Promise<void> => {
+    if (brand === 'codex' || brand === 'xai') {
+      await runCodex(undefined, true);
+      return;
+    }
     const entries = apiKeyEntries ?? [];
     await Promise.all(entries.map((_, idx) => runNativeKey(idx)));
-  }, [apiKeyEntries, runNativeKey]);
+  }, [apiKeyEntries, brand, runCodex, runNativeKey]);
 
   return {
     openaiStatuses,

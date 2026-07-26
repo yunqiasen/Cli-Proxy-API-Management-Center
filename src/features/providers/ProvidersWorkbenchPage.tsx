@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { usePageTransitionLayer } from '@/components/common/PageTransitionLayer';
 import { useHeaderRefresh } from '@/hooks/useHeaderRefresh';
@@ -10,7 +10,7 @@ import {
   getProviderApiKeysRecentWindowStats,
   type ProviderRecentUsageMap,
 } from '@/components/providers/utils';
-import type { OpenAIProviderConfig } from '@/types';
+import type { OpenAIProviderConfig, ProviderKeyConfig } from '@/types';
 import { ProviderHeaderCard } from './components/ProviderHeaderCard';
 import { ProviderCategoryList } from './components/ProviderCategoryList';
 import { ProviderResourcePanel } from './components/ProviderResourcePanel';
@@ -22,6 +22,12 @@ import { isMultiProtocolSponsorBrand } from './sponsorDefinitions';
 import { isSponsorPartialMutationError } from './sponsorMutationRecovery';
 import { useProviderWorkbench } from './useProviderWorkbench';
 import { getNativeProviderUsageIdentity } from './nativeProviderUsageIdentity';
+import {
+  simulateCodexProvider,
+  type CodexProbeMessages,
+  type CodexProbeStatus,
+} from './codexProviderProbe';
+import { createResourceLeaseRegistry } from './requestGeneration';
 import {
   getProviderFilterState,
   readProvidersWorkbenchUiState,
@@ -122,11 +128,26 @@ export function ProvidersWorkbenchPage({ fixedBrand }: ProvidersWorkbenchPagePro
     resource: null,
   });
   const sheetRef = useRef<ProviderSheetHandle>(null);
+  const [codexProbeStatuses, setCodexProbeStatuses] = useState<Record<string, CodexProbeStatus>>(
+    {}
+  );
+  const [codexBulkTesting, setCodexBulkTesting] = useState(false);
+  const codexBulkTestingRef = useRef(false);
+  const codexProbeGenerationRef = useRef(0);
+  const codexRunningResourcesRef = useRef(createResourceLeaseRegistry());
 
   const connected = connectionStatus === 'connected';
   const { usageByProvider, refreshRecentRequests } = useProviderRecentRequests({
     enabled: connected,
   });
+
+  useEffect(() => {
+    codexProbeGenerationRef.current += 1;
+    codexRunningResourcesRef.current.clear();
+    codexBulkTestingRef.current = false;
+    setCodexBulkTesting(false);
+    setCodexProbeStatuses({});
+  }, [workbench.snapshot?.fetchedAt]);
 
   const handleRefresh = useCallback(async () => {
     await Promise.allSettled([workbench.refetch(), refreshRecentRequests().catch(() => undefined)]);
@@ -179,6 +200,117 @@ export function ProvidersWorkbenchPage({ fixedBrand }: ProvidersWorkbenchPagePro
   const providerSortBy = activeFilterState.sortBy;
   const providerSortDir = activeFilterState.sortDir;
   const activeGroup = groups.find((g) => g.id === activeBrand) ?? groups[0] ?? null;
+
+  const codexProbeMessages = useMemo<CodexProbeMessages>(
+    () => ({
+      baseUrlRequired: t('providersPage.connectivity.baseUrlRequired'),
+      endpointInvalid: t('providersPage.connectivity.endpointInvalid'),
+      apiKeyRequired: t('providersPage.connectivity.apiKeyRequired'),
+      modelRequired: t('providersPage.connectivity.modelRequired'),
+      requestFailed: t('providersPage.connectivity.requestFailed'),
+      timeout: (seconds: number) => t('providersPage.connectivity.timeout', { seconds }),
+    }),
+    [t]
+  );
+
+  const handleTestCodexResource = useCallback(
+    async (resource: ProviderResource, fromBulk = false): Promise<void> => {
+      if (
+        resource.brand !== 'codex' ||
+        (!fromBulk && codexBulkTestingRef.current) ||
+        codexRunningResourcesRef.current.has(resource.id)
+      ) {
+        return;
+      }
+      const generation = codexProbeGenerationRef.current;
+      const lease = codexRunningResourcesRef.current.acquire(resource.id);
+      setCodexProbeStatuses((previous) => ({
+        ...previous,
+        [resource.id]: {
+          state: 'loading',
+          total: resource.apiKeyEntryCount,
+          successCount: 0,
+          failureCount: 0,
+          message: '',
+        },
+      }));
+      try {
+        const result = await simulateCodexProvider(
+          resource.raw as ProviderKeyConfig,
+          codexProbeMessages
+        );
+        if (generation === codexProbeGenerationRef.current) {
+          setCodexProbeStatuses((previous) => ({ ...previous, [resource.id]: result }));
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : codexProbeMessages.requestFailed;
+        if (generation === codexProbeGenerationRef.current) {
+          setCodexProbeStatuses((previous) => ({
+            ...previous,
+            [resource.id]: {
+              state: 'error',
+              total: resource.apiKeyEntryCount,
+              successCount: 0,
+              failureCount: resource.apiKeyEntryCount,
+              message,
+            },
+          }));
+        }
+      } finally {
+        codexRunningResourcesRef.current.release(resource.id, lease);
+      }
+    },
+    [codexProbeMessages]
+  );
+
+  const handleTestAllCodexResources = useCallback(async (): Promise<void> => {
+    const resources = activeGroup?.id === 'codex' ? activeGroup.resources : [];
+    if (
+      !resources.length ||
+      codexBulkTestingRef.current ||
+      codexRunningResourcesRef.current.size() > 0
+    ) {
+      return;
+    }
+
+    const generation = codexProbeGenerationRef.current;
+    codexBulkTestingRef.current = true;
+    setCodexBulkTesting(true);
+    setCodexProbeStatuses((previous) => {
+      const next = { ...previous };
+      resources.forEach((resource) => {
+        next[resource.id] = {
+          state: 'loading',
+          total: resource.apiKeyEntryCount,
+          successCount: 0,
+          failureCount: 0,
+          message: '',
+        };
+      });
+      return next;
+    });
+
+    let cursor = 0;
+    const worker = async () => {
+      while (generation === codexProbeGenerationRef.current && cursor < resources.length) {
+        const resource = resources[cursor];
+        cursor += 1;
+        await handleTestCodexResource(resource, true);
+      }
+    };
+    try {
+      await Promise.all(Array.from({ length: Math.min(3, resources.length) }, () => worker()));
+    } finally {
+      if (generation === codexProbeGenerationRef.current) {
+        codexBulkTestingRef.current = false;
+        setCodexBulkTesting(false);
+      }
+    }
+  }, [activeGroup, handleTestCodexResource]);
+
+  const codexAnyTesting =
+    codexBulkTesting ||
+    Object.values(codexProbeStatuses).some((status) => status.state === 'loading');
 
   const updateActiveFilterState = useCallback(
     (patch: Partial<ProviderFilterState>) => {
@@ -279,8 +411,7 @@ export function ProvidersWorkbenchPage({ fixedBrand }: ProvidersWorkbenchPagePro
     [groups]
   );
   const quickStartResource = useMemo(
-    () =>
-      fixedBrand === 'apikeyFun' && activeGroup ? (activeGroup.resources[0] ?? null) : null,
+    () => (fixedBrand === 'apikeyFun' && activeGroup ? (activeGroup.resources[0] ?? null) : null),
     [activeGroup, fixedBrand]
   );
 
@@ -468,9 +599,14 @@ export function ProvidersWorkbenchPage({ fixedBrand }: ProvidersWorkbenchPagePro
             onFilterChange={(value) => updateActiveFilterState({ filter: value })}
             filteredResources={visibleResources}
             selectedId={sheetState.open ? (sheetState.resource?.id ?? null) : null}
-            disableMutations={disableMutations}
+            disableMutations={disableMutations || codexAnyTesting}
             usageByProvider={usageByProvider}
             toolbarControls={toolbarControls}
+            codexProbeStatuses={codexProbeStatuses}
+            codexBulkTesting={codexBulkTesting}
+            codexAnyTesting={codexAnyTesting}
+            onTestCodexResource={(resource) => void handleTestCodexResource(resource)}
+            onTestAllCodexResources={() => void handleTestAllCodexResources()}
             onView={openView}
             onEdit={openEdit}
             onDelete={handleDelete}

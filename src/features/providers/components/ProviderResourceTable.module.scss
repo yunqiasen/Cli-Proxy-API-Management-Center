@@ -2,7 +2,7 @@
 @use '../../../styles/variables' as *;
 
 .providerTable {
-  min-width: 960px;
+  min-width: 1000px;
   table-layout: fixed;
 
   tbody tr:hover .actionsCell {
@@ -408,5 +408,57 @@
   &:hover:not(:disabled) {
     background: var(--destructive-10);
     color: var(--destructive-color);
+  }
+}
+
+.probeStatus {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  padding: 2px 7px;
+  border: 1px solid;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.45;
+  white-space: nowrap;
+}
+
+.probeStatusLoading {
+  border-color: var(--primary-30);
+  background: var(--primary-10);
+  color: var(--primary-color);
+}
+
+.probeStatusSuccess {
+  border-color: rgba(34, 197, 94, 0.28);
+  background: rgba(34, 197, 94, 0.1);
+  color: var(--success-color);
+}
+
+.probeStatusError {
+  border-color: rgba(239, 68, 68, 0.28);
+  background: rgba(239, 68, 68, 0.09);
+  color: var(--danger-color);
+}
+
+.iconBtnProbe {
+  color: var(--primary-color);
+}
+
+.probeSpinner {
+  animation: providerProbeSpin 0.9s linear infinite;
+}
+
+@keyframes providerProbeSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .probeSpinner {
+    animation: none;
   }
 }

@@ -1,5 +1,11 @@
 import { useTranslation } from 'react-i18next';
-import { IconExternalLink, IconPlus, IconSearch } from '@/components/ui/icons';
+import {
+  IconBot,
+  IconExternalLink,
+  IconLoader2,
+  IconPlus,
+  IconSearch,
+} from '@/components/ui/icons';
 import type { ProviderRecentUsageMap } from '@/components/providers/utils';
 import { PROVIDER_LOGOS } from '../brandLogos';
 import { CLAUDE_API_AFFILIATE_URL } from '../claudeApi';
@@ -7,6 +13,7 @@ import { getKimiAffiliateUrl } from '../kimi';
 import { APIKEY_FUN_AFFILIATE_URL, APIKEY_FUN_DASHBOARD_URL } from '../sponsor';
 import { getSponsorProviderDefinition } from '../sponsorDefinitions';
 import type { ProviderGroup, ProviderResource } from '../types';
+import type { CodexProbeStatus } from '../codexProviderProbe';
 import { ProviderResourceTable } from './ProviderResourceTable';
 import { ProviderResourceToolbar } from './ProviderResourceToolbar';
 import type { ProviderSortBy, SortDir } from '../types';
@@ -31,6 +38,11 @@ interface ProviderResourcePanelProps {
   disableMutations?: boolean;
   usageByProvider?: ProviderRecentUsageMap;
   toolbarControls?: ProviderPanelControls;
+  codexProbeStatuses?: Record<string, CodexProbeStatus>;
+  codexBulkTesting?: boolean;
+  codexAnyTesting?: boolean;
+  onTestCodexResource?: (resource: ProviderResource) => void;
+  onTestAllCodexResources?: () => void;
   onView: (resource: ProviderResource) => void;
   onEdit: (resource: ProviderResource) => void;
   onDelete: (resource: ProviderResource) => void;
@@ -47,6 +59,11 @@ export function ProviderResourcePanel({
   disableMutations,
   usageByProvider,
   toolbarControls,
+  codexProbeStatuses,
+  codexBulkTesting,
+  codexAnyTesting,
+  onTestCodexResource,
+  onTestAllCodexResources,
   onView,
   onEdit,
   onDelete,
@@ -164,18 +181,40 @@ export function ProviderResourcePanel({
             />
           </div>
         </div>
-        {toolbarControls ? (
+        {toolbarControls || (group.id === 'codex' && onTestAllCodexResources) ? (
           <div className={styles.headerToolbarRow}>
-            <ProviderResourceToolbar
-              key={group.id}
-              sortBy={toolbarControls.sortBy}
-              sortDir={toolbarControls.sortDir}
-              onSortBy={toolbarControls.onSortBy}
-              onSortDir={toolbarControls.onSortDir}
-              availableModels={toolbarControls.availableModels}
-              selectedModels={toolbarControls.selectedModels}
-              onSelectedModelsChange={toolbarControls.onSelectedModelsChange}
-            />
+            {group.id === 'codex' && onTestAllCodexResources ? (
+              <button
+                type="button"
+                className={styles.testAllButton}
+                disabled={disableMutations || codexAnyTesting || group.resources.length === 0}
+                onClick={onTestAllCodexResources}
+                aria-busy={codexBulkTesting === true}
+              >
+                {codexBulkTesting ? (
+                  <IconLoader2 className={styles.testSpinner} size={15} />
+                ) : (
+                  <IconBot size={15} />
+                )}
+                <span>
+                  {codexBulkTesting
+                    ? t('providersPage.connectivity.simulatingAll')
+                    : t('providersPage.connectivity.simulateAll')}
+                </span>
+              </button>
+            ) : null}
+            {toolbarControls ? (
+              <ProviderResourceToolbar
+                key={group.id}
+                sortBy={toolbarControls.sortBy}
+                sortDir={toolbarControls.sortDir}
+                onSortBy={toolbarControls.onSortBy}
+                onSortDir={toolbarControls.onSortDir}
+                availableModels={toolbarControls.availableModels}
+                selectedModels={toolbarControls.selectedModels}
+                onSelectedModelsChange={toolbarControls.onSelectedModelsChange}
+              />
+            ) : null}
           </div>
         ) : null}
       </div>
@@ -208,6 +247,9 @@ export function ProviderResourcePanel({
           selectedId={selectedId}
           disableMutations={disableMutations}
           usageByProvider={usageByProvider}
+          codexProbeStatuses={codexProbeStatuses}
+          codexBulkTesting={codexBulkTesting}
+          onTestCodexResource={onTestCodexResource}
           onView={onView}
           onEdit={onEdit}
           onDelete={onDelete}

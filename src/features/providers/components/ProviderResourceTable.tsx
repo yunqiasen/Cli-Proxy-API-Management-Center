@@ -4,7 +4,9 @@ import { useTranslation } from 'react-i18next';
 import {
   IconAlertTriangle,
   IconCheckCircle2,
+  IconBot,
   IconEye,
+  IconLoader2,
   IconPencil,
   IconTrash2,
 } from '@/components/ui/icons';
@@ -28,6 +30,7 @@ import {
   type ProviderRecentUsageMap,
 } from '@/components/providers/utils';
 import { getNativeProviderUsageIdentity } from '../nativeProviderUsageIdentity';
+import type { CodexProbeStatus } from '../codexProviderProbe';
 import type { OpenAIProviderConfig } from '@/types';
 import type {
   ApiKeyUsageFailureDetail,
@@ -44,13 +47,16 @@ interface ProviderResourceTableProps {
   selectedId?: string | null;
   disableMutations?: boolean;
   usageByProvider?: ProviderRecentUsageMap;
+  codexProbeStatuses?: Record<string, CodexProbeStatus>;
+  codexBulkTesting?: boolean;
+  onTestCodexResource?: (resource: ProviderResource) => void;
   onView: (resource: ProviderResource) => void;
   onEdit: (resource: ProviderResource) => void;
   onDelete: (resource: ProviderResource) => void;
   onToggleDisabled?: (resource: ProviderResource, disabled: boolean) => void;
 }
 
-const columnWidths = ['180px', '220px', '72px', '138px', '174px', '176px'];
+const columnWidths = ['180px', '220px', '72px', '138px', '174px', '214px'];
 const maxVisibleModelChips = 4;
 const maxVisibleExcludedModels = 2;
 
@@ -150,6 +156,9 @@ export function ProviderResourceTable({
   selectedId,
   disableMutations,
   usageByProvider,
+  codexProbeStatuses,
+  codexBulkTesting,
+  onTestCodexResource,
   onView,
   onEdit,
   onDelete,
@@ -245,6 +254,47 @@ export function ProviderResourceTable({
         <div className={styles.metricsCell}>{items}</div>
         {renderModelChips(r)}
       </div>
+    );
+  };
+
+  const renderCodexProbeStatus = (resource: ProviderResource) => {
+    if (resource.brand !== 'codex') return null;
+    const status = codexProbeStatuses?.[resource.id];
+    if (!status || status.state === 'idle') return null;
+    const title = status.message || undefined;
+    if (status.state === 'loading') {
+      return (
+        <span
+          className={`${styles.probeStatus} ${styles.probeStatusLoading}`}
+          title={title}
+          role="status"
+          aria-live="polite"
+        >
+          <IconLoader2 className={styles.probeSpinner} size={13} />
+          {t('providersPage.connectivity.simulating')}
+        </span>
+      );
+    }
+    return (
+      <span
+        className={`${styles.probeStatus} ${
+          status.state === 'success' ? styles.probeStatusSuccess : styles.probeStatusError
+        }`}
+        title={title}
+        role="status"
+        aria-live="polite"
+        aria-label={title || undefined}
+      >
+        {status.state === 'success' ? (
+          <IconCheckCircle2 size={13} />
+        ) : (
+          <IconAlertTriangle size={13} />
+        )}
+        {t('providersPage.connectivity.simulateResult', {
+          success: status.successCount,
+          total: status.total,
+        })}
+      </span>
     );
   };
 
@@ -468,6 +518,7 @@ export function ProviderResourceTable({
               <TableCell>
                 <div className={styles.statusCell}>
                   {renderStatus(resource)}
+                  {renderCodexProbeStatus(resource)}
                   {usageByProvider && !isSponsorResource(resource) ? (
                     <>
                       {renderUsageStats(resource, usageByProvider)}
@@ -504,6 +555,29 @@ export function ProviderResourceTable({
                         }
                       />
                     </span>
+                  ) : null}
+                  {resource.brand === 'codex' && onTestCodexResource ? (
+                    <button
+                      type="button"
+                      className={`${styles.iconBtn} ${styles.iconBtnProbe}`}
+                      aria-label={t('providersPage.connectivity.simulate')}
+                      title={t('providersPage.connectivity.simulate')}
+                      disabled={
+                        disableMutations ||
+                        codexBulkTesting ||
+                        codexProbeStatuses?.[resource.id]?.state === 'loading'
+                      }
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onTestCodexResource(resource);
+                      }}
+                    >
+                      {codexProbeStatuses?.[resource.id]?.state === 'loading' ? (
+                        <IconLoader2 className={styles.probeSpinner} size={16} />
+                      ) : (
+                        <IconBot size={16} />
+                      )}
+                    </button>
                   ) : null}
                   <button
                     type="button"

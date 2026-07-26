@@ -1522,6 +1522,11 @@
     "connectivity": {
       "test": "Проверить",
       "testAll": "Проверить все",
+      "simulate": "Симуляция теста",
+      "simulateAll": "Симулировать всех провайдеров",
+      "simulating": "Симуляция",
+      "simulatingAll": "Симуляция всех провайдеров…",
+      "simulateResult": "Симуляция {{success}}/{{total}}",
       "success": "Доступно",
       "baseUrlRequired": "Base URL обязателен",
       "endpointInvalid": "Некорректный адрес",

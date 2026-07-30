@@ -97,7 +97,10 @@ function buildInitialForm(
         : undefined,
       experimentalCchSigning: isClaudeLikeBrand(brand) ? false : undefined,
       testModel:
-        brand === 'openaiCompatibility' || brand === 'xai' || isClaudeLikeBrand(brand)
+        brand === 'openaiCompatibility' ||
+        brand === 'xai' ||
+        isClaudeLikeBrand(brand) ||
+        brand === 'interactions'
           ? ''
           : undefined,
       apiKeyEntries: brand === 'openaiCompatibility' ? [emptyApiKeyEntry()] : undefined,
@@ -182,7 +185,8 @@ function buildInitialForm(
     experimentalCchSigning: isClaudeLikeBrand(brand)
       ? (cfg as ProviderKeyConfig).experimentalCchSigning === true
       : undefined,
-    testModel: brand === 'xai' || isClaudeLikeBrand(brand) ? '' : undefined,
+    testModel:
+      brand === 'xai' || isClaudeLikeBrand(brand) || brand === 'interactions' ? '' : undefined,
   };
 }
 

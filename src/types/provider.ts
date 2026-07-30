@@ -15,12 +15,14 @@ export interface ModelAlias {
 export interface ApiKeyEntry {
   apiKey: string;
   proxyUrl?: string;
+  weight?: number;
   authIndex?: string;
 }
 
 export interface NativeApiKeyEntry {
   apiKey: string;
   priority?: number;
+  weight?: number;
   proxyUrl?: string;
   authIndex?: string;
 }
@@ -37,6 +39,7 @@ export interface GeminiKeyConfig {
   apiKey: string;
   apiKeyEntries?: NativeApiKeyEntry[];
   priority?: number;
+  weight?: number;
   prefix?: string;
   baseUrl?: string;
   proxyUrl?: string;
@@ -52,6 +55,7 @@ export interface ProviderKeyConfig {
   apiKey: string;
   apiKeyEntries?: NativeApiKeyEntry[];
   priority?: number;
+  weight?: number;
   prefix?: string;
   baseUrl?: string;
   websockets?: boolean;

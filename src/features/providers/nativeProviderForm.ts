@@ -50,6 +50,7 @@ const normalizedEntries = (entries: ApiKeyEntryInput[] | undefined): NativeApiKe
       return {
         apiKey,
         ...(entry.priority !== undefined ? { priority: entry.priority } : {}),
+        ...(entry.weight !== undefined ? { weight: entry.weight } : {}),
         ...(entry.proxyUrl.trim() ? { proxyUrl: entry.proxyUrl.trim() } : {}),
         ...(entry.authIndex?.trim() ? { authIndex: entry.authIndex.trim() } : {}),
       } satisfies NativeApiKeyEntry;
@@ -73,6 +74,7 @@ export function buildNativeProviderFormInput(
         apiKey: '',
         existingApiKey: entry.apiKey,
         priority: entry.priority,
+        weight: entry.weight,
         proxyUrl: entry.proxyUrl ?? '',
         authIndex: entry.authIndex,
       }))
@@ -90,6 +92,7 @@ export function buildNativeProviderFormInput(
     disabled: config?.excludedModels?.some((model) => model.trim() === '*') ?? false,
     disableCooling: config?.disableCooling === true,
     priority: config?.priority,
+    weight: config?.weight,
     models: config?.models?.length
       ? config.models.map((model) => ({
           name: model.name,
@@ -149,6 +152,7 @@ export function buildNativeProviderConfig(
     apiKey: useGrouped ? legacyKey : (entries[0]?.apiKey ?? legacyKey),
     apiKeyEntries: useGrouped ? entries : undefined,
     priority: input.priority,
+    weight: input.weight,
     prefix: input.prefix.trim() || undefined,
     baseUrl: input.baseUrl.trim() || undefined,
     proxyUrl: input.proxyUrl.trim() || undefined,

@@ -80,7 +80,7 @@ const truncateForId = (value: string | undefined | null): string => {
 };
 
 function providerKeyToResource(
-  brand: 'gemini' | 'codex' | 'xai' | 'claude' | 'claudeApi' | 'vertex',
+  brand: 'gemini' | 'interactions' | 'codex' | 'xai' | 'claude' | 'claudeApi' | 'vertex',
   config: GeminiKeyConfig | ProviderKeyConfig,
   index: number
 ): ProviderResource {
@@ -122,7 +122,12 @@ function providerKeyToResource(
     proxyUrl: config.proxyUrl ?? null,
     prefix: config.prefix ?? null,
     modelCount: config.models?.length ?? 0,
-    models: modelSearchTerms,
+    models:
+      brand === 'interactions'
+        ? Array.from(
+            new Set((config.models ?? []).map((model) => (model.name ?? '').trim()).filter(Boolean))
+          )
+        : modelSearchTerms,
     modelDisplays: collectModelDisplayNames(config.models),
     modelSearchTerms,
     priority: normalizePriority(config.priority),
@@ -139,6 +144,10 @@ function providerKeyToResource(
 
 export function geminiToResource(config: GeminiKeyConfig, index: number): ProviderResource {
   return providerKeyToResource('gemini', config, index);
+}
+
+export function interactionsToResource(config: GeminiKeyConfig, index: number): ProviderResource {
+  return providerKeyToResource('interactions', config, index);
 }
 
 export function codexToResource(config: ProviderKeyConfig, index: number): ProviderResource {

@@ -5,8 +5,11 @@ export interface QuotaRefreshJob {
   status: 'running' | 'completed' | 'failed' | string;
   provider: string;
   total: number;
-  completed: number;
+  done: number;
+  success: number;
   failed: number;
+  /** Compatibility with older management responses. */
+  completed?: number;
   concurrency: number;
   errors?: Array<{ name?: string; error?: string }>;
 }

@@ -8,6 +8,7 @@ import {
   applyAuthFileUsingApi,
   normalizeProviderKey,
   parsePriorityValue,
+  readAuthFileDisableCooling,
   readAuthFileWebsockets,
   readAuthFileUsingApi,
   supportsAuthFileWebsockets,
@@ -35,9 +36,11 @@ export type PrefixProxyEditorField =
   | 'proxyUrl'
   | 'priority'
   | 'weight'
+  | 'disableCooling'
   | 'websockets'
   | 'usingApi'
   | 'note'
+  | 'excludedModelsText'
   | 'headersText';
 
 export type PrefixProxyEditorFieldValue = string | boolean;
@@ -58,12 +61,16 @@ export type PrefixProxyEditorState = {
   priority: string;
   weight: string;
   weightError: string | null;
+  disableCooling: boolean;
+  disableCoolingTouched: boolean;
   websockets: boolean;
   websocketsTouched: boolean;
   usingApi: boolean;
   usingApiTouched: boolean;
   note: string;
   noteTouched: boolean;
+  excludedModelsText: string;
+  excludedModelsTouched: boolean;
   headersText: string;
   headersTouched: boolean;
   headersError: string | null;
@@ -127,6 +134,36 @@ const credentialWeightErrorKey = (error: CredentialWeightError): AuthFileWeightE
 
 const normalizeTextField = (value: unknown): string =>
   typeof value === 'string' ? value.trim() : '';
+
+const normalizeExcludedModels = (value: unknown): string[] => {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  const result: string[] = [];
+  value.forEach((item) => {
+    if (typeof item !== 'string') return;
+    const model = item.trim();
+    const key = model.toLowerCase();
+    if (!model || seen.has(key)) return;
+    seen.add(key);
+    result.push(model);
+  });
+  return result;
+};
+
+const parseExcludedModelsText = (value: string): string[] =>
+  normalizeExcludedModels(value.split(/\r?\n/));
+
+const readExcludedModels = (value: Record<string, unknown>): string[] =>
+  normalizeExcludedModels(
+    value.excluded_models !== undefined ? value.excluded_models : value['excluded-models']
+  );
+
+const getExcludedModelsField = (
+  value: Record<string, unknown>
+): 'excluded_models' | 'excluded-models' =>
+  value.excluded_models === undefined && value['excluded-models'] !== undefined
+    ? 'excluded-models'
+    : 'excluded_models';
 
 const INVALID_CONTENT_PREVIEW_LIMIT = 1000;
 
@@ -280,11 +317,31 @@ export const buildAuthFileFieldsPatch = (
     patch.weight = nextWeight;
   }
 
+  if (editor.disableCoolingTouched) {
+    const originalDisableCooling = readAuthFileDisableCooling(original);
+    const nextDisableCooling = Boolean(editor.disableCooling);
+    if (nextDisableCooling !== originalDisableCooling) {
+      const field =
+        original.disable_cooling === undefined && original['disable-cooling'] !== undefined
+          ? 'disable-cooling'
+          : 'disable_cooling';
+      patch[field] = nextDisableCooling;
+    }
+  }
+
   if (editor.noteTouched) {
     const originalNote = normalizeTextField(original.note);
     const nextNote = editor.note.trim();
     if (nextNote !== originalNote) {
       patch.note = nextNote;
+    }
+  }
+
+  if (editor.excludedModelsTouched) {
+    const originalExcludedModels = readExcludedModels(original);
+    const nextExcludedModels = parseExcludedModelsText(editor.excludedModelsText);
+    if (JSON.stringify(nextExcludedModels) !== JSON.stringify(originalExcludedModels)) {
+      patch[getExcludedModelsField(original)] = nextExcludedModels;
     }
   }
 
@@ -359,12 +416,26 @@ const buildPrefixProxyUpdatedText = (
     }
   }
 
+  if (patch.disable_cooling !== undefined) {
+    next.disable_cooling = patch.disable_cooling;
+  }
+  if (patch['disable-cooling'] !== undefined) {
+    next['disable-cooling'] = patch['disable-cooling'];
+  }
+
   if (patch.note !== undefined) {
     if (patch.note) {
       next.note = patch.note;
     } else if ('note' in next) {
       delete next.note;
     }
+  }
+
+  if (patch.excluded_models !== undefined) {
+    next.excluded_models = patch.excluded_models;
+  }
+  if (patch['excluded-models'] !== undefined) {
+    next['excluded-models'] = patch['excluded-models'];
   }
 
   applyHeadersPatch(next, patch.headers);
@@ -435,12 +506,16 @@ export function useAuthFilesPrefixProxyEditor(
       priority: '',
       weight: '',
       weightError: null,
+      disableCooling: false,
+      disableCoolingTouched: false,
       websockets: false,
       websocketsTouched: false,
       usingApi: false,
       usingApiTouched: false,
       note: '',
       noteTouched: false,
+      excludedModelsText: '',
+      excludedModelsTouched: false,
       headersText: '',
       headersTouched: false,
       headersError: null,
@@ -484,11 +559,13 @@ export function useAuthFilesPrefixProxyEditor(
       const proxyUrl = typeof json.proxy_url === 'string' ? json.proxy_url : '';
       const priority = parsePriorityValue(json.priority);
       const weight = readCredentialWeight(json.weight);
+      const disableCooling = readAuthFileDisableCooling(json);
       const websockets = supportsAuthFileWebsockets(providerKey)
         ? readAuthFileWebsockets(json)
         : false;
       const usingApi = supportsAuthFileUsingApi(providerKey) ? readAuthFileUsingApi(json) : false;
       const note = typeof json.note === 'string' ? json.note : '';
+      const excludedModelsText = readExcludedModels(json).join('\n');
       const headers = json.headers;
       let headersText = '';
       let headersError: string | null = null;
@@ -513,12 +590,16 @@ export function useAuthFilesPrefixProxyEditor(
           priority: priority !== undefined ? String(priority) : '',
           weight: weight !== undefined ? String(weight) : '',
           weightError: null,
+          disableCooling,
+          disableCoolingTouched: false,
           websockets,
           websocketsTouched: false,
           usingApi,
           usingApiTouched: false,
           note,
           noteTouched: false,
+          excludedModelsText,
+          excludedModelsTouched: false,
           headersText,
           headersTouched: false,
           headersError,
@@ -553,6 +634,13 @@ export function useAuthFilesPrefixProxyEditor(
           weightError: error ? t(credentialWeightErrorKey(error)) : null,
         };
       }
+      if (field === 'disableCooling') {
+        return {
+          ...prev,
+          disableCooling: Boolean(value),
+          disableCoolingTouched: true,
+        };
+      }
       if (field === 'websockets') {
         return { ...prev, websockets: Boolean(value), websocketsTouched: true };
       }
@@ -560,6 +648,13 @@ export function useAuthFilesPrefixProxyEditor(
         return { ...prev, usingApi: Boolean(value), usingApiTouched: true };
       }
       if (field === 'note') return { ...prev, note: String(value), noteTouched: true };
+      if (field === 'excludedModelsText') {
+        return {
+          ...prev,
+          excludedModelsText: String(value),
+          excludedModelsTouched: true,
+        };
+      }
       if (field === 'headersText') {
         const headersText = String(value);
         const { errorKey } = parseHeadersText(headersText);

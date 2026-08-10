@@ -5,6 +5,7 @@ import type {
   ProviderKeyConfig,
 } from '../../types/provider.ts';
 import type { ApiKeyEntryInput, ModelEntryInput, ProviderEntryFormInput } from './types.ts';
+import { buildThinkingFromLevels, readThinkingLevels } from './thinkingLevels.ts';
 
 export type NativeProviderBrand = 'gemini' | 'codex' | 'claude';
 export type NativeProviderKeyValidationError = 'api-key-required' | 'duplicate-api-key' | null;
@@ -29,6 +30,16 @@ const headersFromEntries = (
   return headers;
 };
 
+const parseThinkingJson = (value: string | undefined): Record<string, unknown> | undefined => {
+  const trimmed = (value ?? '').trim();
+  if (!trimmed) return undefined;
+  const parsed = JSON.parse(trimmed) as unknown;
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('Thinking config must be a JSON object');
+  }
+  return parsed as Record<string, unknown>;
+};
+
 const buildModels = (models: ModelEntryInput[]): ModelAlias[] =>
   models
     .map((model) => ({
@@ -36,6 +47,9 @@ const buildModels = (models: ModelEntryInput[]): ModelAlias[] =>
       alias: model.alias?.trim() || undefined,
       priority: model.priority,
       testModel: model.testModel,
+      thinking: model.thinkingLevelsTouched
+        ? buildThinkingFromLevels(model.thinkingLevels)
+        : parseThinkingJson(model.thinkingJson),
     }))
     .filter((model) => model.name);
 
@@ -99,6 +113,8 @@ export function buildNativeProviderFormInput(
           alias: model.alias ?? '',
           priority: model.priority,
           testModel: model.testModel,
+          thinkingJson: model.thinking ? JSON.stringify(model.thinking, null, 2) : '',
+          thinkingLevels: readThinkingLevels(model.thinking),
         }))
       : [emptyModel()],
     headers: config?.headers
@@ -141,7 +157,8 @@ export function buildNativeProviderConfig(
 
   const existingGrouped = Boolean(existing?.apiKeyEntries?.length);
   const hasEntryOverrides = entries.some(
-    (entry) => entry.priority !== undefined || Boolean(entry.proxyUrl)
+    (entry) =>
+      entry.priority !== undefined || entry.weight !== undefined || Boolean(entry.proxyUrl)
   );
   const useGrouped =
     existingGrouped || Boolean(input.name.trim()) || entries.length > 1 || hasEntryOverrides;

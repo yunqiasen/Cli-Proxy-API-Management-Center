@@ -2,7 +2,8 @@
  * AI 提供商 Workbench 视图模型(归一化各 brand 的异构 config)
  */
 
-import type { GeminiKeyConfig, OpenAIProviderConfig, ProviderKeyConfig, MediaKind } from '@/types';
+import type { GeminiKeyConfig, MediaKind, OpenAIProviderConfig, ProviderKeyConfig } from '@/types';
+import type { ThinkingLevel } from './thinkingLevels';
 
 export type ProviderBrand =
   | 'gemini'
@@ -17,12 +18,15 @@ export type ProviderBrand =
   | 'code0'
   | 'fennoAI'
   | 'qiniuCloud'
+  | 'lmuAI'
+  | 'infistar'
   | 'kimi'
   | 'image'
   | 'video'
   | 'audio';
 
-export type SponsorProviderBrand = 'apikeyFun' | 'code0' | 'fennoAI' | 'qiniuCloud' | 'kimi';
+export type SponsorProviderBrand =
+  'apikeyFun' | 'code0' | 'fennoAI' | 'qiniuCloud' | 'lmuAI' | 'infistar' | 'kimi';
 
 export const PROVIDER_SORT_BY_VALUES = ['name', 'priority', 'recent-success'] as const;
 export type ProviderSortBy = (typeof PROVIDER_SORT_BY_VALUES)[number];
@@ -63,6 +67,20 @@ export type ProviderResourceSelector =
     }
   | {
       brand: 'qiniuCloud';
+      openaiIndices: number[];
+      claudeIndices: number[];
+      codexIndices: number[];
+      geminiIndices: number[];
+    }
+  | {
+      brand: 'lmuAI';
+      openaiIndices: number[];
+      claudeIndices: number[];
+      codexIndices: number[];
+      geminiIndices: number[];
+    }
+  | {
+      brand: 'infistar';
       openaiIndices: number[];
       claudeIndices: number[];
       codexIndices: number[];
@@ -160,10 +178,13 @@ export interface ModelEntryInput {
   priority?: number;
   testModel?: string;
   image?: boolean;
+  /** Original backend value, preserved until the standard-level selector is changed. */
   thinkingJson?: string;
   displayName?: string;
   forceMapping?: boolean;
   capabilities?: string[];
+  thinkingLevels?: ThinkingLevel[];
+  thinkingLevelsTouched?: boolean;
 }
 
 export type SponsorProtocol = 'openai' | 'codex' | 'claude' | 'gemini';

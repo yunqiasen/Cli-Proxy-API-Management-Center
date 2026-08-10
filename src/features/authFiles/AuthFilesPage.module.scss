@@ -41,7 +41,7 @@
 .grid {
   display: grid;
   gap: 16px;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));
   align-items: stretch;
 }
 
@@ -49,19 +49,11 @@
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
 }
 
-/* provider tab 激活（配额模式）时卡片承载配额区，需要更宽的列 */
+/* provider tab 激活（配额模式）时卡片承载配额区，需要更宽的列。
+   值与 .grid 相同但**必须保留且排在 .gridCompact 之后**：三个类同时挂在网格上，
+   同specificity 靠源序决胜，删掉这条会让「紧凑 + 配额」从 340 掉回 260。 */
 .gridQuota {
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));
-}
-
-/* Codex Pro 20x 钻石徽章的闪耀错峰偏移（消费方见 AuthFileQuota.module.scss 的 gemGlint）。
- * 变量能穿透 CSS Module 边界，> * 又不依赖子元素类名，所以不必给卡片传 index。 */
-.grid > *:nth-child(3n + 2) {
-  --gem-flash-delay: -3.7s;
-}
-
-.grid > *:nth-child(3n + 3) {
-  --gem-flash-delay: -7.1s;
 }
 
 .emptyActions {

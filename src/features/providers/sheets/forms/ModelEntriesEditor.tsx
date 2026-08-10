@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { IconChevronDown, IconPlus, IconX } from '@/components/ui/icons';
+import { SelectionCheckbox } from '@/components/ui/SelectionCheckbox';
+import { THINKING_LEVELS, type ThinkingLevel } from '../../thinkingLevels';
 import type { ModelEntryInput } from '../../types';
 import styles from './sharedForm.module.scss';
 
@@ -8,8 +10,10 @@ const COLLAPSED_LIMIT = 10;
 
 interface ModelEntriesEditorProps {
   models: ModelEntryInput[];
-  /** OpenAI-compatible entries expose image/thinking options behind a per-row expander. */
-  extendedOptions: boolean;
+  /** Only OpenAI-compatible entries can expose the image-generation capability. */
+  supportsImage: boolean;
+  /** Every backend provider model can override its thinking capability. */
+  supportsThinking: boolean;
   /** Media entries expose capability checkboxes behind the same row expander. */
   mediaCapabilities?: ReadonlyArray<string>;
   capabilityLabels?: Record<string, string>;
@@ -22,7 +26,8 @@ interface ModelEntriesEditorProps {
 
 export function ModelEntriesEditor({
   models,
-  extendedOptions,
+  supportsImage,
+  supportsThinking,
   mediaCapabilities,
   capabilityLabels,
   mutating,
@@ -57,8 +62,18 @@ export function ModelEntriesEditor({
     <>
       {visible.map((entry, idx) => {
         const hasMediaOptions = Boolean(mediaCapabilities?.length);
-        const expanded = (extendedOptions || hasMediaOptions) && expandedIdx === idx;
-        const hasThinking = (entry.thinkingJson ?? '').trim().length > 0;
+        const hasExtendedOptions = supportsImage || supportsThinking || hasMediaOptions;
+        const expanded = hasExtendedOptions && expandedIdx === idx;
+        const thinkingLevels = entry.thinkingLevels ?? [];
+        const hasThinking = entry.thinkingLevelsTouched
+          ? thinkingLevels.length > 0
+          : (entry.thinkingJson ?? '').trim().length > 0;
+        const toggleThinkingLevel = (level: ThinkingLevel) => {
+          const nextLevels = thinkingLevels.includes(level)
+            ? thinkingLevels.filter((item) => item !== level)
+            : THINKING_LEVELS.filter((item) => item === level || thinkingLevels.includes(item));
+          onUpdate(idx, { thinkingLevels: nextLevels, thinkingLevelsTouched: true });
+        };
         return (
           <div key={idx} className={styles.modelEntry}>
             <div className={styles.modelAliasRow}>
@@ -77,17 +92,17 @@ export function ModelEntriesEditor({
                 disabled={mutating}
               />
               <div className={styles.modelEntryActions}>
-                {extendedOptions && !expanded && entry.image === true ? (
+                {supportsImage && !expanded && entry.image === true ? (
                   <span className={styles.entryBadge}>
                     {t('providersPage.form.modelBadgeImage')}
                   </span>
                 ) : null}
-                {extendedOptions && !expanded && hasThinking ? (
+                {supportsThinking && !expanded && hasThinking ? (
                   <span className={styles.entryBadge}>
                     {t('providersPage.form.modelBadgeThinking')}
                   </span>
                 ) : null}
-                {extendedOptions || hasMediaOptions ? (
+                {hasExtendedOptions ? (
                   <button
                     type="button"
                     className={styles.entryCardIconBtn}
@@ -145,39 +160,50 @@ export function ModelEntriesEditor({
                     </div>
                   </div>
                 ) : null}
-                {extendedOptions ? (
-                  <>
-                    <label className={styles.checkboxRow}>
-                      <input
-                        type="checkbox"
-                        className={styles.checkboxBox}
-                        checked={entry.image === true}
-                        disabled={mutating}
-                        onChange={(e) => onUpdate(idx, { image: e.target.checked })}
-                      />
-                      <span className={styles.checkboxText}>
-                        <span>{t('providersPage.form.modelImage')}</span>
-                        <small>{t('providersPage.form.modelImageHint')}</small>
-                      </span>
-                    </label>
-                    <div className={styles.field}>
-                      <label className={styles.label}>
-                        {t('providersPage.form.thinkingConfig')}
-                        <span className={styles.labelHint}>
-                          {' '}
-                          · {t('providersPage.form.thinkingConfigHint')}
-                        </span>
-                      </label>
-                      <textarea
-                        className={styles.textarea}
-                        rows={4}
-                        value={entry.thinkingJson ?? ''}
-                        onChange={(e) => onUpdate(idx, { thinkingJson: e.target.value })}
-                        disabled={mutating}
-                        placeholder={'{"levels":["low","medium","high"]}'}
-                      />
+                {supportsImage ? (
+                  <label className={styles.checkboxRow}>
+                    <input
+                      type="checkbox"
+                      className={styles.checkboxBox}
+                      checked={entry.image === true}
+                      disabled={mutating}
+                      onChange={(e) => onUpdate(idx, { image: e.target.checked })}
+                    />
+                    <span className={styles.checkboxText}>
+                      <span>{t('providersPage.form.modelImage')}</span>
+                      <small>{t('providersPage.form.modelImageHint')}</small>
+                    </span>
+                  </label>
+                ) : null}
+                {supportsThinking ? (
+                  <fieldset className={styles.thinkingFieldset}>
+                    <legend className={styles.label}>{t('providersPage.form.thinkingConfig')}</legend>
+                    <div className={styles.thinkingLevelGrid}>
+                      {THINKING_LEVELS.map((level) => (
+                        <SelectionCheckbox
+                          key={level}
+                          checked={thinkingLevels.includes(level)}
+                          disabled={mutating}
+                          onChange={() => toggleThinkingLevel(level)}
+                          className={`${styles.thinkingLevelOption} ${
+                            thinkingLevels.includes(level) ? styles.thinkingLevelOptionSelected : ''
+                          }`}
+                          labelClassName={styles.thinkingLevelLabel}
+                          label={
+                            <>
+                              <span>{t(`providersPage.form.thinkingLevels.${level}`)}</span>
+                              <code>{level}</code>
+                            </>
+                          }
+                        />
+                      ))}
                     </div>
-                  </>
+                    {(entry.thinkingJson ?? '').trim() && !entry.thinkingLevelsTouched ? (
+                      <p className={styles.thinkingExistingHint}>
+                        {t('providersPage.form.thinkingExistingHint')}
+                      </p>
+                    ) : null}
+                  </fieldset>
                 ) : null}
               </div>
             ) : null}

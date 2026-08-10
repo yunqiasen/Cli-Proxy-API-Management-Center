@@ -54,11 +54,17 @@ test('normalizes and serializes named grouped native provider keys', () => {
     priority: 7,
     'proxy-url': 'http://provider-proxy',
     'api-key-entries': [
-      { 'api-key': ' key-a ', priority: 0, 'auth-index': 'auth-a' },
-      { 'api-key': 'key-b', priority: 20, 'proxy-url': 'http://key-proxy' },
+      { 'api-key': ' key-a ', priority: 0, weight: 3, 'auth-index': 'auth-a' },
+      { 'api-key': 'key-b', priority: 20, weight: 0, 'proxy-url': 'http://key-proxy' },
     ],
     websockets: true,
-    models: [{ name: 'gpt-5.6', alias: 'codex-main' }],
+    models: [
+      {
+        name: 'gpt-5.6',
+        alias: 'codex-main',
+        thinking: { min: 128, max: 8192, dynamic_allowed: true },
+      },
+    ],
   });
 
   assert.ok(config);
@@ -66,9 +72,12 @@ test('normalizes and serializes named grouped native provider keys', () => {
   assert.equal(config.apiKey, 'legacy-key');
   assert.equal(config.apiKeyEntries?.[0]?.priority, 0);
   assert.equal(config.apiKeyEntries?.[0]?.authIndex, 'auth-a');
+  assert.equal(config.apiKeyEntries?.[0]?.weight, 3);
+  assert.equal(config.apiKeyEntries?.[1]?.weight, 0);
   assert.equal(config.apiKeyEntries?.[1]?.proxyUrl, 'http://key-proxy');
   assert.equal(config.websockets, true);
   assert.equal(config.models?.[0]?.alias, 'codex-main');
+  assert.deepEqual(config.models?.[0]?.thinking, { min: 128, max: 8192, dynamic_allowed: true });
 
   assert.deepEqual(serializeNativeProviderPayload(config), {
     name: 'relay-a',
@@ -77,10 +86,16 @@ test('normalizes and serializes named grouped native provider keys', () => {
     'proxy-url': 'http://provider-proxy',
     websockets: true,
     'api-key-entries': [
-      { 'api-key': 'key-a', priority: 0 },
-      { 'api-key': 'key-b', priority: 20, 'proxy-url': 'http://key-proxy' },
+      { 'api-key': 'key-a', priority: 0, weight: 3 },
+      { 'api-key': 'key-b', priority: 20, weight: 0, 'proxy-url': 'http://key-proxy' },
     ],
-    models: [{ name: 'gpt-5.6', alias: 'codex-main' }],
+    models: [
+      {
+        name: 'gpt-5.6',
+        alias: 'codex-main',
+        thinking: { min: 128, max: 8192, dynamic_allowed: true },
+      },
+    ],
   });
 });
 
@@ -204,6 +219,38 @@ test('preserves Claude, Codex, and Gemini protocol fields through form conversio
   assert.equal(codexSaved.websockets, true);
   assert.equal(geminiSaved.disableCooling, true);
   assert.deepEqual(geminiSaved.headers, { 'X-Test': 'kept' });
+});
+
+
+test('preserves native model thinking through untouched form edits', () => {
+  const existing = {
+    apiKey: '',
+    name: 'codex-relay',
+    apiKeyEntries: [{ apiKey: 'codex-a' }],
+    models: [
+      {
+        name: 'gpt-5.6',
+        alias: 'codex-main',
+        thinking: { min: 128, max: 8192, dynamic_allowed: true },
+      },
+    ],
+  };
+
+  const form = buildNativeProviderFormInput('codex', existing);
+  assert.deepEqual(form.models[0].thinkingLevels, ['auto']);
+  assert.match(form.models[0].thinkingJson, /"dynamic_allowed": true/);
+
+  const saved = buildNativeProviderConfig('codex', form, existing);
+  assert.deepEqual(saved.models?.[0]?.thinking, existing.models[0].thinking);
+});
+
+test('switches a legacy native provider to grouped keys for a per-key weight', () => {
+  const existing = { apiKey: 'legacy-key' };
+  const form = buildNativeProviderFormInput('gemini', existing);
+  form.apiKeyEntries[0].weight = 5;
+
+  const saved = buildNativeProviderConfig('gemini', form, existing);
+  assert.deepEqual(saved.apiKeyEntries, [{ apiKey: 'legacy-key', weight: 5 }]);
 });
 
 test('aggregates every native provider key for totals, status, details, and recent sorting', () => {

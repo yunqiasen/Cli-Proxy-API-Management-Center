@@ -551,7 +551,8 @@ export function MediaProviderForm({
       >
         <ModelEntriesEditor
           models={models}
-          extendedOptions={false}
+          supportsImage={false}
+          supportsThinking={false}
           mediaCapabilities={mediaCapabilities}
           capabilityLabels={Object.fromEntries(
             mediaCapabilities.map((capability) => [

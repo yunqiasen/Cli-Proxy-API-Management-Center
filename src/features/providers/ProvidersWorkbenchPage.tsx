@@ -22,6 +22,7 @@ import { isMultiProtocolSponsorBrand } from './sponsorDefinitions';
 import { isSponsorPartialMutationError } from './sponsorMutationRecovery';
 import { useProviderWorkbench } from './useProviderWorkbench';
 import { getNativeProviderUsageIdentity } from './nativeProviderUsageIdentity';
+import { getVisibleProviderGroups } from './providerGroupVisibility';
 import {
   simulateCodexProvider,
   type CodexProbeMessages,
@@ -186,10 +187,7 @@ export function ProvidersWorkbenchPage({ fixedBrand }: ProvidersWorkbenchPagePro
 
   const allGroups = useMemo(() => workbench.snapshot?.groups ?? [], [workbench.snapshot]);
   const groups = useMemo(
-    () =>
-      fixedBrand
-        ? allGroups.filter((group) => group.id === fixedBrand)
-        : allGroups.filter((group) => group.id !== 'apikeyFun'),
+    () => getVisibleProviderGroups(allGroups, fixedBrand),
     [allGroups, fixedBrand]
   );
   const firstVisibleBrand = groups[0]?.id ?? fixedBrand ?? 'gemini';

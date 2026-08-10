@@ -282,7 +282,7 @@
     "pagination_next": "下一頁",
     "pagination_info": "第 {{current}} / {{total}} 頁 · 共 {{count}} 個檔案",
     "search_label": "搜尋設定檔",
-    "search_placeholder": "輸入名稱、類型或供應方關鍵字，支援 * 萬用字元",
+    "search_placeholder": "輸入名稱、帳號、類型或供應方關鍵字，支援 * 萬用字元",
     "problem_filter_label": "狀態篩選",
     "problem_filter_all": "全部",
     "problem_filter_enabled": "啟用",
@@ -297,9 +297,6 @@
     "priority_display": "優先順序",
     "weight_display": "WRR 權重",
     "page_size_label": "單頁數量",
-    "view_mode_paged": "分頁顯示",
-    "view_mode_all": "顯示全部",
-    "too_many_files_warning": "您的憑證總數過多，全部載入會導致頁面卡頓，請保持分頁瀏覽。",
     "filter_all": "全部",
     "filter_qwen": "Qwen",
     "filter_gemini": "Gemini",
@@ -357,6 +354,8 @@
     "weight_hint": "預設值為 1；小於或等於 0 時不參與加權調度；最大值為 1,000,000。",
     "weight_invalid_integer": "權重必須是整數。",
     "weight_invalid_max": "權重不能超過 1,000,000。",
+    "disable_cooling_label": "停用指數冷卻（disable_cooling）",
+    "disable_cooling_hint": "開啟後，僅目前憑證會略過失敗後的冷卻與指數退避；其他憑證不受影響。",
     "websockets_label": "WebSockets（websockets）",
     "websockets_hint": "為該憑證開啟 Responses API 的 websocket 傳輸。",
     "using_api_label": "使用官方 API（using_api）",
@@ -364,6 +363,7 @@
     "note_label": "備註（note）",
     "note_placeholder": "輸入備註資訊，例如：張三的帳號",
     "note_hint": "選填，用於標記憑證用途或歸屬；留空則不寫入。",
+    "excluded_models_label": "排除模型（excluded_models）",
     "headers_label": "自訂請求標頭（headers）",
     "headers_placeholder": "{\n  \"Header-Name\": \"value\"\n}",
     "headers_hint": "以 JSON 物件格式輸入自訂 HTTP 請求標頭，例如：{\"X-My-Header\": \"value\"}",
@@ -468,7 +468,7 @@
     "plan_label": "方案",
     "expires_label": "續期時間",
     "reset_credits_label": "主動重置次數",
-    "reset_credits_expiry_label": "主動重置過期時間（GMT+8）",
+    "reset_credits_expiry_label": "主動重置過期時間（{{timezone}}）",
     "reset_credit_number": "第 {{index}} 次",
     "reset_credits_expiry_failed": "主動重置過期時間取得失敗：{{message}}",
     "reset_credits_invalid_payload": "主動重置過期時間回應格式無效",
@@ -554,16 +554,6 @@
     "provider_placeholder": "例如 codex / openai",
     "provider_hint": "預設選取目前篩選的供應商，也可直接輸入或選擇其他名稱。",
     "models_label": "停用的模型",
-    "models_loading": "正在載入模型清單...",
-    "models_unsupported": "目前 CPA 版本不支援取得模型清單。",
-    "models_loaded": "已載入 {{count}} 個模型，勾選要停用的模型。",
-    "no_models_available": "該供應商暫無可用模型清單。",
-    "custom_rule_label": "自訂模型規則",
-    "custom_rule_hint": "可填寫精確模型 ID，或使用 gpt-* 這類萬用字元規則。",
-    "custom_rule_placeholder": "例如 gpt-* / custom-model",
-    "custom_rule_add": "新增規則",
-    "custom_rules_label": "已設定的自訂規則",
-    "custom_rule_remove": "移除 {{rule}}",
     "save": "儲存/更新",
     "save_success": "模型停用已更新",
     "save_failed": "更新模型停用失敗",
@@ -578,6 +568,38 @@
     "upgrade_required": "目前 CPA 版本不支援 OAuth 模型停用，請升級 CPA 版本",
     "upgrade_required_title": "需要升級 CPA 版本",
     "upgrade_required_desc": "目前伺服器版本不支援取得 OAuth 模型停用功能，請升級到最新版本的 CPA（CLI Proxy API）後重試。"
+  },
+  "excluded_models": {
+    "trigger_summary": "已排除 {{excluded}} · {{available}} 可用",
+    "trigger_summary_rules": "{{n}} 條規則",
+    "trigger_empty": "未排除任何模型",
+    "meter_aria": "共 {{total}} 個模型，已排除 {{excluded}} 個",
+    "search_placeholder": "搜尋模型…",
+    "search_aria": "搜尋要排除的模型",
+    "list_aria": "模型",
+    "no_results": "沒有符合「{{query}}」的模型",
+    "catalog_loading": "正在載入模型…",
+    "catalog_unavailable": "無法取得模型清單，規則仍然生效。",
+    "catalog_error": "模型載入失敗。",
+    "catalog_retry": "重試",
+    "catalog_empty": "暫無可列出的模型。",
+    "footer_count": "{{excluded}} / {{total}} 已排除",
+    "select_all": "全部排除",
+    "clear": "清空",
+    "clear_aria": "清空已選模型（保留萬用字元規則）",
+    "badge_wildcard": "由規則",
+    "badge_unknown": "不在清單中",
+    "wildcard_reason": "由規則 {{rule}} 比對",
+    "wildcard_locked": "由規則 {{rule}} 排除，請在下方修改該規則",
+    "also_wildcard": "另由 {{rule}} 比對",
+    "chips_more": "還有 {{n}} 個",
+    "chip_remove": "取消排除 {{rule}}",
+    "rules_label": "萬用字元規則",
+    "rules_placeholder": "每行一個規則，例如 gpt-5-*",
+    "rules_hint": "* 比對任意字元，比對不區分大小寫。",
+    "rules_match_count": "比對 {{n}} 個模型",
+    "rules_match_none": "未比對到清單中的任何模型",
+    "rules_reserved": "「*」會停用整個 provider，請改用「已停用」開關"
   },
   "oauth_model_alias": {
     "title": "OAuth 模型別名",
@@ -846,6 +868,21 @@
   },
   "config_management": {
     "title": "設定面板",
+    "meta_fields": "{{count}} 項設定",
+    "meta_dirty": "{{count}} 項待儲存",
+    "meta_dirty_source": "原始碼有未儲存修改",
+    "meta_errors": "{{count}} 項驗證錯誤",
+    "meta_synced": "已同步",
+    "actions": {
+      "discard": "放棄變更",
+      "save": "儲存變更"
+    },
+    "discard_confirm_message": "確定放棄所有未儲存的變更並還原到最近的伺服器版本嗎？",
+    "mode": {
+      "label": "編輯模式",
+      "visual": "視覺化",
+      "source": "原始碼"
+    },
     "reload": "重新載入",
     "reload_confirm_message": "重新載入將捨棄你目前未儲存的修改，確定繼續嗎？",
     "save": "儲存",
@@ -879,26 +916,16 @@
       "confirm": "確認儲存",
       "no_changes": "未偵測到變更"
     },
-    "tabs": {
-      "visual": "視覺化編輯",
-      "source": "原始檔編輯"
-    },
     "visual": {
-      "notice": "視覺化模式涵蓋常用欄位，未涵蓋的設定仍需在原始檔模式中查看或編輯。",
-      "quick_jump": "快速跳轉",
-      "mode": {
-        "simple": "簡單",
-        "full": "完整",
-        "label": "編輯模式",
-        "more_settings": "切換到完整模式，檢視全部 {{total}} 個設定分區",
-        "validation_banner": "部分進階設定項存在驗證錯誤，已阻止儲存。請切換到完整模式進行修正。",
-        "switch_to_full": "切換完整模式"
-      },
       "search": {
         "placeholder": "搜尋設定項（標籤或 YAML 鍵名）",
         "no_results": "沒有符合的設定項"
       },
       "sections": {
+        "common": {
+          "title": "常用",
+          "description": "最常調整的設定項，與完整分區共享同一份資料"
+        },
         "connectivity": {
           "title": "接入與認證",
           "description": "服務位址、連接埠、認證目錄與 API 金鑰"
@@ -914,8 +941,6 @@
           "signature_title": "Antigravity 簽章"
         },
         "server": {
-          "title": "伺服器設定",
-          "description": "基本伺服器設定",
           "host": "主機位址",
           "port": "連接埠"
         },
@@ -941,14 +966,10 @@
           "panel_repo": "面板儲存庫"
         },
         "auth": {
-          "title": "驗證設定",
-          "description": "API 金鑰與驗證檔案目錄設定",
           "auth_dir": "驗證檔案目錄（auth-dir）",
           "auth_dir_hint": "存放驗證檔案的目錄路徑（支援 ~）"
         },
         "system": {
-          "title": "系統設定",
-          "description": "除錯、記錄、統計與效能調整設定",
           "debug": "除錯模式",
           "debug_desc": "啟用詳細的除錯記錄",
           "commercial_mode": "商業模式",
@@ -1093,7 +1114,15 @@
         "input_placeholder": "貼上你的 API 金鑰",
         "input_hint": "此處僅修改本地設定檔內容，不會自動同步到 API 金鑰管理介面",
         "error_empty": "請輸入 API 金鑰",
-        "error_invalid": "API 金鑰包含無效字元"
+        "error_invalid": "API 金鑰包含無效字元",
+        "strength": {
+          "label": "API 金鑰強度",
+          "empty": "待輸入",
+          "weak": "弱",
+          "fair": "一般",
+          "good": "良好",
+          "strong": "很強"
+        }
       },
       "payload_rules": {
         "rule": "規則",
@@ -1166,7 +1195,49 @@
   "quota_management": {
     "title": "配額管理",
     "description": "集中查看 OAuth 配額與剩餘情況",
-    "refresh_all_credentials": "重新整理全部憑證"
+    "refresh_all_credentials": "重新整理全部憑證",
+    "refresh_current_page": "重新整理目前頁面",
+    "refresh_progress": "背景重新整理 {{done}}/{{total}}",
+    "refresh_all_started": "已開始背景重新整理全部憑證：{{count}} 個",
+    "refresh_all_done": "全部憑證重新整理完成：成功 {{success}}，失敗 {{failed}}",
+    "refresh_all_failed": "重新整理全部憑證失敗：{{message}}",
+    "sort_label": "排序",
+    "sort_default": "預設",
+    "sort_soonest": "最快恢復優先",
+    "meta_credentials": "{{count}} 個憑證",
+    "meta_loaded": "{{count}} 個已載入",
+    "meta_attention": "{{count}} 個需關注",
+    "empty_title": "暫無可查配額的憑證",
+    "empty_desc": "接入 Antigravity、Claude、Codex、xAI 或 Kimi 憑證後即可在此查看配額。",
+    "windows_title": "配額視窗",
+    "windows_span_weekly": "兩週",
+    "windows_span_session": "三天",
+    "windows_current": "目前",
+    "windows_today": "今天",
+    "windows_prev": "上一頁",
+    "windows_next": "下一頁",
+    "windows_mode_weekly": "按週",
+    "windows_mode_session": "5 小時",
+    "windows_credential": "憑證",
+    "windows_idle": "沒有正在計時的視窗",
+    "windows_empty_session": "目前頁面沒有憑證提供 5 小時配額視窗。",
+    "windows_legend_current": "目前視窗",
+    "windows_legend_upcoming": "即將開始",
+    "windows_legend_elapsed": "已結束",
+    "windows_legend_reset_credit": "主動重設過期",
+    "soonest_row_hint": "該憑證中最先恢復",
+    "windows_reset_credit": "主動重設",
+    "windows_credit_granted": "取得時間",
+    "windows_credit_expires": "過期時間",
+    "windows_note_weekly": "每條表示一個完整的配額視窗，從開啟到重設。同時結束的視窗會競用相同的日期。",
+    "windows_note_session": "每條表示一個 5 小時視窗。僅顯示有正在計時視窗的憑證，其餘保持為空。",
+    "weekday_sun": "日",
+    "weekday_mon": "一",
+    "weekday_tue": "二",
+    "weekday_wed": "三",
+    "weekday_thu": "四",
+    "weekday_fri": "五",
+    "weekday_sat": "六"
   },
   "plugin_management": {
     "title": "插件管理",
@@ -1446,6 +1517,8 @@
       "code0": "Code0",
       "fennoAI": "FennoAI",
       "qiniuCloud": "七牛雲",
+      "lmuAI": "LMU AI（靈眸AI）",
+      "infistar": "無限星河",
       "kimi": "Kimi",
       "image": "圖片供應商",
       "video": "影片供應商",
@@ -1502,11 +1575,15 @@
         "standard": "普通 URL",
         "direct": "專線直連 URL",
         "domestic": "中國大陸線路",
-        "overseas": "海外線路"
+        "overseas": "海外線路",
+        "mainlandChina": "中國大陸（推薦）",
+        "global": "全球"
       },
       "urlOptionDescriptions": {
         "domestic": "面向中國大陸使用者和部署在中國大陸網路環境中的業務，通常可獲得更低延遲。",
-        "overseas": "面向海外部署、跨境存取或需要存取境外模型的業務。"
+        "overseas": "面向海外部署、跨境存取或需要存取境外模型的業務。",
+        "mainlandChinaRecommended": "推薦中國大陸使用者和部署在中國大陸網路環境中的業務使用。",
+        "global": "適用於全球其他地區的使用者和部署環境。"
       },
       "modelsTitle": "協議模型設定",
       "modelsHint": "可分別限制或別名映射 Codex API、Anthropic、Gemini 與 OpenAI 相容入口的模型。",
@@ -1587,7 +1664,7 @@
       "headersSection": "請求標頭",
       "addHeader": "新增請求標頭",
       "excludedSection": "排除模型",
-      "excludedHint": "每行一個模型名稱,匹配後將不會被路由到此提供商",
+      "excludedDisabledNote": "「*」表示整個 provider 已停用，請改用上方的「已停用」開關。",
       "cloakSection": "Cloak 設定",
       "cloakMode": "模式",
       "cloakStrict": "嚴格模式",
@@ -1606,8 +1683,18 @@
       "proxyBadge": "代理",
       "modelBadgeImage": "圖片",
       "modelBadgeThinking": "Thinking",
-      "thinkingConfig": "Thinking 設定(JSON)",
-      "thinkingConfigHint": "可設定 levels、min、max、zero_allowed、dynamic_allowed",
+      "thinkingConfig": "允許的思考檔位",
+      "thinkingExistingHint": "目前後端設定會保持不變；修改選項後將替換為所選標準檔位。",
+      "thinkingLevels": {
+        "none": "關閉思考",
+        "minimal": "最少",
+        "low": "低",
+        "medium": "中",
+        "high": "高",
+        "xhigh": "超高",
+        "max": "最大",
+        "auto": "自動"
+      },
       "cloakCacheUserId": "快取 user_id",
       "cloakCacheUserIdHint": "按 API key 複用 Claude cloak 產生的 user_id",
       "experimentalCchSigning": "實驗性 CCH 簽名",

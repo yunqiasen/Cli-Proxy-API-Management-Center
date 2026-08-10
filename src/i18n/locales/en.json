@@ -282,7 +282,7 @@
     "pagination_next": "Next",
     "pagination_info": "Page {{current}} / {{total}} · {{count}} files",
     "search_label": "Search configs",
-    "search_placeholder": "Filter by name, type, or provider. Use * as a wildcard",
+    "search_placeholder": "Filter by name, account, type, or provider. Use * as a wildcard",
     "problem_filter_label": "Status Filter",
     "problem_filter_all": "All",
     "problem_filter_enabled": "Enabled",
@@ -297,9 +297,6 @@
     "priority_display": "Priority",
     "weight_display": "WRR weight",
     "page_size_label": "Per page",
-    "view_mode_paged": "Paged",
-    "view_mode_all": "Show all",
-    "too_many_files_warning": "Too many credentials. Showing all may cause performance issues, please use paged view.",
     "filter_all": "All",
     "filter_qwen": "Qwen",
     "filter_gemini": "Gemini",
@@ -357,6 +354,8 @@
     "weight_hint": "Defaults to 1. Values at or below 0 exclude this credential from weighted scheduling; maximum 1,000,000.",
     "weight_invalid_integer": "Weight must be an integer.",
     "weight_invalid_max": "Weight cannot exceed 1,000,000.",
+    "disable_cooling_label": "Disable exponential cooldown (disable_cooling)",
+    "disable_cooling_hint": "Skip failure cooldown and exponential backoff only for this credential; other credentials are unaffected.",
     "websockets_label": "WebSockets (websockets)",
     "websockets_hint": "Enable Responses API websocket transport for this credential.",
     "using_api_label": "Use official API (using_api)",
@@ -364,6 +363,7 @@
     "note_label": "Note",
     "note_placeholder": "Enter a note, e.g.: John's account",
     "note_hint": "Optional. Used to describe the purpose or owner of this credential; leave empty to omit.",
+    "excluded_models_label": "Excluded models (excluded_models)",
     "headers_label": "Custom Headers (headers)",
     "headers_placeholder": "{\n  \"Header-Name\": \"value\"\n}",
     "headers_hint": "Enter custom HTTP headers as a JSON object, e.g., {\"X-My-Header\": \"value\"}",
@@ -468,7 +468,7 @@
     "plan_label": "Plan",
     "expires_label": "Renewal time",
     "reset_credits_label": "Manual resets",
-    "reset_credits_expiry_label": "Manual reset expiry (GMT+8)",
+    "reset_credits_expiry_label": "Manual reset expiry ({{timezone}})",
     "reset_credit_number": "Reset {{index}}",
     "reset_credits_expiry_failed": "Failed to load manual reset expiry: {{message}}",
     "reset_credits_invalid_payload": "Invalid manual reset expiry response",
@@ -554,16 +554,6 @@
     "provider_placeholder": "e.g. codex / openai",
     "provider_hint": "Defaults to the current filter; pick an existing provider or type a new name.",
     "models_label": "Models to disable",
-    "models_loading": "Loading models...",
-    "models_unsupported": "Current CPA version does not support fetching model lists.",
-    "models_loaded": "{{count}} models loaded. Check the models to disable.",
-    "no_models_available": "No models available for this provider.",
-    "custom_rule_label": "Custom model rule",
-    "custom_rule_hint": "Enter an exact model ID or a wildcard rule such as gpt-*.",
-    "custom_rule_placeholder": "e.g. gpt-* / custom-model",
-    "custom_rule_add": "Add rule",
-    "custom_rules_label": "Configured custom rules",
-    "custom_rule_remove": "Remove {{rule}}",
     "save": "Save/Update",
     "save_success": "Model disablement updated",
     "save_failed": "Failed to update model disablement",
@@ -578,6 +568,38 @@
     "upgrade_required": "Current CPA version does not support OAuth model disablement. Please upgrade.",
     "upgrade_required_title": "Please upgrade CLI Proxy API",
     "upgrade_required_desc": "The current server version does not support fetching OAuth model disablement. Please upgrade to the latest CPA (CLI Proxy API) version and try again."
+  },
+  "excluded_models": {
+    "trigger_summary": "{{excluded}} excluded · {{available}} available",
+    "trigger_summary_rules": "{{n}} rules",
+    "trigger_empty": "No models excluded",
+    "meter_aria": "{{excluded}} of {{total}} models excluded",
+    "search_placeholder": "Search models…",
+    "search_aria": "Search models to exclude",
+    "list_aria": "Models",
+    "no_results": "No model matches “{{query}}”",
+    "catalog_loading": "Loading models…",
+    "catalog_unavailable": "Model list unavailable — rules still apply.",
+    "catalog_error": "Could not load models.",
+    "catalog_retry": "Retry",
+    "catalog_empty": "No models to list.",
+    "footer_count": "{{excluded}} / {{total}} excluded",
+    "select_all": "Exclude all",
+    "clear": "Clear",
+    "clear_aria": "Clear selected models (wildcard rules are kept)",
+    "badge_wildcard": "By rule",
+    "badge_unknown": "Not in list",
+    "wildcard_reason": "Matched by rule {{rule}}",
+    "wildcard_locked": "Excluded by rule {{rule}} — edit the rule below",
+    "also_wildcard": "Also matched by {{rule}}",
+    "chips_more": "+{{n}} more",
+    "chip_remove": "Stop excluding {{rule}}",
+    "rules_label": "Wildcard rules",
+    "rules_placeholder": "One rule per line, e.g. gpt-5-*",
+    "rules_hint": "* matches any characters. Matching is case-insensitive.",
+    "rules_match_count": "matches {{n}} models",
+    "rules_match_none": "matches no model in the list",
+    "rules_reserved": "“*” disables the whole provider — use the Disabled switch instead"
   },
   "oauth_model_alias": {
     "title": "OAuth Model Aliases",
@@ -820,6 +842,21 @@
   },
   "config_management": {
     "title": "Config Panel",
+    "meta_fields": "{{count}} settings",
+    "meta_dirty": "{{count}} unsaved",
+    "meta_dirty_source": "Unsaved source edits",
+    "meta_errors": "{{count}} validation errors",
+    "meta_synced": "In sync",
+    "actions": {
+      "discard": "Discard changes",
+      "save": "Save changes"
+    },
+    "discard_confirm_message": "Discard all unsaved changes and restore the last server version?",
+    "mode": {
+      "label": "Editor mode",
+      "visual": "Visual",
+      "source": "Source"
+    },
     "reload": "Reload",
     "reload_confirm_message": "Reloading will discard your unsaved changes. Do you want to continue?",
     "save": "Save",
@@ -853,26 +890,16 @@
       "confirm": "Confirm Save",
       "no_changes": "No changes detected"
     },
-    "tabs": {
-      "visual": "Visual Editor",
-      "source": "Source File Editor"
-    },
     "visual": {
-      "notice": "Visual mode covers common fields. Review or edit unsupported config.yaml entries in source mode.",
-      "quick_jump": "Quick Jump",
-      "mode": {
-        "simple": "Simple",
-        "full": "Full",
-        "label": "Editor mode",
-        "more_settings": "Switch to full mode to see all {{total}} sections",
-        "validation_banner": "Some advanced settings have validation errors and are blocking save. Switch to full mode to fix them.",
-        "switch_to_full": "Switch to full mode"
-      },
       "search": {
         "placeholder": "Search settings (label or YAML key)",
         "no_results": "No matching settings"
       },
       "sections": {
+        "common": {
+          "title": "Common",
+          "description": "The most-used settings, backed by the same data as the full sections"
+        },
         "connectivity": {
           "title": "Access & Authentication",
           "description": "Server address, port, auth directory, and API keys"
@@ -888,8 +915,6 @@
           "signature_title": "Antigravity Signature"
         },
         "server": {
-          "title": "Server Configuration",
-          "description": "Basic server settings",
           "host": "Host Address",
           "port": "Port"
         },
@@ -915,14 +940,10 @@
           "panel_repo": "Panel Repository"
         },
         "auth": {
-          "title": "Authentication Configuration",
-          "description": "API keys and authentication directory settings",
           "auth_dir": "Auth Directory (auth-dir)",
           "auth_dir_hint": "Directory path for authentication files (supports ~)"
         },
         "system": {
-          "title": "System Configuration",
-          "description": "Debug, logging, statistics, and performance settings",
           "debug": "Debug Mode",
           "debug_desc": "Enable verbose debug logging",
           "commercial_mode": "Commercial Mode",
@@ -1067,7 +1088,15 @@
         "input_placeholder": "Paste your API key",
         "input_hint": "This only modifies the local config file content, it will not sync to the API Key Management interface",
         "error_empty": "Please enter an API key",
-        "error_invalid": "API key contains invalid characters"
+        "error_invalid": "API key contains invalid characters",
+        "strength": {
+          "label": "API key strength",
+          "empty": "Not entered",
+          "weak": "Weak",
+          "fair": "Fair",
+          "good": "Good",
+          "strong": "Strong"
+        }
       },
       "payload_rules": {
         "rule": "Rule",
@@ -1140,7 +1169,49 @@
   "quota_management": {
     "title": "Quota Management",
     "description": "Monitor OAuth quota status for Antigravity, Codex, Claude, Kimi, and xAI credentials.",
-    "refresh_all_credentials": "Refresh all credentials"
+    "refresh_all_credentials": "Refresh all credentials",
+    "refresh_current_page": "Refresh current page",
+    "refresh_progress": "Background refresh {{done}}/{{total}}",
+    "refresh_all_started": "Started background refresh for {{count}} credentials",
+    "refresh_all_done": "All credentials refreshed: {{success}} succeeded, {{failed}} failed",
+    "refresh_all_failed": "Failed to refresh all credentials: {{message}}",
+    "sort_label": "Sort",
+    "sort_default": "Default",
+    "sort_soonest": "Soonest recovery",
+    "meta_credentials": "{{count}} credentials",
+    "meta_loaded": "{{count}} loaded",
+    "meta_attention": "{{count}} need attention",
+    "empty_title": "No quota-capable credentials",
+    "empty_desc": "Connect an Antigravity, Claude, Codex, xAI, or Kimi credential to track its quota here.",
+    "windows_title": "Quota windows",
+    "windows_span_weekly": "two weeks",
+    "windows_span_session": "three days",
+    "windows_current": "current",
+    "windows_today": "Today",
+    "windows_prev": "Previous",
+    "windows_next": "Next",
+    "windows_mode_weekly": "Weekly",
+    "windows_mode_session": "5-hour",
+    "windows_credential": "Credential",
+    "windows_idle": "no window counting down",
+    "windows_empty_session": "No credentials on this page report a 5-hour quota window.",
+    "windows_legend_current": "current window",
+    "windows_legend_upcoming": "upcoming",
+    "windows_legend_elapsed": "elapsed",
+    "windows_legend_reset_credit": "manual reset expiry",
+    "soonest_row_hint": "Recovers first on this credential",
+    "windows_reset_credit": "Manual reset",
+    "windows_credit_granted": "Granted",
+    "windows_credit_expires": "Expires",
+    "windows_note_weekly": "Each bar is one full quota window, drawn from when it opened to when it resets. Lanes ending together compete for the same days.",
+    "windows_note_session": "Each bar is one 5-hour window. Only credentials with a window counting down can be projected; the rest stay empty rather than invented.",
+    "weekday_sun": "Sun",
+    "weekday_mon": "Mon",
+    "weekday_tue": "Tue",
+    "weekday_wed": "Wed",
+    "weekday_thu": "Thu",
+    "weekday_fri": "Fri",
+    "weekday_sat": "Sat"
   },
   "plugin_management": {
     "title": "Plugin Management",
@@ -1420,6 +1491,8 @@
       "code0": "Code0",
       "fennoAI": "FennoAI",
       "qiniuCloud": "Qiniu Cloud",
+      "lmuAI": "LMU AI (Lingmou AI)",
+      "infistar": "Infistar",
       "kimi": "Kimi",
       "image": "Image Providers",
       "video": "Video Providers",
@@ -1476,11 +1549,15 @@
         "standard": "Standard URL",
         "direct": "Direct URL",
         "domestic": "China mainland route",
-        "overseas": "Overseas route"
+        "overseas": "Overseas route",
+        "mainlandChina": "Mainland China (recommended)",
+        "global": "Global"
       },
       "urlOptionDescriptions": {
         "domestic": "For users and workloads in mainland China; usually lower latency in mainland networks.",
-        "overseas": "For overseas deployments, cross-border access, or workloads that need overseas models."
+        "overseas": "For overseas deployments, cross-border access, or workloads that need overseas models.",
+        "mainlandChinaRecommended": "Recommended for users and workloads on mainland China networks.",
+        "global": "For users and workloads in all other regions."
       },
       "modelsTitle": "Protocol model settings",
       "modelsHint": "Configure model allowlists or aliases separately for Codex API, Anthropic, Gemini, and OpenAI-compatible routes.",
@@ -1561,7 +1638,7 @@
       "headersSection": "Request headers",
       "addHeader": "Add header",
       "excludedSection": "Excluded models",
-      "excludedHint": "One model per line; matched models won't be routed",
+      "excludedDisabledNote": "“*” means the whole provider is disabled — use the Disabled switch above instead.",
       "cloakSection": "Cloak settings",
       "cloakMode": "Mode",
       "cloakStrict": "Strict mode",
@@ -1580,8 +1657,18 @@
       "proxyBadge": "Proxy",
       "modelBadgeImage": "Image",
       "modelBadgeThinking": "Thinking",
-      "thinkingConfig": "Thinking config (JSON)",
-      "thinkingConfigHint": "Supports levels, min, max, zero_allowed, dynamic_allowed",
+      "thinkingConfig": "Allowed thinking levels",
+      "thinkingExistingHint": "The current backend config remains unchanged until you change a selection; then it will be replaced by the selected standard levels.",
+      "thinkingLevels": {
+        "none": "Disable thinking",
+        "minimal": "Minimal",
+        "low": "Low",
+        "medium": "Medium",
+        "high": "High",
+        "xhigh": "Extra high",
+        "max": "Maximum",
+        "auto": "Automatic"
+      },
       "cloakCacheUserId": "Cache user_id",
       "cloakCacheUserIdHint": "Reuse the Claude cloak user_id per API key",
       "experimentalCchSigning": "Experimental CCH signing",

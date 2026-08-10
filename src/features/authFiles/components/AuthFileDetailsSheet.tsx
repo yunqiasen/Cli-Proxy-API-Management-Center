@@ -16,6 +16,7 @@ import {
   supportsAuthFileWebsockets,
 } from '@/features/authFiles/constants';
 import { MAX_CREDENTIAL_WEIGHT } from '@/utils/credentialWeight';
+import { AuthFileExcludedModelsField } from './AuthFileExcludedModelsField';
 import styles from './AuthFileDetailsSheet.module.scss';
 
 /** API 边界归一化补写的派生字段——INFO 视图里只展示后端原始形状，避免重复噪音。 */
@@ -27,6 +28,8 @@ const DERIVED_INFO_KEYS = [
   'authIndex',
   'statusMessage',
   'modified',
+  // 'email' 不在此列：后端原始键名与 camelCase 同形，删掉会藏起真实数据。
+  'projectId',
 ];
 
 export type AuthFileDetailsSheetProps = {
@@ -205,6 +208,16 @@ export function AuthFileDetailsSheet(props: AuthFileDetailsSheetProps) {
                     disabled={disableControls || editor.saving || !editor.json}
                     onChange={(e) => onChange('weight', e.target.value)}
                   />
+                  <div className="form-group">
+                    <label>{t('auth_files.disable_cooling_label')}</label>
+                    <ToggleSwitch
+                      checked={editor.disableCooling}
+                      onChange={(value) => onChange('disableCooling', value)}
+                      disabled={disableControls || editor.saving || !editor.json}
+                      ariaLabel={t('auth_files.disable_cooling_label')}
+                    />
+                    <div className="hint">{t('auth_files.disable_cooling_hint')}</div>
+                  </div>
                   {supportsAuthFileWebsockets(editor.providerKey) && (
                     <div className="form-group">
                       <label>{t('auth_files.websockets_label')}</label>
@@ -229,6 +242,12 @@ export function AuthFileDetailsSheet(props: AuthFileDetailsSheetProps) {
                       <div className="hint">{t('auth_files.using_api_hint')}</div>
                     </div>
                   )}
+                  <AuthFileExcludedModelsField
+                    fileName={editor.fileName}
+                    value={editor.excludedModelsText}
+                    disabled={disableControls || editor.saving || !editor.json}
+                    onChange={(value) => onChange('excludedModelsText', value)}
+                  />
                   <div className="form-group">
                     <label>{t('auth_files.headers_label')}</label>
                     <textarea

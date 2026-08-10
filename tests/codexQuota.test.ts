@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { TFunction } from 'i18next';
-import { CODEX_CONFIG, buildCodexQuotaWindows } from '@/components/quota/quotaConfigs';
+import { CODEX_CONFIG, buildCodexQuotaWindows } from '@/features/quota/providers/codex/data';
 import type { CodexQuotaState, CodexUsagePayload } from '@/types';
 import { normalizeCodexResetCreditsPayload, parseCodexUsagePayload } from '@/utils/quota';
 
@@ -59,7 +59,7 @@ describe('Codex current usage payload', () => {
     expect(windows[1]?.labelParams).toEqual({ name: 'GPT-5.3-Codex-Spark' });
   });
 
-  test('distinguishes total reset credits from credits currently applicable', () => {
+  test('shows reset support when total credits remain but none currently apply', () => {
     const summary = normalizeCodexResetCreditsPayload(
       CURRENT_CODEX_USAGE_PAYLOAD.rate_limit_reset_credits
     );
@@ -74,7 +74,7 @@ describe('Codex current usage payload', () => {
       rateLimitResetCreditsAvailableCount: summary.availableCount,
       rateLimitResetCreditsApplicableAvailableCount: summary.applicableAvailableCount,
     };
-    expect(CODEX_CONFIG.canResetQuota?.(quota)).toBeFalse();
+    expect(CODEX_CONFIG.canResetQuota?.(quota)).toBeTrue();
   });
 
   test('keeps reset support for legacy payloads without applicable count', () => {

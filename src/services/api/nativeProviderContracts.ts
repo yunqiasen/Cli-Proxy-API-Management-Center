@@ -72,6 +72,7 @@ const normalizeModels = (value: unknown): ModelAlias[] | undefined => {
       if (priority !== undefined) model.priority = priority;
       const testModel = normalizeString(item['test-model']);
       if (testModel) model.testModel = testModel;
+      if (isRecord(item.thinking)) model.thinking = item.thinking;
       return model;
     })
     .filter((item): item is ModelAlias => item !== null);
@@ -103,6 +104,8 @@ export const normalizeNativeApiKeyEntries = (value: unknown): NativeApiKeyEntry[
     const entry: NativeApiKeyEntry = { apiKey };
     const priority = normalizeNumber(item.priority);
     if (priority !== undefined) entry.priority = priority;
+    const weight = normalizeNumber(item.weight);
+    if (weight !== undefined) entry.weight = weight;
     const proxyUrl = normalizeString(item['proxy-url']);
     if (proxyUrl) entry.proxyUrl = proxyUrl;
     const authIndex = normalizeString(item['auth-index']);
@@ -166,6 +169,7 @@ const serializeModels = (models?: ModelAlias[]) => {
       if (model.alias?.trim() && model.alias.trim() !== name) entry.alias = model.alias.trim();
       if (model.priority !== undefined) entry.priority = model.priority;
       if (model.testModel?.trim()) entry['test-model'] = model.testModel.trim();
+      if (model.thinking) entry.thinking = model.thinking;
       return entry;
     })
     .filter((entry): entry is Record<string, unknown> => entry !== null);
@@ -187,6 +191,7 @@ export const serializeNativeApiKeyEntry = (
 ): Record<string, unknown> => {
   const payload: Record<string, unknown> = { 'api-key': entry.apiKey.trim() };
   if (entry.priority !== undefined) payload.priority = entry.priority;
+  if (entry.weight !== undefined) payload.weight = entry.weight;
   if (entry.proxyUrl?.trim()) payload['proxy-url'] = entry.proxyUrl.trim();
   return payload;
 };

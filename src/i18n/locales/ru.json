@@ -281,7 +281,7 @@
     "pagination_next": "Следующая",
     "pagination_info": "Страница {{current}} / {{total}} · {{count}} файлов",
     "search_label": "Поиск конфигов",
-    "search_placeholder": "Фильтр по имени, типу или провайдеру, поддерживается wildcard *",
+    "search_placeholder": "Фильтр по имени, аккаунту, типу или провайдеру, поддерживается wildcard *",
     "problem_filter_label": "Фильтр статуса",
     "problem_filter_all": "Все",
     "problem_filter_enabled": "Вкл.",
@@ -296,9 +296,6 @@
     "priority_display": "Приоритет",
     "weight_display": "Вес WRR",
     "page_size_label": "На странице",
-    "view_mode_paged": "Постранично",
-    "view_mode_all": "Показать все",
-    "too_many_files_warning": "Слишком много учётных данных. Полный список может повлиять на производительность, используйте постраничный режим.",
     "filter_all": "Все",
     "filter_qwen": "Qwen",
     "filter_gemini": "Gemini",
@@ -356,6 +353,8 @@
     "weight_hint": "По умолчанию 1. Значения ≤ 0 исключают эти учётные данные из взвешенного планирования; максимум 1 000 000.",
     "weight_invalid_integer": "Вес должен быть целым числом.",
     "weight_invalid_max": "Вес не может превышать 1 000 000.",
+    "disable_cooling_label": "Отключить экспоненциальный cooldown (disable_cooling)",
+    "disable_cooling_hint": "Отключает cooldown после ошибок и экспоненциальную задержку только для этих учётных данных; остальные не затрагиваются.",
     "websockets_label": "WebSockets (websockets)",
     "websockets_hint": "Включает websocket-транспорт Responses API для этих учётных данных.",
     "using_api_label": "Использовать официальный API (using_api)",
@@ -363,6 +362,7 @@
     "note_label": "Заметка (note)",
     "note_placeholder": "Введите заметку, например: аккаунт Ивана",
     "note_hint": "Необязательно. Используется для описания назначения или владельца учётных данных; оставьте пустым, чтобы не записывать.",
+    "excluded_models_label": "Исключённые модели (excluded_models)",
     "prefix_proxy_invalid_json": "Этот файл авторизации не является JSON-объектом, поэтому поля нельзя редактировать.",
     "prefix_proxy_html_challenge": "Скачанное содержимое является HTML-страницей проверки, а не JSON-объектом авторизации. Повторно авторизуйтесь или замените файл перед редактированием полей.",
     "prefix_proxy_saved_success": "Файл авторизации \"{{name}}\" успешно обновлён",
@@ -461,7 +461,7 @@
     "plan_label": "Тариф",
     "expires_label": "Истекает",
     "reset_credits_label": "Ручные сбросы",
-    "reset_credits_expiry_label": "Срок действия ручных сбросов (GMT+8)",
+    "reset_credits_expiry_label": "Срок действия ручных сбросов ({{timezone}})",
     "reset_credit_number": "Сброс {{index}}",
     "reset_credits_expiry_failed": "Не удалось загрузить срок действия ручных сбросов: {{message}}",
     "reset_credits_invalid_payload": "Недопустимый ответ о сроке действия ручных сбросов",
@@ -541,16 +541,6 @@
     "provider_placeholder": "например: codex / openai",
     "provider_hint": "По умолчанию используется текущий фильтр; выберите существующего провайдера или введите новое имя.",
     "models_label": "Отключаемые модели",
-    "models_loading": "Загрузка моделей...",
-    "models_unsupported": "Текущая версия CPA не поддерживает загрузку списка моделей.",
-    "models_loaded": "Загружено моделей: {{count}}. Отметьте модели, которые нужно отключить.",
-    "no_models_available": "Для этого провайдера нет доступных моделей.",
-    "custom_rule_label": "Пользовательское правило модели",
-    "custom_rule_hint": "Введите точный ID модели или шаблон, например gpt-*.",
-    "custom_rule_placeholder": "например: gpt-* / custom-model",
-    "custom_rule_add": "Добавить правило",
-    "custom_rules_label": "Настроенные пользовательские правила",
-    "custom_rule_remove": "Удалить {{rule}}",
     "save": "Сохранить/обновить",
     "save_success": "Отключение моделей обновлено",
     "save_failed": "Не удалось обновить отключение моделей",
@@ -565,6 +555,38 @@
     "upgrade_required": "Текущая версия CPA не поддерживает отключение OAuth-моделей. Пожалуйста, обновите систему.",
     "upgrade_required_title": "Пожалуйста, обновите CLI Proxy API",
     "upgrade_required_desc": "Текущая версия сервера не поддерживает получение отключения OAuth-моделей. Обновите CPA (CLI Proxy API) до последней версии и повторите попытку."
+  },
+  "excluded_models": {
+    "trigger_summary": "Исключено: {{excluded}} · доступно: {{available}}",
+    "trigger_summary_rules": "Правил: {{n}}",
+    "trigger_empty": "Нет исключённых моделей",
+    "meter_aria": "Исключено {{excluded}} из {{total}} моделей",
+    "search_placeholder": "Поиск моделей…",
+    "search_aria": "Поиск моделей для исключения",
+    "list_aria": "Модели",
+    "no_results": "Нет моделей по запросу «{{query}}»",
+    "catalog_loading": "Загрузка моделей…",
+    "catalog_unavailable": "Список моделей недоступен — правила всё равно применяются.",
+    "catalog_error": "Не удалось загрузить модели.",
+    "catalog_retry": "Повторить",
+    "catalog_empty": "Нет моделей для отображения.",
+    "footer_count": "Исключено {{excluded}} / {{total}}",
+    "select_all": "Исключить все",
+    "clear": "Очистить",
+    "clear_aria": "Очистить выбранные модели (правила с подстановкой останутся)",
+    "badge_wildcard": "По правилу",
+    "badge_unknown": "Нет в списке",
+    "wildcard_reason": "Соответствует правилу {{rule}}",
+    "wildcard_locked": "Исключено правилом {{rule}} — измените правило ниже",
+    "also_wildcard": "Также соответствует {{rule}}",
+    "chips_more": "+{{n}}",
+    "chip_remove": "Не исключать {{rule}}",
+    "rules_label": "Правила с подстановкой",
+    "rules_placeholder": "По одному правилу в строке, например gpt-5-*",
+    "rules_hint": "* соответствует любым символам. Регистр не учитывается.",
+    "rules_match_count": "соответствует моделям: {{n}}",
+    "rules_match_none": "не соответствует ни одной модели из списка",
+    "rules_reserved": "«*» отключает провайдера целиком — используйте переключатель «Отключено»"
   },
   "oauth_model_alias": {
     "title": "Псевдонимы моделей OAuth",
@@ -807,6 +829,21 @@
   },
   "config_management": {
     "title": "Панель конфигурации",
+    "meta_fields": "Настроек: {{count}}",
+    "meta_dirty": "Не сохранено: {{count}}",
+    "meta_dirty_source": "Несохранённые правки исходника",
+    "meta_errors": "Ошибок валидации: {{count}}",
+    "meta_synced": "Синхронизировано",
+    "actions": {
+      "discard": "Отменить изменения",
+      "save": "Сохранить изменения"
+    },
+    "discard_confirm_message": "Отменить все несохранённые изменения и восстановить последнюю версию с сервера?",
+    "mode": {
+      "label": "Режим редактора",
+      "visual": "Визуальный",
+      "source": "Исходный код"
+    },
     "reload": "Перезагрузить",
     "reload_confirm_message": "Перезагрузка отбросит ваши несохранённые изменения. Продолжить?",
     "save": "Сохранить",
@@ -840,26 +877,16 @@
       "confirm": "Подтвердить",
       "no_changes": "Изменений не обнаружено"
     },
-    "tabs": {
-      "visual": "Визуальный редактор",
-      "source": "Редактор файла"
-    },
     "visual": {
-      "notice": "Визуальный режим охватывает основные поля. Остальные параметры config.yaml по-прежнему нужно проверять или редактировать в режиме исходника.",
-      "quick_jump": "Быстрый переход",
-      "mode": {
-        "simple": "Простой",
-        "full": "Полный",
-        "label": "Режим редактора",
-        "more_settings": "Переключитесь в полный режим, чтобы увидеть все разделы ({{total}})",
-        "validation_banner": "В некоторых дополнительных параметрах есть ошибки проверки, сохранение заблокировано. Переключитесь в полный режим, чтобы исправить их.",
-        "switch_to_full": "Перейти в полный режим"
-      },
       "search": {
         "placeholder": "Поиск настроек (по названию или ключу YAML)",
         "no_results": "Нет подходящих настроек"
       },
       "sections": {
+        "common": {
+          "title": "Основные",
+          "description": "Самые востребованные настройки — те же данные, что и в полных разделах"
+        },
         "connectivity": {
           "title": "Доступ и аутентификация",
           "description": "Адрес сервера, порт, каталог аутентификации и ключи API"
@@ -875,8 +902,6 @@
           "signature_title": "Подпись Antigravity"
         },
         "server": {
-          "title": "Настройки сервера",
-          "description": "Базовые параметры сервера",
           "host": "Адрес хоста",
           "port": "Порт"
         },
@@ -902,14 +927,10 @@
           "panel_repo": "Репозиторий панели"
         },
         "auth": {
-          "title": "Настройки аутентификации",
-          "description": "API-ключи и каталог аутентификации",
           "auth_dir": "Каталог auth-dir",
           "auth_dir_hint": "Путь к каталогу с файлами аутентификации (поддерживает ~)"
         },
         "system": {
-          "title": "Системные настройки",
-          "description": "Отладка, журналирование, статистика и производительность",
           "debug": "Режим отладки",
           "debug_desc": "Включить подробные отладочные журналы",
           "commercial_mode": "Коммерческий режим",
@@ -1054,7 +1075,15 @@
         "input_placeholder": "Вставьте API-ключ",
         "input_hint": "Меняет только содержимое локального файла конфигурации, не синхронизируется с интерфейсом управления API-ключами",
         "error_empty": "Введите API-ключ",
-        "error_invalid": "API-ключ содержит недопустимые символы"
+        "error_invalid": "API-ключ содержит недопустимые символы",
+        "strength": {
+          "label": "Надёжность API-ключа",
+          "empty": "Не введено",
+          "weak": "Слабый",
+          "fair": "Средний",
+          "good": "Хороший",
+          "strong": "Надёжный"
+        }
       },
       "payload_rules": {
         "rule": "Правило",
@@ -1127,7 +1156,49 @@
   "quota_management": {
     "title": "Управление квотами",
     "description": "Следите за статусом квот OAuth для учётных данных Antigravity, Codex, Claude, Kimi и xAI.",
-    "refresh_all_credentials": "Обновить все учётные данные"
+    "refresh_all_credentials": "Обновить все учётные данные",
+    "refresh_current_page": "Обновить текущую страницу",
+    "refresh_progress": "Фоновое обновление {{done}}/{{total}}",
+    "refresh_all_started": "Запущено фоновое обновление {{count}} учётных данных",
+    "refresh_all_done": "Обновление завершено: успешно {{success}}, ошибок {{failed}}",
+    "refresh_all_failed": "Не удалось обновить все учётные данные: {{message}}",
+    "sort_label": "Сортировка",
+    "sort_default": "По умолчанию",
+    "sort_soonest": "Сначала ближайшее восстановление",
+    "meta_credentials": "{{count}} учётных данных",
+    "meta_loaded": "{{count}} загружено",
+    "meta_attention": "{{count}} требуют внимания",
+    "empty_title": "Нет учётных данных с квотами",
+    "empty_desc": "Подключите учётные данные Antigravity, Claude, Codex, xAI или Kimi, чтобы отслеживать квоту здесь.",
+    "windows_title": "Окна квот",
+    "windows_span_weekly": "две недели",
+    "windows_span_session": "три дня",
+    "windows_current": "текущий",
+    "windows_today": "Сегодня",
+    "windows_prev": "Назад",
+    "windows_next": "Вперёд",
+    "windows_mode_weekly": "Неделя",
+    "windows_mode_session": "5 часов",
+    "windows_credential": "Учётные данные",
+    "windows_idle": "нет активного окна",
+    "windows_empty_session": "Ни одни учётные данные на этой странице не предоставляют 5-часовое окно квоты.",
+    "windows_legend_current": "текущее окно",
+    "windows_legend_upcoming": "предстоящее",
+    "windows_legend_elapsed": "прошедшее",
+    "windows_legend_reset_credit": "срок ручного сброса",
+    "soonest_row_hint": "Восстановится первым у этих учётных данных",
+    "windows_reset_credit": "Ручной сброс",
+    "windows_credit_granted": "Предоставлен",
+    "windows_credit_expires": "Истекает",
+    "windows_note_weekly": "Каждая полоса — одно окно квоты, от открытия до сброса. Окна, заканчивающиеся вместе, конкурируют за одни и те же дни.",
+    "windows_note_session": "Каждая полоса — одно 5-часовое окно. Показаны только учётные данные с активным окном; остальные остаются пустыми.",
+    "weekday_sun": "Вс",
+    "weekday_mon": "Пн",
+    "weekday_tue": "Вт",
+    "weekday_wed": "Ср",
+    "weekday_thu": "Чт",
+    "weekday_fri": "Пт",
+    "weekday_sat": "Сб"
   },
   "plugin_management": {
     "title": "Управление плагинами",
@@ -1398,6 +1469,8 @@
       "code0": "Code0",
       "fennoAI": "FennoAI",
       "qiniuCloud": "Qiniu Cloud",
+      "lmuAI": "LMU AI (Lingmou AI)",
+      "infistar": "Infistar",
       "kimi": "Kimi",
       "image": "Провайдеры изображений",
       "video": "Видео-провайдеры",
@@ -1454,11 +1527,15 @@
         "standard": "Обычный URL",
         "direct": "Прямой URL",
         "domestic": "Маршрут для материкового Китая",
-        "overseas": "Зарубежный маршрут"
+        "overseas": "Зарубежный маршрут",
+        "mainlandChina": "Материковый Китай (рекомендуется)",
+        "global": "Глобальный"
       },
       "urlOptionDescriptions": {
         "domestic": "Для пользователей и нагрузок в материковом Китае; обычно дает меньшую задержку в сетях материкового Китая.",
-        "overseas": "Для зарубежных развертываний, трансграничного доступа или задач, которым нужны зарубежные модели."
+        "overseas": "Для зарубежных развертываний, трансграничного доступа или задач, которым нужны зарубежные модели.",
+        "mainlandChinaRecommended": "Рекомендуется для пользователей и нагрузок в сетях материкового Китая.",
+        "global": "Для пользователей и нагрузок во всех остальных регионах."
       },
       "modelsTitle": "Настройки моделей по протоколам",
       "modelsHint": "Настраивайте allowlist моделей и алиасы отдельно для маршрутов Codex API, Anthropic, Gemini и OpenAI-compatible.",
@@ -1539,7 +1616,7 @@
       "headersSection": "Заголовки запроса",
       "addHeader": "Добавить заголовок",
       "excludedSection": "Исключённые модели",
-      "excludedHint": "По одной модели в строке; совпавшие модели не будут направлены",
+      "excludedDisabledNote": "«*» означает, что провайдер отключён целиком — используйте переключатель «Отключено» выше.",
       "cloakSection": "Настройки Cloak",
       "cloakMode": "Режим",
       "cloakStrict": "Строгий режим",
@@ -1558,8 +1635,18 @@
       "proxyBadge": "Прокси",
       "modelBadgeImage": "Image",
       "modelBadgeThinking": "Thinking",
-      "thinkingConfig": "Thinking config (JSON)",
-      "thinkingConfigHint": "Поддерживает levels, min, max, zero_allowed, dynamic_allowed",
+      "thinkingConfig": "Допустимые уровни thinking",
+      "thinkingExistingHint": "Текущая серверная конфигурация сохранится до изменения выбора, после чего будет заменена выбранными стандартными уровнями.",
+      "thinkingLevels": {
+        "none": "Отключить thinking",
+        "minimal": "Минимальный",
+        "low": "Низкий",
+        "medium": "Средний",
+        "high": "Высокий",
+        "xhigh": "Очень высокий",
+        "max": "Максимальный",
+        "auto": "Автоматический"
+      },
       "cloakCacheUserId": "Кэшировать user_id",
       "cloakCacheUserIdHint": "Переиспользовать Claude cloak user_id для каждого API-ключа",
       "experimentalCchSigning": "Экспериментальная CCH-подпись",

@@ -223,6 +223,8 @@ const emptyMediaOperation = (): MediaOperationInput => ({
   model: '',
   responseFormat: 'passthrough',
   resultPath: '',
+  testRequestJson: '',
+  testRequestMultipartFieldsText: '',
   asyncEnabled: false,
   taskIdPath: '',
   pollMethod: 'GET',
@@ -243,6 +245,8 @@ const buildMediaProviderFormInput = (
   baseUrl: config?.baseUrl ?? '',
   proxyUrl: config?.apiKeyEntries?.[0]?.proxyUrl ?? '',
   prefix: config?.prefix ?? '',
+  apiKeyHeader: config?.apiKeyHeader ?? '',
+  apiKeyPrefix: config?.apiKeyPrefix ?? '',
   disabled: config?.disabled === true,
   disableCooling: config?.disableCooling === true,
   priority: config?.priority,
@@ -271,6 +275,10 @@ const buildMediaProviderFormInput = (
         model: operation.model ?? '',
         responseFormat: operation.responseFormat,
         resultPath: operation.resultPath ?? '',
+        testRequestJson: operation.testRequest?.json ?? '',
+        testRequestMultipartFieldsText: Object.entries(operation.testRequest?.multipartFields ?? {})
+          .map(([key, value]) => `${key}=${value}`)
+          .join('\n'),
         asyncEnabled: Boolean(operation.async),
         taskIdPath: operation.async?.taskIdPath ?? '',
         pollMethod: operation.async?.pollMethod ?? 'GET',
@@ -335,6 +343,20 @@ const buildMediaProviderConfig = (
         responseFormat: operation.responseFormat,
         resultPath: operation.resultPath.trim() || undefined,
       };
+      const testRequestJson = operation.testRequestJson.trim();
+      const multipartFields = Object.fromEntries(
+        splitMediaText(operation.testRequestMultipartFieldsText).flatMap((line) => {
+          const separator = line.indexOf('=');
+          if (separator <= 0) return [];
+          return [[line.slice(0, separator).trim(), line.slice(separator + 1)]];
+        })
+      );
+      if (testRequestJson || Object.keys(multipartFields).length) {
+        result.testRequest = {
+          ...(testRequestJson ? { json: testRequestJson } : {}),
+          ...(Object.keys(multipartFields).length ? { multipartFields } : {}),
+        };
+      }
       if (operation.asyncEnabled) {
         result.async = {
           taskIdPath: operation.taskIdPath.trim(),
@@ -364,6 +386,11 @@ const buildMediaProviderConfig = (
     disabled: input.disabled,
     disableCooling: input.disableCooling === true,
     prefix: input.prefix.trim() || undefined,
+    apiKeyHeader: input.apiKeyHeader?.trim() || undefined,
+    apiKeyPrefix:
+      input.apiKeyPrefix !== undefined && input.apiKeyPrefix.trim() !== ''
+        ? input.apiKeyPrefix.trim()
+        : undefined,
     authIndex: providerAuthIndex,
     apiKeyEntries,
     headers: Object.keys(headers).length ? headers : undefined,

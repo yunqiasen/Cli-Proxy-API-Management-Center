@@ -1654,6 +1654,8 @@
       "providerName": "Имя провайдера",
       "baseUrlHint": "Общий адрес API провайдера",
       "testProvider": "Проверить провайдера",
+      "apiKeyHeader": "Заголовок API-ключа",
+      "apiKeyPrefix": "Префикс API-ключа (используйте - без префикса)",
       "operationsSection": "Операции и API",
       "operationUntitled": "Операция без имени",
       "operationName": "Имя операции",
@@ -1669,6 +1671,9 @@
       "fixedModelPlaceholder": "Необязательно; заменяет модель запроса",
       "responseFormat": "Формат ответа",
       "resultPath": "JSON-путь результата",
+      "testRequestJson": "JSON для проверки подключения",
+      "testRequestMultipartFields": "Поля формы для проверки",
+      "testRequestHint": "Необязательно. Используется кнопкой проверки; JSON или по одному field=value в строке.",
       "asyncEnabled": "Асинхронная отправка и опрос",
       "asyncHint": "Опрос задачи тем же ключом",
       "taskIdPath": "Путь ID задачи",
@@ -1703,7 +1708,8 @@
         "speech": "Речь",
         "music": "Музыка",
         "clone": "Клонирование голоса",
-        "voice-convert": "Изменение голоса"
+        "voice-convert": "Изменение голоса",
+        "transcribe": "Транскрибация"
       }
     }
   }

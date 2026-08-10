@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { apiCallApi, getApiCallErrorMessage } from '@/services/api';
-import { buildMediaConnectivityRequest } from '@/services/api/mediaProviderConnectivity';
+import {
+  MEDIA_CONNECTIVITY_TIMEOUT_MS,
+  buildMediaConnectivityRequest,
+} from '@/services/api/mediaProviderConnectivity';
 import { Collapsible } from '@/components/ui/Collapsible';
 import { IconLoader2, IconPlus, IconX } from '@/components/ui/icons';
 import type { MediaProviderConfig } from '@/types';
@@ -46,6 +49,8 @@ const emptyOperation = (): MediaOperationInput => ({
   model: '',
   responseFormat: 'passthrough',
   resultPath: '',
+  testRequestJson: '',
+  testRequestMultipartFieldsText: '',
   asyncEnabled: false,
   taskIdPath: '',
   pollMethod: 'GET',
@@ -69,6 +74,8 @@ const inputFromConfig = (
     baseUrl: config?.baseUrl ?? '',
     proxyUrl: config?.apiKeyEntries?.[0]?.proxyUrl ?? '',
     prefix: config?.prefix ?? '',
+    apiKeyHeader: config?.apiKeyHeader ?? '',
+    apiKeyPrefix: config?.apiKeyPrefix ?? '',
     disabled: config?.disabled === true,
     disableCooling: config?.disableCooling === true,
     priority: config?.priority,
@@ -105,6 +112,10 @@ const inputFromConfig = (
           model: operation.model ?? '',
           responseFormat: operation.responseFormat,
           resultPath: operation.resultPath ?? '',
+          testRequestJson: operation.testRequest?.json ?? '',
+          testRequestMultipartFieldsText: Object.entries(operation.testRequest?.multipartFields ?? {})
+            .map(([key, value]) => `${key}=${value}`)
+            .join('\n'),
           asyncEnabled: Boolean(operation.async),
           taskIdPath: operation.async?.taskIdPath ?? '',
           pollMethod: operation.async?.pollMethod ?? 'GET',
@@ -177,6 +188,11 @@ export function MediaProviderForm({
     });
   }, [entries.length]);
 
+  useEffect(() => {
+    setForm(inputFromConfig(brand, resource, mode));
+    setError(null);
+  }, [brand, mode, resource]);
+
   const updateField = <K extends keyof ProviderEntryFormInput>(
     key: K,
     value: ProviderEntryFormInput[K]
@@ -220,9 +236,23 @@ export function MediaProviderForm({
       kind: brand,
       baseUrl: form.baseUrl,
       model,
-      operation,
+      operation: operation
+        ? {
+            name: operation.name,
+            capability: operation.capability || undefined,
+            method: operation.method,
+            path: operation.path,
+            requestFormat: operation.requestFormat,
+            modelMode: operation.modelMode,
+            model: operation.model || undefined,
+            testRequestJson: operation.testRequestJson,
+            testRequestMultipartFieldsText: operation.testRequestMultipartFieldsText,
+          }
+        : undefined,
       headers,
       apiKey: resolveEntryKey(index),
+      apiKeyHeader: form.apiKeyHeader,
+      apiKeyPrefix: form.apiKeyPrefix,
       authIndex: entry.authIndex,
     });
     setStatuses((previous) =>
@@ -238,7 +268,7 @@ export function MediaProviderForm({
           data: request.data,
           dataBase64: request.dataBase64,
         },
-        { timeout: 30_000 }
+        { timeout: MEDIA_CONNECTIVITY_TIMEOUT_MS }
       );
       if (result.statusCode < 200 || result.statusCode >= 300)
         throw new Error(getApiCallErrorMessage(result));
@@ -321,6 +351,28 @@ export function MediaProviderForm({
             disabled={mutating}
             placeholder="https://api.example.com/v1"
           />
+        </div>
+        <div className={styles.fieldRow}>
+          <div className={styles.field}>
+            <label className={styles.label}>{t('providersPage.media.apiKeyHeader')}</label>
+            <input
+              className={styles.input}
+              value={form.apiKeyHeader ?? ''}
+              onChange={(event) => updateField('apiKeyHeader', event.target.value)}
+              disabled={mutating}
+              placeholder="Authorization"
+            />
+          </div>
+          <div className={styles.field}>
+            <label className={styles.label}>{t('providersPage.media.apiKeyPrefix')}</label>
+            <input
+              className={styles.input}
+              value={form.apiKeyPrefix ?? ''}
+              onChange={(event) => updateField('apiKeyPrefix', event.target.value)}
+              disabled={mutating}
+              placeholder="Bearer"
+            />
+          </div>
         </div>
         <div className={styles.fieldRow}>
           <div className={styles.field}>

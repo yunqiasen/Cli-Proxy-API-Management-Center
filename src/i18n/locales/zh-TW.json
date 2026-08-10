@@ -1702,6 +1702,8 @@
       "providerName": "供應商名稱",
       "baseUrlHint": "此供應商共用的上游位址",
       "testProvider": "測試目前供應商",
+      "apiKeyHeader": "API 金鑰請求標頭",
+      "apiKeyPrefix": "API 金鑰前綴（填 - 表示不加前綴）",
       "operationsSection": "功能與介面",
       "operationUntitled": "未命名功能",
       "operationName": "功能名稱",
@@ -1717,6 +1719,9 @@
       "fixedModelPlaceholder": "可選；填寫後覆蓋請求模型",
       "responseFormat": "回應格式",
       "resultPath": "結果 JSON 路徑",
+      "testRequestJson": "連線測試 JSON",
+      "testRequestMultipartFields": "連線測試表單欄位",
+      "testRequestHint": "可選。測試按鈕使用此內容；JSON 直接填請求內容，表單每行填 欄位=值。",
       "asyncEnabled": "非同步提交並輪詢",
       "asyncHint": "提交任務後使用同一個 Key 輪詢",
       "taskIdPath": "任務 ID 路徑",
@@ -1751,7 +1756,8 @@
         "speech": "語音生成",
         "music": "音樂生成",
         "clone": "聲音複製",
-        "voice-convert": "變聲"
+        "voice-convert": "變聲",
+        "transcribe": "語音轉寫"
       }
     }
   }

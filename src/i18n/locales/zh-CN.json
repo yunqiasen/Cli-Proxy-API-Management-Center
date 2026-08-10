@@ -1676,6 +1676,8 @@
       "providerName": "供应商名称",
       "baseUrlHint": "该供应商共用的上游地址",
       "testProvider": "测试当前供应商",
+      "apiKeyHeader": "API 密钥请求头",
+      "apiKeyPrefix": "API 密钥前缀（填 - 表示不加前缀）",
       "operationsSection": "功能与接口",
       "operationUntitled": "未命名功能",
       "operationName": "功能名称",
@@ -1691,6 +1693,9 @@
       "fixedModelPlaceholder": "可选；填写后覆盖请求中的模型",
       "responseFormat": "响应格式",
       "resultPath": "结果 JSON 路径",
+      "testRequestJson": "连通性测试 JSON",
+      "testRequestMultipartFields": "连通性测试表单字段",
+      "testRequestHint": "可选。测试按钮使用此内容；JSON 直接填写请求体，表单每行写 字段=值。",
       "asyncEnabled": "异步提交并轮询",
       "asyncHint": "提交任务后，使用同一个 Key 轮询任务接口",
       "taskIdPath": "任务 ID 路径",
@@ -1725,7 +1730,8 @@
         "speech": "语音生成",
         "music": "音乐生成",
         "clone": "声音克隆",
-        "voice-convert": "变声"
+        "voice-convert": "变声",
+        "transcribe": "语音识别"
       }
     }
   }

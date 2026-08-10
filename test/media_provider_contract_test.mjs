@@ -37,6 +37,9 @@ const rawProvider = {
       'model-mode': 'none',
       'response-format': 'json-url',
       'result-path': 'output.url',
+      'test-request': {
+        json: '{"prompt":"test"}',
+      },
       async: {
         'task-id-path': 'task_id',
         'poll-method': 'GET',
@@ -63,6 +66,7 @@ test('normalizes media provider payload including keys, models, operations, and 
   assert.deepEqual(normalized.models?.[0].capabilities, ['generate', 'edit']);
   assert.equal(normalized.operations?.[0].modelMode, 'none');
   assert.equal(normalized.operations?.[0].async?.pollInterval, '2s');
+  assert.equal(normalized.operations?.[0].testRequest?.json, '{"prompt":"test"}');
 });
 
 test('serializes exact backend kebab-case contract and strips response-only auth indexes', () => {
@@ -271,4 +275,32 @@ test('drops operations with incomplete normalization or async contracts', () => 
   });
   assert.ok(normalized);
   assert.deepEqual(normalized.operations, []);
+});
+
+test('round-trips custom credential header and prefix provider fields', () => {
+  const normalized = normalizeMediaProviderPayload({
+    name: 'Noiz',
+    kind: 'audio',
+    'base-url': 'https://api.noiz.ai/v1',
+    'api-key-header': 'X-API-Key',
+    'api-key-prefix': '-',
+    'api-key-entries': [{ 'api-key': 'token' }],
+    operations: [
+      {
+        name: 'speech',
+        capability: 'speech',
+        method: 'POST',
+        path: '/text-to-speech',
+        'request-format': 'json',
+        'model-mode': 'none',
+        'response-format': 'binary',
+      },
+    ],
+  });
+  assert.ok(normalized);
+  assert.equal(normalized.apiKeyHeader, 'X-API-Key');
+  assert.equal(normalized.apiKeyPrefix, '-');
+  const serialized = serializeMediaProviderPayload(normalized);
+  assert.equal(serialized['api-key-header'], 'X-API-Key');
+  assert.equal(serialized['api-key-prefix'], '-');
 });

@@ -22,8 +22,22 @@ export function MediaOperationsEditor({
   onRemove,
 }: MediaOperationsEditorProps) {
   const { t } = useTranslation();
+  const preferredOperationIndex = operations.findIndex((operation) => {
+    const capability = operation.capability.trim().toLowerCase();
+    const name = operation.name.trim().toLowerCase();
+    return (
+      capability === 'generate' ||
+      name === 'generate' ||
+      capability === 'speech' ||
+      name === 'speech' ||
+      capability === 'text-to-video' ||
+      name === 'text-to-video' ||
+      capability === 'transcribe' ||
+      name === 'transcribe'
+    );
+  });
   const [expandedIndex, setExpandedIndex] = useState<number | null>(
-    operations.length === 1 ? 0 : null
+    operations.length === 1 ? 0 : preferredOperationIndex >= 0 ? preferredOperationIndex : null
   );
 
   return (
@@ -221,6 +235,41 @@ export function MediaOperationsEditor({
                     disabled={mutating}
                     placeholder="data.0.url"
                   />
+                </div>
+                <div className={styles.section}>
+                  <div className={styles.field}>
+                    <label className={styles.label}>
+                      {operation.requestFormat === 'multipart'
+                        ? t('providersPage.media.testRequestMultipartFields')
+                        : t('providersPage.media.testRequestJson')}
+                    </label>
+                    <textarea
+                      className={styles.textarea}
+                      rows={operation.requestFormat === 'multipart' ? 4 : 5}
+                      value={
+                        operation.requestFormat === 'multipart'
+                          ? operation.testRequestMultipartFieldsText
+                          : operation.testRequestJson
+                      }
+                      onChange={(event) =>
+                        onUpdate(
+                          index,
+                          operation.requestFormat === 'multipart'
+                            ? { testRequestMultipartFieldsText: event.target.value }
+                            : { testRequestJson: event.target.value }
+                        )
+                      }
+                      disabled={mutating || operation.requestFormat === 'binary'}
+                      placeholder={
+                        operation.requestFormat === 'multipart'
+                          ? 'text=CPA test\nvoice_id=voice-id\noutput_format=mp3'
+                          : '{"messages":[{"role":"assistant","content":"CPA test"}]}'
+                      }
+                    />
+                    <span className={styles.labelHint}>
+                      {t('providersPage.media.testRequestHint')}
+                    </span>
+                  </div>
                 </div>
                 <label className={styles.checkboxRow}>
                   <input

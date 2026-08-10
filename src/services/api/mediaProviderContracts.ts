@@ -21,6 +21,7 @@ const MEDIA_CAPABILITIES = new Set([
   'music',
   'clone',
   'voice-convert',
+  'transcribe',
 ]);
 const MEDIA_METHODS = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']);
 const MEDIA_REQUEST_FORMATS = new Set(['json', 'multipart', 'binary']);
@@ -37,6 +38,10 @@ const PROVIDER_FIELDS = [
   'disable-cooling',
   'disableCooling',
   'prefix',
+  'api-key-header',
+  'apiKeyHeader',
+  'api-key-prefix',
+  'apiKeyPrefix',
   'api-key-entries',
   'apiKeyEntries',
   'headers',
@@ -78,6 +83,8 @@ const OPERATION_FIELDS = [
   'responseFormat',
   'result-path',
   'resultPath',
+  'test-request',
+  'testRequest',
   'async',
 ] as const;
 const ASYNC_FIELDS = [
@@ -267,6 +274,23 @@ const normalizeMediaOperation = (value: unknown): MediaOperationConfig | null =>
   if (model && modelMode !== 'none') operation.model = model;
   const resultPath = normalizeString(value['result-path'] ?? value.resultPath);
   if (resultPath) operation.resultPath = resultPath;
+  const rawTestRequest = value['test-request'] ?? value.testRequest;
+  if (isRecord(rawTestRequest)) {
+    const json = normalizeString(rawTestRequest.json);
+    const multipartFields = isRecord(rawTestRequest['multipart-fields'] ?? rawTestRequest.multipartFields)
+      ? Object.fromEntries(
+          Object.entries(rawTestRequest['multipart-fields'] ?? rawTestRequest.multipartFields as Record<string, unknown>)
+            .map(([key, fieldValue]) => [key.trim(), String(fieldValue ?? '')])
+            .filter(([key]) => key.length > 0)
+        )
+      : undefined;
+    if (json || (multipartFields && Object.keys(multipartFields).length)) {
+      operation.testRequest = {
+        ...(json ? { json } : {}),
+        ...(multipartFields && Object.keys(multipartFields).length ? { multipartFields } : {}),
+      };
+    }
+  }
   const hasAsyncConfig = value.async !== undefined && value.async !== null;
   const asyncConfig = normalizeMediaAsync(value.async);
   if (hasAsyncConfig && !asyncConfig) return null;
@@ -331,6 +355,12 @@ export function normalizeMediaProviderPayload(
   if (typeof disableCooling === 'boolean') provider.disableCooling = disableCooling;
   const prefix = normalizeString(value.prefix);
   if (prefix) provider.prefix = prefix;
+  const apiKeyHeader = normalizeString(value['api-key-header'] ?? value.apiKeyHeader);
+  if (apiKeyHeader) provider.apiKeyHeader = apiKeyHeader;
+  const apiKeyPrefix = value['api-key-prefix'] ?? value.apiKeyPrefix;
+  if (apiKeyPrefix !== undefined && apiKeyPrefix !== null) {
+    provider.apiKeyPrefix = String(apiKeyPrefix).trim();
+  }
   const headers = normalizeHeaders(value.headers);
   if (headers) provider.headers = headers;
   if (Array.isArray(value.models)) {
@@ -405,6 +435,14 @@ const serializeMediaOperation = (operation: MediaOperationConfig): Record<string
   }
   payload['response-format'] = operation.responseFormat;
   if (operation.resultPath?.trim()) payload['result-path'] = operation.resultPath.trim();
+  if (operation.testRequest) {
+    const testRequest: Record<string, unknown> = {};
+    if (operation.testRequest.json?.trim()) testRequest.json = operation.testRequest.json.trim();
+    if (operation.testRequest.multipartFields && Object.keys(operation.testRequest.multipartFields).length) {
+      testRequest['multipart-fields'] = operation.testRequest.multipartFields;
+    }
+    if (Object.keys(testRequest).length) payload['test-request'] = testRequest;
+  }
   if (operation.async) payload.async = serializeMediaAsync(operation.async);
   return payload;
 };
@@ -433,6 +471,10 @@ export function serializeMediaProviderPayload(
   if (provider.disabled !== undefined) payload.disabled = provider.disabled;
   if (provider.disableCooling) payload['disable-cooling'] = true;
   if (provider.prefix?.trim()) payload.prefix = provider.prefix.trim();
+  if (provider.apiKeyHeader?.trim()) payload['api-key-header'] = provider.apiKeyHeader.trim();
+  if (provider.apiKeyPrefix !== undefined && provider.apiKeyPrefix !== '') {
+    payload['api-key-prefix'] = provider.apiKeyPrefix.trim();
+  }
   if (provider.headers && Object.keys(provider.headers).length) payload.headers = provider.headers;
   if (provider.models?.length) {
     payload.models = provider.models.filter((model) => model.name.trim()).map(serializeMediaModel);

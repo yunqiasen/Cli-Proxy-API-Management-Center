@@ -4,7 +4,7 @@ import type { MediaOperationInput, ModelEntryInput, ProviderEntryFormInput } fro
 export const MEDIA_CAPABILITIES_BY_KIND: Record<MediaKind, readonly string[]> = {
   image: ['generate', 'edit', 'upscale', 'super-resolution', 'remove-background'],
   video: ['generate', 'text-to-video', 'image-to-video', 'remove-watermark'],
-  audio: ['generate', 'speech', 'music', 'clone', 'voice-convert'],
+  audio: ['generate', 'speech', 'music', 'clone', 'voice-convert', 'transcribe'],
 };
 
 export type MediaProviderFormValidationCode =

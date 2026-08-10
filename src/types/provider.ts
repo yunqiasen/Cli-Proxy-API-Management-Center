@@ -118,6 +118,11 @@ export interface MediaAsyncOperationConfig {
   pollInterval?: string;
 }
 
+export interface MediaTestRequestConfig {
+  json?: string;
+  multipartFields?: Record<string, string>;
+}
+
 export interface MediaOperationConfig {
   name: string;
   capability?: string;
@@ -128,6 +133,7 @@ export interface MediaOperationConfig {
   model?: string;
   responseFormat: MediaResponseFormat;
   resultPath?: string;
+  testRequest?: MediaTestRequestConfig;
   async?: MediaAsyncOperationConfig;
 }
 
@@ -139,6 +145,8 @@ export interface MediaProviderConfig {
   disabled?: boolean;
   disableCooling?: boolean;
   prefix?: string;
+  apiKeyHeader?: string;
+  apiKeyPrefix?: string;
   apiKeyEntries: MediaApiKeyEntry[];
   headers?: Record<string, string>;
   models?: MediaModelConfig[];

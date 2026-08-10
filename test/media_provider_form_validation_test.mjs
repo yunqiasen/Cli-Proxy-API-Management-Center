@@ -111,3 +111,38 @@ test('accepts model-free and fully configured async operations', () => {
     null
   );
 });
+
+test('exposes audio transcription as a valid capability', () => {
+  assert.equal(MEDIA_CAPABILITIES_BY_KIND.audio.includes('transcribe'), true);
+  assert.equal(
+    validateMediaProviderFormInput(
+      {
+        ...baseForm(operation({
+          name: 'transcribe',
+          capability: 'transcribe',
+          path: '/audio/transcriptions',
+        })),
+        models: [{ name: 'asr-model', capabilities: ['transcribe'] }],
+      },
+      'audio'
+    ),
+    null
+  );
+});
+
+test('media operation editor defaults to the primary testable operation when several exist', async () => {
+  const source = await import('node:fs/promises').then((fs) =>
+    fs.readFile(new URL('../src/features/providers/sheets/forms/MediaOperationsEditor.tsx', import.meta.url), 'utf8')
+  );
+  assert.match(source, /capability === 'generate'/);
+  assert.match(source, /capability === 'speech'/);
+  assert.match(source, /capability === 'text-to-video'/);
+  assert.match(source, /capability === 'transcribe'/);
+});
+
+test('media operation editor initializes multi-operation forms on the primary operation', async () => {
+  const source = await import('node:fs/promises').then((fs) =>
+    fs.readFile(new URL('../src/features/providers/sheets/forms/MediaOperationsEditor.tsx', import.meta.url), 'utf8')
+  );
+  assert.match(source, /preferredOperationIndex >= 0 \? preferredOperationIndex : null/);
+});

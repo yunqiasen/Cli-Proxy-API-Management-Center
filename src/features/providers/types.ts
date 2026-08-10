@@ -208,6 +208,8 @@ export interface MediaOperationInput {
   model: string;
   responseFormat: 'passthrough' | 'json-url' | 'json-base64' | 'binary';
   resultPath: string;
+  testRequestJson: string;
+  testRequestMultipartFieldsText: string;
   asyncEnabled: boolean;
   taskIdPath: string;
   pollMethod: string;
@@ -227,6 +229,8 @@ export interface ProviderEntryFormInput {
   baseUrl: string;
   proxyUrl: string;
   prefix: string;
+  apiKeyHeader?: string;
+  apiKeyPrefix?: string;
   disabled: boolean;
   disableCooling?: boolean;
   priority?: number;

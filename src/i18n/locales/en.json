@@ -1676,6 +1676,8 @@
       "providerName": "Provider name",
       "baseUrlHint": "Base endpoint shared by this provider",
       "testProvider": "Test current provider",
+      "apiKeyHeader": "API key header",
+      "apiKeyPrefix": "API key prefix (use - for none)",
       "operationsSection": "Operations and endpoints",
       "operationUntitled": "Untitled operation",
       "operationName": "Operation name",
@@ -1691,6 +1693,9 @@
       "fixedModelPlaceholder": "Optional; overrides the requested model",
       "responseFormat": "Response format",
       "resultPath": "Result JSON path",
+      "testRequestJson": "Connectivity test JSON",
+      "testRequestMultipartFields": "Connectivity test form fields",
+      "testRequestHint": "Optional. Used by the test button; enter a JSON body or one field=value pair per line.",
       "asyncEnabled": "Submit and poll asynchronously",
       "asyncHint": "Submit once, then poll the task endpoint with the same key",
       "taskIdPath": "Task ID path",
@@ -1725,7 +1730,8 @@
         "speech": "Speech",
         "music": "Music",
         "clone": "Voice clone",
-        "voice-convert": "Voice conversion"
+        "voice-convert": "Voice conversion",
+        "transcribe": "Transcription"
       }
     }
   }

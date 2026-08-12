@@ -193,6 +193,7 @@ export const serializeNativeApiKeyEntry = (
   if (entry.priority !== undefined) payload.priority = entry.priority;
   if (entry.weight !== undefined) payload.weight = entry.weight;
   if (entry.proxyUrl?.trim()) payload['proxy-url'] = entry.proxyUrl.trim();
+  if (entry.authIndex?.trim()) payload['auth-index'] = entry.authIndex.trim();
   return payload;
 };
 

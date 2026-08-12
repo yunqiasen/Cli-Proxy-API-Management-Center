@@ -1762,7 +1762,7 @@
     "media": {
       "providerName": "Provider name",
       "baseUrlHint": "Base endpoint shared by this provider",
-      "testProvider": "Test current provider",
+      "testProvider": "Test upstream key",
       "apiKeyHeader": "API key header",
       "apiKeyPrefix": "API key prefix (use - for none)",
       "operationsSection": "Operations and endpoints",
@@ -1819,7 +1819,16 @@
         "clone": "Voice clone",
         "voice-convert": "Voice conversion",
         "transcribe": "Transcription"
-      }
+      },
+      "testOperation": "Test operation",
+      "testModel": "Test model",
+      "testGateway": "Test CPA API",
+      "gatewayRoute": "CPA public route",
+      "gatewaySaveFirst": "Save this provider before testing the CPA public API.",
+      "gatewayApiKeyRequired": "CPA has no client API key configured.",
+      "gatewayOperationRequired": "Configure an operation first.",
+      "gatewaySuccess": "HTTP {{status}} · {{route}} · {{model}}",
+      "directKeyTestHint": "Per-key tests below check the upstream directly. This button uses the CPA public API and writes a request log."
     }
   }
 }

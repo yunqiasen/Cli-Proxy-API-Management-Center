@@ -1762,7 +1762,7 @@
     "media": {
       "providerName": "供应商名称",
       "baseUrlHint": "该供应商共用的上游地址",
-      "testProvider": "测试当前供应商",
+      "testProvider": "测试上游 Key",
       "apiKeyHeader": "API 密钥请求头",
       "apiKeyPrefix": "API 密钥前缀（填 - 表示不加前缀）",
       "operationsSection": "功能与接口",
@@ -1819,7 +1819,16 @@
         "clone": "声音克隆",
         "voice-convert": "变声",
         "transcribe": "语音识别"
-      }
+      },
+      "testOperation": "测试接口",
+      "testModel": "测试模型",
+      "testGateway": "测试 CPA API",
+      "gatewayRoute": "CPA 对外路由",
+      "gatewaySaveFirst": "请先保存当前供应商，再测试 CPA 对外 API。",
+      "gatewayApiKeyRequired": "CPA 尚未配置客户端 API Key。",
+      "gatewayOperationRequired": "请先配置一个功能接口。",
+      "gatewaySuccess": "HTTP {{status}} · {{route}} · {{model}}",
+      "directKeyTestHint": "下面每个 Key 的“测试”只检查上游；这里的按钮会走 CPA 对外 API，并写入请求日志。"
     }
   }
 }

@@ -1788,7 +1788,7 @@
     "media": {
       "providerName": "供應商名稱",
       "baseUrlHint": "此供應商共用的上游位址",
-      "testProvider": "測試目前供應商",
+      "testProvider": "測試上游 Key",
       "apiKeyHeader": "API 金鑰請求標頭",
       "apiKeyPrefix": "API 金鑰前綴（填 - 表示不加前綴）",
       "operationsSection": "功能與介面",
@@ -1845,7 +1845,16 @@
         "clone": "聲音複製",
         "voice-convert": "變聲",
         "transcribe": "語音轉寫"
-      }
+      },
+      "testOperation": "測試介面",
+      "testModel": "測試模型",
+      "testGateway": "測試 CPA API",
+      "gatewayRoute": "CPA 對外路由",
+      "gatewaySaveFirst": "請先儲存目前供應商，再測試 CPA 對外 API。",
+      "gatewayApiKeyRequired": "CPA 尚未設定用戶端 API Key。",
+      "gatewayOperationRequired": "請先設定一個功能介面。",
+      "gatewaySuccess": "HTTP {{status}} · {{route}} · {{model}}",
+      "directKeyTestHint": "下方每個 Key 的「測試」只檢查上游；此按鈕會走 CPA 對外 API，並寫入請求日誌。"
     }
   }
 }

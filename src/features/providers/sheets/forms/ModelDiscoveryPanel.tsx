@@ -1,8 +1,12 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { IconLoader2, IconRefreshCw, IconSearch } from '@/components/ui/icons';
 import { SelectionCheckbox } from '@/components/ui/SelectionCheckbox';
-import type { ModelInfo } from '@/utils/models';
+import { normalizeModelIdentity, type ModelInfo } from '@/utils/models';
+import {
+  modelDiscoveryResultSignature,
+  reconcileModelDiscoverySelection,
+} from '../../mediaProviderModelDiscovery';
 import styles from './sharedForm.module.scss';
 
 interface ModelDiscoveryPanelProps {
@@ -31,6 +35,19 @@ export function ModelDiscoveryPanel({
   const { t } = useTranslation();
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const resultSignature = useMemo(() => modelDiscoveryResultSignature(models), [models]);
+  const lastResultSignatureRef = useRef(resultSignature);
+
+  useEffect(() => {
+    setSelected((previous) =>
+      reconcileModelDiscoverySelection(
+        previous,
+        lastResultSignatureRef.current,
+        resultSignature
+      )
+    );
+    lastResultSignatureRef.current = resultSignature;
+  }, [resultSignature]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -38,9 +55,14 @@ export function ModelDiscoveryPanel({
     return models.filter((m) => `${m.name} ${m.alias ?? ''}`.toLowerCase().includes(q));
   }, [models, search]);
 
+  const existingNameKeys = useMemo(
+    () => new Set(Array.from(existingNames, (name) => normalizeModelIdentity(name))),
+    [existingNames]
+  );
+
   const selectable = useMemo(
-    () => filtered.filter((m) => !existingNames.has(m.name)),
-    [filtered, existingNames]
+    () => filtered.filter((m) => !existingNameKeys.has(normalizeModelIdentity(m.name))),
+    [existingNameKeys, filtered]
   );
 
   const allSelectableChecked =
@@ -64,7 +86,9 @@ export function ModelDiscoveryPanel({
   };
 
   const handleApply = () => {
-    const picked = models.filter((m) => selected.has(m.name) && !existingNames.has(m.name));
+    const picked = models.filter(
+      (m) => selected.has(m.name) && !existingNameKeys.has(normalizeModelIdentity(m.name))
+    );
     if (!picked.length) return;
     onApply(picked);
     setSelected(new Set());
@@ -140,7 +164,7 @@ export function ModelDiscoveryPanel({
           </div>
           <ul className={styles.discoveryList}>
             {filtered.map((m) => {
-              const existing = existingNames.has(m.name);
+              const existing = existingNameKeys.has(normalizeModelIdentity(m.name));
               return (
                 <li
                   key={m.name}

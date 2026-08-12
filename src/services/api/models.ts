@@ -81,6 +81,33 @@ const resolveBearerTokenFromAuthorization = (headers: Record<string, string>): s
   return match?.[1]?.trim() || '';
 };
 
+const buildCredentialValue = (token: string, prefix?: string): string => {
+  const normalizedPrefix = prefix?.trim();
+  if (normalizedPrefix === '-') return token;
+  if (!normalizedPrefix) return `Bearer ${token}`;
+  return `${normalizedPrefix} ${token}`;
+};
+
+const requestModelsViaApiCall = async (
+  endpoint: string,
+  headers: Record<string, string>,
+  authIndex?: string
+) => {
+  const result = await apiCallApi.request({
+    authIndex,
+    method: 'GET',
+    url: endpoint,
+    header: Object.keys(headers).length ? headers : undefined,
+  });
+
+  if (result.statusCode < 200 || result.statusCode >= 300) {
+    throw new Error(getApiCallErrorMessage(result));
+  }
+
+  const payload = result.body ?? result.bodyText;
+  return normalizeModelList(payload, { dedupe: true });
+};
+
 export const modelsApi = {
   /**
    * Fetch available models from /v1/models endpoint (for system info page)
@@ -126,19 +153,7 @@ export const modelsApi = {
       resolvedHeaders.Authorization = 'Bearer $TOKEN$';
     }
 
-    const result = await apiCallApi.request({
-      authIndex: trimmedAuthIndex,
-      method: 'GET',
-      url: endpoint,
-      header: Object.keys(resolvedHeaders).length ? resolvedHeaders : undefined,
-    });
-
-    if (result.statusCode < 200 || result.statusCode >= 300) {
-      throw new Error(getApiCallErrorMessage(result));
-    }
-
-    const payload = result.body ?? result.bodyText;
-    return normalizeModelList(payload, { dedupe: true });
+    return requestModelsViaApiCall(endpoint, resolvedHeaders, trimmedAuthIndex);
   },
 
   /**
@@ -163,19 +178,35 @@ export const modelsApi = {
       resolvedHeaders.Authorization = 'Bearer $TOKEN$';
     }
 
-    const result = await apiCallApi.request({
-      authIndex: trimmedAuthIndex,
-      method: 'GET',
-      url: endpoint,
-      header: Object.keys(resolvedHeaders).length ? resolvedHeaders : undefined,
-    });
+    return requestModelsViaApiCall(endpoint, resolvedHeaders, trimmedAuthIndex);
+  },
 
-    if (result.statusCode < 200 || result.statusCode >= 300) {
-      throw new Error(getApiCallErrorMessage(result));
+  /**
+   * Fetch media models from /models via api-call while honoring the provider's
+   * configured credential header and prefix.
+   */
+  async fetchMediaModelsViaApiCall(
+    baseUrl: string,
+    apiKey?: string,
+    headers: Record<string, string> = {},
+    authIndex?: string,
+    apiKeyHeader?: string,
+    apiKeyPrefix?: string
+  ) {
+    const endpoint = buildModelsEndpoint(baseUrl);
+    if (!endpoint) {
+      throw new Error('Invalid base url');
     }
 
-    const payload = result.body ?? result.bodyText;
-    return normalizeModelList(payload, { dedupe: true });
+    const trimmedAuthIndex = authIndex?.trim() || undefined;
+    const resolvedHeaders = { ...headers };
+    const headerName = apiKeyHeader?.trim() || 'Authorization';
+    const token = apiKey?.trim() || (trimmedAuthIndex ? '$TOKEN$' : '');
+    if (token && !hasHeader(resolvedHeaders, headerName)) {
+      resolvedHeaders[headerName] = buildCredentialValue(token, apiKeyPrefix);
+    }
+
+    return requestModelsViaApiCall(endpoint, resolvedHeaders, trimmedAuthIndex);
   },
 
   /**

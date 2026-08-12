@@ -1740,7 +1740,7 @@
     "media": {
       "providerName": "Имя провайдера",
       "baseUrlHint": "Общий адрес API провайдера",
-      "testProvider": "Проверить провайдера",
+      "testProvider": "Проверить ключ upstream",
       "apiKeyHeader": "Заголовок API-ключа",
       "apiKeyPrefix": "Префикс API-ключа (используйте - без префикса)",
       "operationsSection": "Операции и API",
@@ -1797,7 +1797,16 @@
         "clone": "Клонирование голоса",
         "voice-convert": "Изменение голоса",
         "transcribe": "Транскрибация"
-      }
+      },
+      "testOperation": "Тестовая операция",
+      "testModel": "Тестовая модель",
+      "testGateway": "Проверить CPA API",
+      "gatewayRoute": "Публичный маршрут CPA",
+      "gatewaySaveFirst": "Сначала сохраните провайдера, затем проверьте публичный API CPA.",
+      "gatewayApiKeyRequired": "В CPA не настроен клиентский API-ключ.",
+      "gatewayOperationRequired": "Сначала настройте операцию.",
+      "gatewaySuccess": "HTTP {{status}} · {{route}} · {{model}}",
+      "directKeyTestHint": "Тесты ключей ниже проверяют upstream напрямую. Эта кнопка вызывает публичный API CPA и записывает журнал запроса."
     }
   }
 }

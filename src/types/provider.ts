@@ -121,6 +121,7 @@ export interface MediaAsyncOperationConfig {
 export interface MediaTestRequestConfig {
   json?: string;
   multipartFields?: Record<string, string>;
+  [key: string]: unknown;
 }
 
 export interface MediaOperationConfig {

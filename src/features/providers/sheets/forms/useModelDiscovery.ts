@@ -13,6 +13,9 @@ export const MODEL_DISCOVERY_BRANDS: ReadonlyArray<ProviderBrand> = [
   'claude',
   'claudeApi',
   'openaiCompatibility',
+  'image',
+  'video',
+  'audio',
 ];
 
 export const isModelDiscoveryBrand = (brand: ProviderBrand): boolean =>
@@ -26,7 +29,73 @@ export interface UseModelDiscoveryArgs {
   apiKey?: string;
   fallbackApiKey?: string;
   authIndex?: string;
+  apiKeyHeader?: string;
+  apiKeyPrefix?: string;
 }
+
+export const createModelDiscoveryInputSignature = (
+  input: Pick<
+    UseModelDiscoveryArgs,
+    | 'brand'
+    | 'baseUrl'
+    | 'formHeaders'
+    | 'apiKeyEntries'
+    | 'apiKey'
+    | 'fallbackApiKey'
+    | 'authIndex'
+    | 'apiKeyHeader'
+    | 'apiKeyPrefix'
+  >
+): string =>
+  JSON.stringify({
+    brand: input.brand,
+    baseUrl: input.baseUrl,
+    formHeaders: input.formHeaders.map(({ key, value }) => ({ key, value })),
+    apiKeyEntries: (input.apiKeyEntries ?? []).map((entry) => ({
+      apiKey: entry.apiKey ?? '',
+      existingApiKey: entry.existingApiKey ?? '',
+      authIndex: entry.authIndex ?? '',
+      priority: entry.priority ?? null,
+      proxyUrl: entry.proxyUrl ?? '',
+      weight: entry.weight ?? null,
+    })),
+    apiKey: input.apiKey ?? '',
+    fallbackApiKey: input.fallbackApiKey ?? '',
+    authIndex: input.authIndex ?? '',
+    apiKeyHeader: input.apiKeyHeader ?? '',
+    apiKeyPrefix: input.apiKeyPrefix ?? '',
+  });
+
+export interface ModelDiscoveryRequest {
+  id: number;
+  signature: string;
+}
+
+export interface ModelDiscoveryRequestGuard {
+  begin: (signature: string) => ModelDiscoveryRequest;
+  updateSignature: (signature: string) => void;
+  invalidate: () => void;
+  isCurrent: (request: ModelDiscoveryRequest) => boolean;
+}
+
+export const createModelDiscoveryRequestGuard = (): ModelDiscoveryRequestGuard => {
+  let currentRequestID = 0;
+  let currentSignature = '';
+  return {
+    begin: (signature) => {
+      currentSignature = signature;
+      return { id: ++currentRequestID, signature };
+    },
+    updateSignature: (signature) => {
+      currentSignature = signature;
+    },
+    invalidate: () => {
+      currentRequestID += 1;
+    },
+    isCurrent: (request) =>
+      request.id === currentRequestID && request.signature === currentSignature,
+  };
+};
 
 export interface UseModelDiscoveryResult {
   available: boolean;
@@ -39,16 +108,56 @@ export interface UseModelDiscoveryResult {
 }
 
 export function useModelDiscovery(args: UseModelDiscoveryArgs): UseModelDiscoveryResult {
-  const { brand, baseUrl, formHeaders, apiKeyEntries, apiKey, fallbackApiKey, authIndex } = args;
+  const {
+    brand,
+    baseUrl,
+    formHeaders,
+    apiKeyEntries,
+    apiKey,
+    fallbackApiKey,
+    authIndex,
+    apiKeyHeader,
+    apiKeyPrefix,
+  } = args;
 
   const available = isModelDiscoveryBrand(brand);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [hasFetched, setHasFetched] = useState(false);
+  const [requestGuard] = useState(createModelDiscoveryRequestGuard);
+
+  const inputSignature = useMemo(
+    () =>
+      createModelDiscoveryInputSignature({
+        brand,
+        baseUrl,
+        formHeaders,
+        apiKeyEntries,
+        apiKey,
+        fallbackApiKey,
+        authIndex,
+        apiKeyHeader,
+        apiKeyPrefix,
+      }),
+    [
+      apiKey,
+      apiKeyEntries,
+      apiKeyHeader,
+      apiKeyPrefix,
+      authIndex,
+      baseUrl,
+      brand,
+      fallbackApiKey,
+      formHeaders,
+    ]
+  );
+
+  requestGuard.updateSignature(inputSignature);
 
   const fetch = useCallback(async () => {
     if (!available) return;
+    const request = requestGuard.begin(inputSignature);
     setLoading(true);
     setError(null);
     try {
@@ -79,7 +188,12 @@ export function useModelDiscovery(args: UseModelDiscoveryArgs): UseModelDiscover
           baseHeaders,
           resolvedAuthIndex
         );
-      } else if (brand === 'openaiCompatibility') {
+      } else if (
+        brand === 'openaiCompatibility' ||
+        brand === 'image' ||
+        brand === 'video' ||
+        brand === 'audio'
+      ) {
         const firstEntry = (apiKeyEntries ?? []).find(
           (e) =>
             (e.apiKey ?? '').trim() || (e.existingApiKey ?? '').trim() || (e.authIndex ?? '').trim()
@@ -87,17 +201,22 @@ export function useModelDiscovery(args: UseModelDiscoveryArgs): UseModelDiscover
         const entryKey =
           (firstEntry?.apiKey ?? '').trim() || (firstEntry?.existingApiKey ?? '').trim();
         const entryAuthIndex = (firstEntry?.authIndex ?? '').trim() || resolvedAuthIndex;
+        const fetchModels = () =>
+          brand === 'openaiCompatibility'
+            ? modelsApi.fetchModelsViaApiCall(baseUrl, entryKey, baseHeaders, entryAuthIndex)
+            : modelsApi.fetchMediaModelsViaApiCall(
+                baseUrl,
+                entryKey,
+                baseHeaders,
+                entryAuthIndex,
+                apiKeyHeader,
+                apiKeyPrefix
+              );
         try {
-          next = await modelsApi.fetchModelsViaApiCall(
-            baseUrl,
-            entryKey,
-            baseHeaders,
-            entryAuthIndex
-          );
+          next = await fetchModels();
         } catch (firstErr) {
-          // Some OpenAI-compatible endpoints expose /models without auth, or
-          // reject the configured key for the discovery route. Retry once
-          // without any auth/headers before surfacing the original error.
+          // Some compatible endpoints expose /models without auth. Retry once
+          // without provider credentials before surfacing the original error.
           try {
             next = await modelsApi.fetchModelsViaApiCall(baseUrl);
           } catch {
@@ -105,38 +224,39 @@ export function useModelDiscovery(args: UseModelDiscoveryArgs): UseModelDiscover
           }
         }
       }
+      if (!requestGuard.isCurrent(request)) return;
       setModels(next ?? []);
       setHasFetched(true);
     } catch (err) {
+      if (!requestGuard.isCurrent(request)) return;
       setModels([]);
       setError(getErrorMessage(err) || 'Failed to fetch models');
       setHasFetched(true);
     } finally {
-      setLoading(false);
+      if (requestGuard.isCurrent(request)) setLoading(false);
     }
-  }, [available, apiKey, apiKeyEntries, authIndex, baseUrl, brand, fallbackApiKey, formHeaders]);
+  }, [
+    available,
+    apiKey,
+    apiKeyEntries,
+    apiKeyHeader,
+    apiKeyPrefix,
+    authIndex,
+    baseUrl,
+    brand,
+    fallbackApiKey,
+    formHeaders,
+    inputSignature,
+    requestGuard,
+  ]);
 
   const reset = useCallback(() => {
+    requestGuard.invalidate();
     setModels([]);
     setError(null);
     setLoading(false);
     setHasFetched(false);
-  }, []);
-
-  const inputSignature = useMemo(() => {
-    const headerSig = formHeaders.map((h) => `${h.key}:${h.value}`).join('|');
-    const entriesSig = (apiKeyEntries ?? [])
-      .map((e) => `${e.apiKey ?? ''}::${e.existingApiKey ?? ''}::${e.authIndex ?? ''}`)
-      .join('|');
-    return [
-      baseUrl,
-      apiKey ?? '',
-      fallbackApiKey ?? '',
-      authIndex ?? '',
-      headerSig,
-      entriesSig,
-    ].join('||');
-  }, [apiKey, apiKeyEntries, authIndex, baseUrl, fallbackApiKey, formHeaders]);
+  }, [requestGuard]);
 
   const lastSignatureRef = useRef(inputSignature);
   useEffect(() => {

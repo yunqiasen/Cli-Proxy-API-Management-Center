@@ -9,11 +9,10 @@ import {
 } from '@/utils/recentRequests';
 import {
   PROVIDER_RECENT_REQUESTS_STALE_TIME_MS,
-  beginProviderRecentRequestsLoad,
   createProviderRecentRequestsCacheState,
-  failProviderRecentRequestsLoad,
   isProviderRecentRequestsCacheFresh,
-  resolveProviderRecentRequestsLoad,
+  runProviderRecentRequestsLoad,
+  waitForProviderRecentRequestsReady,
   type ProviderRecentRequestsCacheState,
 } from './providerRecentRequestsCache';
 
@@ -105,45 +104,22 @@ const syncLegacyFieldsFromCacheState = (cache: ProviderRecentRequestsCache) => {
 };
 
 const fetchProviderRecentRequests = (
-  cache: ProviderRecentRequestsCache
+  cache: ProviderRecentRequestsCache,
+  force = false
 ): Promise<ProviderRecentRequests> => {
-  if (cache.inFlightRequest) return cache.inFlightRequest;
-
   syncCacheStateFromLegacyFields(cache);
-  const started = beginProviderRecentRequestsLoad(cache.state);
-  cache.state = started.state;
+  const request = runProviderRecentRequestsLoad(
+    cache,
+    async () => {
+      const payload = await waitForProviderRecentRequestsReady(() =>
+        apiKeyUsageApi.getUsageSnapshot()
+      );
+      return normalizeApiKeyUsageResponse(payload);
+    },
+    { force }
+  );
   syncLegacyFieldsFromCacheState(cache);
-
-  const request = (async () => {
-    try {
-      const payload = await apiKeyUsageApi.getUsage();
-      const normalized = normalizeApiKeyUsageResponse(payload);
-      cache.state = resolveProviderRecentRequestsLoad(
-        cache.state,
-        started.requestId,
-        normalized,
-        Date.now()
-      );
-      syncLegacyFieldsFromCacheState(cache);
-      return cache.state.data;
-    } catch (error) {
-      cache.state = failProviderRecentRequestsLoad(
-        cache.state,
-        started.requestId,
-        error instanceof Error ? error.message : String(error)
-      );
-      syncLegacyFieldsFromCacheState(cache);
-      throw error;
-    }
-  })();
-
-  const tracked = request.finally(() => {
-    if (cache.inFlightRequest === tracked) {
-      cache.inFlightRequest = null;
-    }
-  });
-  cache.inFlightRequest = tracked;
-  return tracked;
+  return request.finally(() => syncLegacyFieldsFromCacheState(cache));
 };
 
 export function useProviderRecentRequests(options: UseProviderRecentRequestsOptions = {}) {
@@ -177,7 +153,7 @@ export function useProviderRecentRequests(options: UseProviderRecentRequestsOpti
         return cache.state.data;
       }
 
-      const request = fetchProviderRecentRequests(cache);
+      const request = fetchProviderRecentRequests(cache, loadOptions.force === true);
       setCurrentViewState(cache.state);
       try {
         await request;

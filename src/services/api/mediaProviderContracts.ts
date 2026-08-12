@@ -69,6 +69,7 @@ const MODEL_FIELDS = [
   'forceMapping',
   'capabilities',
 ] as const;
+const TEST_REQUEST_FIELDS = ['json', 'multipart-fields', 'multipartFields'] as const;
 const OPERATION_FIELDS = [
   'name',
   'capability',
@@ -277,15 +278,21 @@ const normalizeMediaOperation = (value: unknown): MediaOperationConfig | null =>
   const rawTestRequest = value['test-request'] ?? value.testRequest;
   if (isRecord(rawTestRequest)) {
     const json = normalizeString(rawTestRequest.json);
-    const multipartFields = isRecord(rawTestRequest['multipart-fields'] ?? rawTestRequest.multipartFields)
+    const multipartFields = isRecord(
+      rawTestRequest['multipart-fields'] ?? rawTestRequest.multipartFields
+    )
       ? Object.fromEntries(
-          Object.entries(rawTestRequest['multipart-fields'] ?? rawTestRequest.multipartFields as Record<string, unknown>)
+          Object.entries(
+            rawTestRequest['multipart-fields'] ??
+              (rawTestRequest.multipartFields as Record<string, unknown>)
+          )
             .map(([key, fieldValue]) => [key.trim(), String(fieldValue ?? '')])
             .filter(([key]) => key.length > 0)
         )
       : undefined;
     if (json || (multipartFields && Object.keys(multipartFields).length)) {
       operation.testRequest = {
+        ...copyUnknownFields(rawTestRequest, TEST_REQUEST_FIELDS),
         ...(json ? { json } : {}),
         ...(multipartFields && Object.keys(multipartFields).length ? { multipartFields } : {}),
       };
@@ -374,6 +381,94 @@ export function normalizeMediaProviderPayload(
   return provider;
 }
 
+const mergeMediaTestRequestExtensions = (
+  existing: MediaOperationConfig['testRequest'],
+  edited: MediaOperationConfig['testRequest']
+): MediaOperationConfig['testRequest'] => {
+  if (!edited) return undefined;
+  return {
+    ...copyUnknownFields(existing, TEST_REQUEST_FIELDS),
+    ...edited,
+  };
+};
+
+const mergeMediaAsyncExtensions = (
+  existing: MediaAsyncOperationConfig | undefined,
+  edited: MediaAsyncOperationConfig | undefined
+): MediaAsyncOperationConfig | undefined => {
+  if (!edited) return undefined;
+  return { ...(existing ?? {}), ...edited };
+};
+
+const mergeMediaOperationExtensions = (
+  existing: MediaOperationConfig | undefined,
+  edited: MediaOperationConfig
+): MediaOperationConfig => ({
+  ...(existing ?? {}),
+  ...edited,
+  testRequest: mergeMediaTestRequestExtensions(existing?.testRequest, edited.testRequest),
+  async: mergeMediaAsyncExtensions(existing?.async, edited.async),
+});
+
+// Merges edited form values with the original nested vendor extensions by row identity.
+export function mergeEditedMediaProviderConfig(
+  existing: MediaProviderConfig | null | undefined,
+  edited: MediaProviderConfig
+): MediaProviderConfig {
+  if (!existing) return edited;
+  const existingKeyEntries = existing.apiKeyEntries ?? [];
+  const existingKeysByAuthIndex = new Map(
+    existingKeyEntries
+      .filter((entry) => entry.authIndex?.trim())
+      .map((entry) => [entry.authIndex!.trim(), entry] as const)
+  );
+  const existingKeysByValue = new Map(
+    existingKeyEntries
+      .filter((entry) => entry.apiKey.trim())
+      .map((entry) => [entry.apiKey.trim(), entry] as const)
+  );
+  const existingModelsByName = new Map(
+    (existing.models ?? [])
+      .filter((model) => model.name.trim())
+      .map((model) => [model.name.trim().toLowerCase(), model] as const)
+  );
+  const existingOperationsByName = new Map(
+    (existing.operations ?? [])
+      .filter((operation) => operation.name.trim())
+      .map((operation) => [operation.name.trim().toLowerCase(), operation] as const)
+  );
+  return {
+    ...existing,
+    ...edited,
+    apiKeyEntries: (edited.apiKeyEntries ?? []).map((entry, index) => ({
+      ...(existingKeysByAuthIndex.get(entry.authIndex?.trim() ?? '') ??
+        existingKeysByValue.get(entry.apiKey.trim()) ??
+        (existingKeyEntries.length === (edited.apiKeyEntries ?? []).length
+          ? existingKeyEntries[index]
+          : undefined) ??
+        {}),
+      ...entry,
+    })),
+    models: edited.models?.map((model, index) => ({
+      ...(existingModelsByName.get(model.name.trim().toLowerCase()) ??
+        ((existing.models ?? []).length === (edited.models ?? []).length
+          ? existing.models?.[index]
+          : undefined) ??
+        {}),
+      ...model,
+    })),
+    operations: edited.operations?.map((operation, index) =>
+      mergeMediaOperationExtensions(
+        existingOperationsByName.get(operation.name.trim().toLowerCase()) ??
+          ((existing.operations ?? []).length === (edited.operations ?? []).length
+            ? existing.operations?.[index]
+            : undefined),
+        operation
+      )
+    ),
+  };
+}
+
 export interface MediaProviderSerializationOptions {
   includeAuthIndexes?: boolean;
 }
@@ -436,9 +531,15 @@ const serializeMediaOperation = (operation: MediaOperationConfig): Record<string
   payload['response-format'] = operation.responseFormat;
   if (operation.resultPath?.trim()) payload['result-path'] = operation.resultPath.trim();
   if (operation.testRequest) {
-    const testRequest: Record<string, unknown> = {};
+    const testRequest: Record<string, unknown> = copyUnknownFields(
+      operation.testRequest,
+      TEST_REQUEST_FIELDS
+    );
     if (operation.testRequest.json?.trim()) testRequest.json = operation.testRequest.json.trim();
-    if (operation.testRequest.multipartFields && Object.keys(operation.testRequest.multipartFields).length) {
+    if (
+      operation.testRequest.multipartFields &&
+      Object.keys(operation.testRequest.multipartFields).length
+    ) {
       testRequest['multipart-fields'] = operation.testRequest.multipartFields;
     }
     if (Object.keys(testRequest).length) payload['test-request'] = testRequest;

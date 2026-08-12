@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  mergeEditedMediaProviderConfig,
   normalizeMediaProviderPayload,
   serializeMediaProviderPayload,
 } from '../src/services/api/mediaProviderContracts.ts';
@@ -160,6 +161,121 @@ test('preserves unknown provider extensions while rewriting known fields', () =>
   assert.equal(serialized.models[0]['vendor-model'], true);
   assert.deepEqual(serialized.operations[0]['vendor-operation'], { queue: true });
   assert.equal(serialized.operations[0].async['vendor-async'], 'kept');
+});
+
+test('preserves nested media extensions after known fields are edited', () => {
+  const normalized = normalizeMediaProviderPayload({
+    name: 'Relay',
+    kind: 'image',
+    'base-url': 'https://images.example',
+    'api-key-entries': [{ 'api-key': 'old-key', 'vendor-key-id': 'k1' }],
+    models: [
+      { name: 'old-model', alias: 'public', capabilities: ['generate'], 'vendor-model': true },
+    ],
+    operations: [
+      {
+        name: 'generate',
+        method: 'POST',
+        path: '/generate',
+        'request-format': 'json',
+        'model-mode': 'required',
+        'response-format': 'passthrough',
+        'vendor-operation': { queue: true },
+        'test-request': { json: '{"prompt":"old"}', 'vendor-test': 'kept' },
+        async: {
+          'task-id-path': 'id',
+          'poll-path': '/tasks/{task_id}',
+          'status-path': 'status',
+          'success-values': ['done'],
+          'vendor-async': 'kept',
+        },
+      },
+    ],
+  });
+  assert.ok(normalized);
+
+  const edited = mergeEditedMediaProviderConfig(normalized, {
+    ...normalized,
+    apiKeyEntries: [{ apiKey: 'new-key' }],
+    models: [{ name: 'new-model', alias: 'public-v2', capabilities: ['generate'] }],
+    operations: [
+      {
+        ...normalized.operations[0],
+        path: '/generate-v2',
+        testRequest: { json: '{"prompt":"new"}' },
+        async: { ...normalized.operations[0].async, pollPath: '/jobs/{task_id}' },
+      },
+    ],
+  });
+  const serialized = serializeMediaProviderPayload(edited);
+  assert.equal(serialized['api-key-entries'][0]['vendor-key-id'], 'k1');
+  assert.equal(serialized.models[0]['vendor-model'], true);
+  assert.deepEqual(serialized.operations[0]['vendor-operation'], { queue: true });
+  assert.equal(serialized.operations[0]['test-request']['vendor-test'], 'kept');
+  assert.equal(serialized.operations[0].async['vendor-async'], 'kept');
+});
+
+test('matches nested vendor extensions by stable key and semantic names, not row indexes', () => {
+  const normalized = normalizeMediaProviderPayload({
+    name: 'Relay',
+    kind: 'image',
+    'base-url': 'https://images.example',
+    'api-key-entries': [
+      { 'api-key': 'old-a', 'auth-index': 'auth-a', 'vendor-key-id': 'k-a' },
+      { 'api-key': 'old-b', 'auth-index': 'auth-b', 'vendor-key-id': 'k-b' },
+    ],
+    models: [
+      { name: 'model-a', 'vendor-model-id': 'm-a' },
+      { name: 'model-b', 'vendor-model-id': 'm-b' },
+    ],
+    operations: [
+      {
+        name: 'generate',
+        path: '/generate',
+        method: 'POST',
+        'request-format': 'json',
+        'model-mode': 'required',
+        'response-format': 'passthrough',
+        'vendor-operation-id': 'op-a',
+      },
+      {
+        name: 'edit',
+        path: '/edit',
+        method: 'POST',
+        'request-format': 'json',
+        'model-mode': 'required',
+        'response-format': 'passthrough',
+        'vendor-operation-id': 'op-b',
+      },
+    ],
+  });
+  assert.ok(normalized);
+
+  const edited = mergeEditedMediaProviderConfig(normalized, {
+    ...normalized,
+    apiKeyEntries: [
+      { apiKey: 'new-b', authIndex: 'auth-b' },
+      { apiKey: 'old-a', authIndex: 'auth-a' },
+    ],
+    models: [{ name: 'model-b' }, { name: 'model-a' }],
+    operations: [
+      { ...normalized.operations[1], path: '/edit-v2' },
+      { ...normalized.operations[0], path: '/generate-v2' },
+    ],
+  });
+  const serialized = serializeMediaProviderPayload(edited);
+  assert.deepEqual(
+    serialized['api-key-entries'].map((entry) => entry['vendor-key-id']),
+    ['k-b', 'k-a']
+  );
+  assert.deepEqual(
+    serialized.models.map((model) => model['vendor-model-id']),
+    ['m-b', 'm-a']
+  );
+  assert.deepEqual(
+    serialized.operations.map((operation) => operation['vendor-operation-id']),
+    ['op-b', 'op-a']
+  );
 });
 
 test('drops duplicate media keys and operations without changing list order', () => {

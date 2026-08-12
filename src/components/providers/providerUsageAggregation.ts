@@ -52,7 +52,8 @@ export interface AggregatedProviderUsage {
 
 export function aggregateProviderUsageByApiKeys(
   apiKeys: readonly string[],
-  resolveUsageEntry: (apiKey: string) => RecentRequestUsageEntry | undefined
+  resolveUsageEntry: (apiKey: string) => RecentRequestUsageEntry | undefined,
+  resolveUnassignedUsageEntry?: () => RecentRequestUsageEntry | undefined
 ): AggregatedProviderUsage {
   const entries = apiKeys.map((apiKey) => {
     // An empty key is a real credential slot for public media endpoints.
@@ -60,6 +61,10 @@ export function aggregateProviderUsageByApiKeys(
     const normalizedApiKey = apiKey.trim();
     return resolveUsageEntry(normalizedApiKey) ?? EMPTY_USAGE_ENTRY;
   });
+  if (resolveUnassignedUsageEntry && !apiKeys.some((apiKey) => apiKey.trim() === '')) {
+    const unassigned = resolveUnassignedUsageEntry();
+    if (unassigned) entries.push(unassigned);
+  }
   const recentRequests = mergeRecentRequestBucketGroups(
     entries.map((entry) => entry.recentRequests)
   );

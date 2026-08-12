@@ -13,6 +13,7 @@ import { useAuthStore, useNotificationStore } from '@/stores';
 import { downloadBlob } from '@/utils/download';
 import { getErrorMessage } from '@/utils/helpers';
 import styles from './RequestLogsPanel.module.scss';
+import { requestLogModelLabel, requestLogProviderLabel } from './requestLogLabels';
 import {
   applyRequestLogRefreshError,
   applyRequestLogRefreshSuccess,
@@ -80,8 +81,7 @@ const compactRequestPath = (value?: string) => {
 const requestPathTitle = (item: RequestLogItem) =>
   [item.method, item.url].filter(Boolean).join(' ') || '—';
 
-const requestModelLabel = (item: RequestLogItem) =>
-  preview(item.model || item.upstream_model || item.channel_model, 36);
+const requestModelLabel = (item: RequestLogItem) => preview(requestLogModelLabel(item), 36);
 
 const requestModelTooltip = (item: RequestLogItem) => {
   const channelModel = String(item.channel_model ?? '').trim();
@@ -301,7 +301,8 @@ export function RequestLogsPanel() {
     if (!detail) return [];
     return [
       ['请求', `${detail.method || '—'} ${detail.url || '—'}`],
-      ['模型', detail.channel_model || detail.upstream_model || detail.model || '—'],
+      ['模型', requestLogModelLabel(detail)],
+      ['供应商', requestLogProviderLabel(detail)],
       ['IP', `${detail.ip || '未记录'} ${detail.ip_location || ''}`.trim()],
       ['状态', `${detail.success ? '成功' : '失败'} · ${detail.status || 'unknown'}`],
       [
@@ -443,6 +444,7 @@ export function RequestLogsPanel() {
                 <th>时间</th>
                 <th>路径 / 方法</th>
                 <th>模型</th>
+                <th>供应商</th>
                 <th>IP / 归属地</th>
                 <th>实际调用</th>
                 <th>系统提示词</th>
@@ -471,6 +473,11 @@ export function RequestLogsPanel() {
                     onMouseLeave={hideHoverTooltip}
                   >
                     <span className={styles.shortText}>{requestModelLabel(item)}</span>
+                  </td>
+                  <td>
+                    <span className={styles.shortText} title={requestLogProviderLabel(item)}>
+                      {requestLogProviderLabel(item)}
+                    </span>
                   </td>
                   <td>
                     {item.ip || '未记录'} {item.ip_location || ''}

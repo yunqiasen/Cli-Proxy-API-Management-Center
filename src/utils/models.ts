@@ -8,8 +8,15 @@ import { isRecord } from './helpers';
 export interface ModelInfo {
   name: string;
   alias?: string;
+  displayName?: string;
   description?: string;
+  capabilities?: string[];
 }
+
+export const normalizeModelIdentity = (value: string): string =>
+  String(value ?? '')
+    .trim()
+    .toLowerCase();
 
 const MODEL_CATEGORIES = [
   { id: 'gpt', label: 'GPT', patterns: [/gpt/i, /\bo\d\b/i, /\bo\d+\.?/i, /\bchatgpt/i] },
@@ -43,11 +50,19 @@ export function normalizeModelList(payload: unknown, { dedupe = false } = {}): M
     const name = entry.id || entry.name || entry.model || entry.value;
     if (!name) return null;
 
-    const alias = entry.alias || entry.display_name || entry.displayName;
+    const alias = entry.alias;
+    const displayName = entry.display_name || entry.displayName;
     const description = entry.description || entry.note || entry.comment;
+    const capabilities = Array.isArray(entry.capabilities)
+      ? entry.capabilities.map((value) => String(value).trim()).filter(Boolean)
+      : [];
     const model: ModelInfo = { name: String(name) };
+    if (capabilities.length) model.capabilities = capabilities;
     if (alias && alias !== name) {
       model.alias = String(alias);
+    }
+    if (displayName && displayName !== name) {
+      model.displayName = String(displayName);
     }
     if (description) {
       model.description = String(description);
@@ -74,7 +89,7 @@ export function normalizeModelList(payload: unknown, { dedupe = false } = {}): M
 
   const seen = new Set<string>();
   return normalized.filter((model) => {
-    const key = (model?.name || '').toLowerCase();
+    const key = normalizeModelIdentity(model?.name || '');
     if (!key || seen.has(key)) {
       return false;
     }

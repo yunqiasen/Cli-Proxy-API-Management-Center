@@ -8,6 +8,10 @@ import { buildNativeProviderResourceData } from '../src/features/providers/nativ
 import { getNativeProviderUsageIdentity } from '../src/features/providers/nativeProviderUsageIdentity.ts';
 import { aggregateProviderUsageByApiKeys } from '../src/components/providers/providerUsageAggregation.ts';
 import {
+  getProviderApiKeysTotalStats,
+  getProviderTotalStats,
+} from '../src/components/providers/utils.ts';
+import {
   buildNativeProviderConfig,
   buildNativeProviderFormInput,
   validateNativeProviderKeyEntries,
@@ -86,7 +90,7 @@ test('normalizes and serializes named grouped native provider keys', () => {
     'proxy-url': 'http://provider-proxy',
     websockets: true,
     'api-key-entries': [
-      { 'api-key': 'key-a', priority: 0, weight: 3 },
+      { 'api-key': 'key-a', priority: 0, weight: 3, 'auth-index': 'auth-a' },
       { 'api-key': 'key-b', priority: 20, weight: 0, 'proxy-url': 'http://key-proxy' },
     ],
     models: [
@@ -295,4 +299,136 @@ test('aggregates every native provider key for totals, status, details, and rece
     { model: 'model-b', status: 429, count: 3, error: 'rate-limit' },
     { model: 'model-a', status: 500, count: 1, error: 'upstream-a' },
   ]);
+});
+
+test('adds provider-level unassigned history once without assigning it to a specific key', () => {
+  const providerBucket = new Map([
+    [
+      'https://relay.example/v1|first-key',
+      {
+        success: 0,
+        failed: 0,
+        recentRequests: [],
+        successDetails: [],
+        failureDetails: [],
+      },
+    ],
+    [
+      'https://relay.example/v1|second-key',
+      {
+        success: 0,
+        failed: 0,
+        recentRequests: [],
+        successDetails: [],
+        failureDetails: [],
+      },
+    ],
+    [
+      'https://relay.example/v1|',
+      {
+        success: 8,
+        failed: 1,
+        recentRequests: [{ success: 8, failed: 1 }],
+        successDetails: [{ model: 'claude-history', status: 200, count: 8 }],
+        failureDetails: [
+          { model: 'claude-history', status: 502, count: 1, error: 'fixture failure' },
+        ],
+      },
+    ],
+  ]);
+
+  const summary = aggregateProviderUsageByApiKeys(
+    ['first-key', 'second-key'],
+    (apiKey) => providerBucket.get(`https://relay.example/v1|${apiKey}`),
+    () => providerBucket.get('https://relay.example/v1|')
+  );
+
+  assert.deepEqual(summary.totalStats, { success: 8, failure: 1 });
+  assert.deepEqual(summary.recentWindowStats, { success: 8, failure: 1 });
+  assert.deepEqual(summary.usageDetails.successDetails, [
+    { model: 'claude-history', status: 200, count: 8 },
+  ]);
+
+  assert.deepEqual(
+    aggregateProviderUsageByApiKeys(['first-key'], (apiKey) =>
+      providerBucket.get(`https://relay.example/v1|${apiKey}`)
+    ).totalStats,
+    { success: 0, failure: 0 }
+  );
+});
+
+test('does not double count a public no-key provider bucket as unassigned history', () => {
+  const publicEntry = {
+    success: 2,
+    failed: 1,
+    recentRequests: [],
+    successDetails: [],
+    failureDetails: [],
+  };
+  const summary = aggregateProviderUsageByApiKeys(
+    [''],
+    () => publicEntry,
+    () => publicEntry
+  );
+  assert.deepEqual(summary.totalStats, { success: 2, failure: 1 });
+});
+
+
+test('keeps unassigned provider history when concrete keys also have usage', () => {
+  const usageByProvider = new Map([
+    [
+      'relay a',
+      new Map([
+        [
+          'https://relay.example/v1|first-key',
+          {
+            success: 2,
+            failed: 0,
+            recentRequests: [],
+            successDetails: [],
+            failureDetails: [],
+          },
+        ],
+        [
+          'https://relay.example/v1|second-key',
+          {
+            success: 0,
+            failed: 0,
+            recentRequests: [],
+            successDetails: [],
+            failureDetails: [],
+          },
+        ],
+        [
+          'https://relay.example/v1|',
+          {
+            success: 8,
+            failed: 1,
+            recentRequests: [],
+            successDetails: [],
+            failureDetails: [],
+          },
+        ],
+      ]),
+    ],
+  ]);
+
+  assert.deepEqual(
+    getProviderApiKeysTotalStats(
+      usageByProvider,
+      'Relay A',
+      ['first-key', 'second-key'],
+      'https://relay.example/v1'
+    ),
+    { success: 10, failure: 1 }
+  );
+  assert.deepEqual(
+    getProviderTotalStats(
+      usageByProvider,
+      'Relay A',
+      'first-key',
+      'https://relay.example/v1'
+    ),
+    { success: 2, failure: 0 }
+  );
 });

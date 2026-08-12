@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { providersApi } from '@/services/api';
+import { mergeEditedMediaProviderConfig } from '@/services/api/mediaProviderContracts';
 import { getErrorMessage } from '@/utils/helpers';
 import { useAuthStore, useConfigStore } from '@/stores';
 import {
@@ -402,7 +403,7 @@ const buildMediaProviderConfig = (
       ? input.apiKeyEntries?.find((entry) => entry.authIndex?.trim())?.authIndex?.trim() ||
         existing?.authIndex
       : undefined;
-  return {
+  return mergeEditedMediaProviderConfig(existing, {
     ...(existing ?? {}),
     name: input.name.trim(),
     kind: brand,
@@ -421,7 +422,7 @@ const buildMediaProviderConfig = (
     headers: Object.keys(headers).length ? headers : undefined,
     models: models.length ? models : undefined,
     operations: operations.length ? operations : undefined,
-  };
+  });
 };
 
 const buildOpenAIConfig = (

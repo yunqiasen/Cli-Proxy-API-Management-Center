@@ -1,12 +1,17 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { apiCallApi, getApiCallErrorMessage } from '@/services/api';
+import { useAuthStore, useConfigStore } from '@/stores';
 import {
   MEDIA_CONNECTIVITY_TIMEOUT_MS,
   buildMediaConnectivityRequest,
+  buildMediaGatewayConnectivityRequest,
+  getMediaConnectivityApplicationError,
+  getMediaGatewayPath,
+  requestMediaGatewayConnectivity,
 } from '@/services/api/mediaProviderConnectivity';
 import { Collapsible } from '@/components/ui/Collapsible';
-import { IconLoader2, IconPlus, IconX } from '@/components/ui/icons';
+import { IconDownload, IconLoader2, IconPlus, IconX } from '@/components/ui/icons';
 import type { MediaProviderConfig } from '@/types';
 import type {
   ApiKeyEntryInput,
@@ -17,10 +22,24 @@ import type {
 } from '../../types';
 import { MediaOperationsEditor } from './MediaOperationsEditor';
 import {
+  clampMediaTestOperationIndex,
+  createMediaConnectivityResultGuard,
+  createMediaConnectivityResultGuardMap,
+  describeMediaTestModel,
+  getDefaultMediaTestOperationIndex,
+  getMediaTestModelOptions,
+  mediaConnectivityTestSignature,
+  mediaTestOperationLabel,
+  resolveMediaTestModels,
+} from '../../mediaProviderTestSelection';
+import {
   MEDIA_CAPABILITIES_BY_KIND,
   validateMediaProviderFormInput,
 } from '../../mediaProviderFormValidation';
 import { ModelEntriesEditor } from './ModelEntriesEditor';
+import { ModelDiscoveryPanel } from './ModelDiscoveryPanel';
+import { useModelDiscovery } from './useModelDiscovery';
+import { mergeDiscoveredMediaModels } from '../../mediaProviderModelDiscovery';
 import { ApiKeyEntriesEditor } from './ApiKeyEntriesEditor';
 import { ConnectivityStatusIcon } from './ConnectivityStatusIcon';
 import type { ConnectivityStatus } from './useConnectivityTest';
@@ -113,7 +132,9 @@ const inputFromConfig = (
           responseFormat: operation.responseFormat,
           resultPath: operation.resultPath ?? '',
           testRequestJson: operation.testRequest?.json ?? '',
-          testRequestMultipartFieldsText: Object.entries(operation.testRequest?.multipartFields ?? {})
+          testRequestMultipartFieldsText: Object.entries(
+            operation.testRequest?.multipartFields ?? {}
+          )
             .map(([key, value]) => `${key}=${value}`)
             .join('\n'),
           asyncEnabled: Boolean(operation.async),
@@ -131,19 +152,30 @@ const inputFromConfig = (
   };
 };
 
-const selectTestModel = (
-  operation: MediaOperationInput | undefined,
-  models: ModelEntryInput[]
-): string => {
-  const capability = operation?.capability.trim().toLowerCase();
-  const candidates = models.filter((model) => model.name.trim());
-  if (capability) {
-    const capable = candidates.find((model) =>
-      (model.capabilities ?? []).some((item) => item.toLowerCase() === capability)
-    );
-    if (capable) return capable.name.trim();
-  }
-  return candidates[0]?.name.trim() ?? '';
+const connectivityOperation = (operation: MediaOperationInput) => ({
+  name: operation.name,
+  capability: operation.capability || undefined,
+  method: operation.method,
+  path: operation.path,
+  requestFormat: operation.requestFormat,
+  modelMode: operation.modelMode,
+  model: operation.model || undefined,
+  testRequestJson: operation.testRequestJson,
+  testRequestMultipartFieldsText: operation.testRequestMultipartFieldsText,
+});
+
+const idleConnectivityStatuses = (count: number): ConnectivityStatus[] =>
+  Array.from({ length: Math.max(count, 1) }, () => ({ state: 'idle', message: '' }));
+
+const defaultTestSelection = (input: ProviderEntryFormInput) => {
+  const operations = input.operations?.length ? input.operations : [emptyOperation()];
+  const models = input.models.length ? input.models : [emptyModel()];
+  const operationIndex = getDefaultMediaTestOperationIndex(operations);
+  const operation = operations[operationIndex];
+  return {
+    operationIndex,
+    model: resolveMediaTestModels(operation, models, '').upstreamModel,
+  };
 };
 
 export function MediaProviderForm({
@@ -156,18 +188,24 @@ export function MediaProviderForm({
   onDirtyChange,
 }: MediaProviderFormProps) {
   const { t } = useTranslation();
+  const gatewayBaseUrl = useAuthStore((state) => state.apiBase);
+  const gatewayApiKey = useConfigStore((state) => state.config?.apiKeys?.[0] ?? '');
   const [form, setForm] = useState<ProviderEntryFormInput>(() =>
     inputFromConfig(brand, resource, mode)
   );
+  const [selectedTestOperationIndex, setSelectedTestOperationIndex] = useState<number>(
+    () => defaultTestSelection(inputFromConfig(brand, resource, mode)).operationIndex
+  );
+  const [selectedTestModel, setSelectedTestModel] = useState<string>(
+    () => defaultTestSelection(inputFromConfig(brand, resource, mode)).model
+  );
+  const [gatewayStatus, setGatewayStatus] = useState<ConnectivityStatus>({
+    state: 'idle',
+    message: '',
+  });
   const [error, setError] = useState<string | null>(null);
   const [statuses, setStatuses] = useState<ConnectivityStatus[]>(() =>
-    Array.from(
-      { length: inputFromConfig(brand, resource, mode).apiKeyEntries?.length ?? 1 },
-      () => ({
-        state: 'idle',
-        message: '',
-      })
-    )
+    idleConnectivityStatuses(inputFromConfig(brand, resource, mode).apiKeyEntries?.length ?? 1)
   );
   const initialSignature = useMemo(
     () => JSON.stringify(inputFromConfig(brand, resource, mode)),
@@ -175,28 +213,116 @@ export function MediaProviderForm({
   );
   const isDirty = JSON.stringify(form) !== initialSignature;
   const entries = form.apiKeyEntries?.length ? form.apiKeyEntries : [emptyKey()];
-  const models = form.models.length ? form.models : [emptyModel()];
-  const operations = form.operations?.length ? form.operations : [emptyOperation()];
+  const models = useMemo(() => (form.models.length ? form.models : [emptyModel()]), [form.models]);
+  const operations = useMemo(
+    () => (form.operations?.length ? form.operations : [emptyOperation()]),
+    [form.operations]
+  );
+  const selectedTestOperation =
+    operations[selectedTestOperationIndex] ?? operations[0] ?? emptyOperation();
+  const testModelOptions = getMediaTestModelOptions(selectedTestOperation, models);
+  const resolvedTestModels = resolveMediaTestModels(
+    selectedTestOperation,
+    models,
+    selectedTestModel
+  );
+  const gatewayPath = getMediaGatewayPath(brand, connectivityOperation(selectedTestOperation));
   const mediaCapabilities = MEDIA_CAPABILITIES_BY_KIND[brand];
+  const discovery = useModelDiscovery({
+    brand,
+    baseUrl: form.baseUrl,
+    formHeaders: form.headers,
+    apiKeyEntries: form.apiKeyEntries,
+    apiKeyHeader: form.apiKeyHeader,
+    apiKeyPrefix: form.apiKeyPrefix,
+  });
+  const [discoveryOpen, setDiscoveryOpen] = useState(false);
+  const existingModelNames = useMemo(
+    () => new Set(models.map((model) => model.name.trim()).filter(Boolean)),
+    [models]
+  );
+  const connectivityStatusSignature = useMemo(
+    () =>
+      mediaConnectivityTestSignature({
+        baseUrl: form.baseUrl,
+        apiKeyHeader: form.apiKeyHeader,
+        apiKeyPrefix: form.apiKeyPrefix,
+        headers: form.headers,
+        apiKeyEntries: form.apiKeyEntries,
+        operation: selectedTestOperation,
+        model: resolvedTestModels.upstreamModel,
+      }),
+    [
+      form.apiKeyEntries,
+      form.apiKeyHeader,
+      form.apiKeyPrefix,
+      form.baseUrl,
+      form.headers,
+      resolvedTestModels.upstreamModel,
+      selectedTestOperation,
+    ]
+  );
+  const previousConnectivityStatusSignatureRef = useRef(connectivityStatusSignature);
+  const directConnectivityGuardsRef = useRef(createMediaConnectivityResultGuardMap());
+  const gatewayConnectivityGuardRef = useRef(createMediaConnectivityResultGuard());
 
   useEffect(() => onDirtyChange?.(isDirty), [isDirty, onDirtyChange]);
   useEffect(() => {
-    setStatuses((previous) => {
-      const next = previous.slice(0, entries.length);
-      while (next.length < entries.length) next.push({ state: 'idle', message: '' });
-      return next;
-    });
-  }, [entries.length]);
+    if (previousConnectivityStatusSignatureRef.current === connectivityStatusSignature) return;
+    previousConnectivityStatusSignatureRef.current = connectivityStatusSignature;
+    directConnectivityGuardsRef.current.invalidateAll();
+    gatewayConnectivityGuardRef.current.invalidate();
+    setStatuses(idleConnectivityStatuses(entries.length));
+    setGatewayStatus({ state: 'idle', message: '' });
+  }, [connectivityStatusSignature, entries.length]);
 
   useEffect(() => {
-    setForm(inputFromConfig(brand, resource, mode));
+    const nextForm = inputFromConfig(brand, resource, mode);
+    const selection = defaultTestSelection(nextForm);
+    setForm(nextForm);
+    setSelectedTestOperationIndex(selection.operationIndex);
+    setSelectedTestModel(selection.model);
+    setGatewayStatus({ state: 'idle', message: '' });
+    directConnectivityGuardsRef.current.invalidateAll();
+    gatewayConnectivityGuardRef.current.invalidate();
+    setStatuses(idleConnectivityStatuses(nextForm.apiKeyEntries?.length ?? 1));
+    setDiscoveryOpen(false);
     setError(null);
   }, [brand, mode, resource]);
+
+  useEffect(() => {
+    const nextIndex = clampMediaTestOperationIndex(selectedTestOperationIndex, operations.length);
+    if (nextIndex === selectedTestOperationIndex) return;
+    setSelectedTestOperationIndex(nextIndex);
+    setSelectedTestModel(resolveMediaTestModels(operations[nextIndex], models, '').upstreamModel);
+    setGatewayStatus({ state: 'idle', message: '' });
+  }, [models, operations, selectedTestOperationIndex]);
+
+  useEffect(() => {
+    if (selectedTestModel !== resolvedTestModels.upstreamModel) {
+      setSelectedTestModel(resolvedTestModels.upstreamModel);
+    }
+  }, [resolvedTestModels.upstreamModel, selectedTestModel]);
 
   const updateField = <K extends keyof ProviderEntryFormInput>(
     key: K,
     value: ProviderEntryFormInput[K]
   ) => setForm((previous) => ({ ...previous, [key]: value }));
+
+  const openDiscovery = () => {
+    setDiscoveryOpen(true);
+    if (!discovery.loading && !discovery.hasFetched) {
+      void discovery.fetch();
+    }
+  };
+
+  const applyDiscoveredModels = (incoming: Parameters<typeof mergeDiscoveredMediaModels>[1]) => {
+    if (!incoming.length) return;
+    setForm((previous) => ({
+      ...previous,
+      models: mergeDiscoveredMediaModels(previous.models, incoming),
+    }));
+  };
 
   const resolveEntryKey = (index: number): string => {
     const entry = entries[index];
@@ -205,9 +331,9 @@ export function MediaProviderForm({
 
   const runTest = async (index: number): Promise<boolean> => {
     const entry = entries[index];
-    const operation = operations.find((item) => item.name.trim()) ?? undefined;
-    const model = selectTestModel(operation, models);
-    const modelRequired = operation?.modelMode === 'required' && !operation.model.trim() && !model;
+    const operation = selectedTestOperation.name.trim() ? selectedTestOperation : undefined;
+    const model = resolvedTestModels.upstreamModel;
+    const modelRequired = operation?.modelMode === 'required' && !model;
     if (!form.baseUrl.trim()) {
       setStatuses((previous) =>
         previous.map((item, idx) =>
@@ -232,23 +358,15 @@ export function MediaProviderForm({
     const headers = Object.fromEntries(
       form.headers.filter((item) => item.key.trim()).map((item) => [item.key.trim(), item.value])
     );
+    const entryGuard = directConnectivityGuardsRef.current.guardFor(
+      entry.authIndex?.trim() || `row:${index}`
+    );
+    const requestID = entryGuard.begin(connectivityStatusSignature);
     const request = buildMediaConnectivityRequest({
       kind: brand,
       baseUrl: form.baseUrl,
       model,
-      operation: operation
-        ? {
-            name: operation.name,
-            capability: operation.capability || undefined,
-            method: operation.method,
-            path: operation.path,
-            requestFormat: operation.requestFormat,
-            modelMode: operation.modelMode,
-            model: operation.model || undefined,
-            testRequestJson: operation.testRequestJson,
-            testRequestMultipartFieldsText: operation.testRequestMultipartFieldsText,
-          }
-        : undefined,
+      operation: operation ? connectivityOperation(operation) : undefined,
       headers,
       apiKey: resolveEntryKey(index),
       apiKeyHeader: form.apiKeyHeader,
@@ -272,11 +390,19 @@ export function MediaProviderForm({
       );
       if (result.statusCode < 200 || result.statusCode >= 300)
         throw new Error(getApiCallErrorMessage(result));
+      const applicationError = getMediaConnectivityApplicationError(result.body, result.bodyText);
+      if (applicationError) throw new Error(applicationError);
+      if (!entryGuard.isCurrent(requestID, connectivityStatusSignature)) {
+        return false;
+      }
       setStatuses((previous) =>
         previous.map((item, idx) => (idx === index ? { state: 'success', message: '' } : item))
       );
       return true;
     } catch (testError) {
+      if (!entryGuard.isCurrent(requestID, connectivityStatusSignature)) {
+        return false;
+      }
       setStatuses((previous) =>
         previous.map((item, idx) =>
           idx === index
@@ -287,6 +413,80 @@ export function MediaProviderForm({
             : item
         )
       );
+      return false;
+    }
+  };
+
+  const runGatewayTest = async (): Promise<boolean> => {
+    if (mode !== 'edit' || isDirty) {
+      setGatewayStatus({
+        state: 'error',
+        message: t('providersPage.media.gatewaySaveFirst'),
+      });
+      return false;
+    }
+    if (!gatewayApiKey.trim()) {
+      setGatewayStatus({
+        state: 'error',
+        message: t('providersPage.media.gatewayApiKeyRequired'),
+      });
+      return false;
+    }
+    if (!selectedTestOperation.name.trim()) {
+      setGatewayStatus({
+        state: 'error',
+        message: t('providersPage.media.gatewayOperationRequired'),
+      });
+      return false;
+    }
+    if (selectedTestOperation.modelMode === 'required' && !resolvedTestModels.gatewayModel) {
+      setGatewayStatus({
+        state: 'error',
+        message: t('providersPage.connectivity.modelRequired'),
+      });
+      return false;
+    }
+
+    const requestSignature = JSON.stringify({
+      connectivityStatusSignature,
+      gatewayBaseUrl,
+      gatewayApiKey,
+      gatewayPath,
+      gatewayModel: resolvedTestModels.gatewayModel,
+    });
+    const requestID = gatewayConnectivityGuardRef.current.begin(requestSignature);
+    const request = buildMediaGatewayConnectivityRequest({
+      kind: brand,
+      gatewayBaseUrl,
+      gatewayApiKey,
+      model: resolvedTestModels.gatewayModel,
+      operation: connectivityOperation(selectedTestOperation),
+    });
+    setGatewayStatus({ state: 'loading', message: '' });
+    try {
+      const result = await requestMediaGatewayConnectivity(request, {
+        timeoutMs: MEDIA_CONNECTIVITY_TIMEOUT_MS,
+      });
+      if (!gatewayConnectivityGuardRef.current.isCurrent(requestID, requestSignature)) {
+        return false;
+      }
+      setGatewayStatus({
+        state: 'success',
+        message: t('providersPage.media.gatewaySuccess', {
+          status: result.statusCode,
+          route: gatewayPath,
+          model: resolvedTestModels.gatewayModel || t('providersPage.media.modelNone'),
+        }),
+      });
+      return true;
+    } catch (testError) {
+      if (!gatewayConnectivityGuardRef.current.isCurrent(requestID, requestSignature)) {
+        return false;
+      }
+      setGatewayStatus({
+        state: 'error',
+        message: testError instanceof Error ? testError.message : String(testError),
+      });
       return false;
     }
   };
@@ -426,26 +626,81 @@ export function MediaProviderForm({
             <small>{t('providersPage.form.disableCoolingHint')}</small>
           </span>
         </label>
+        <div className={styles.fieldRow}>
+          <div className={styles.field}>
+            <label className={styles.label}>{t('providersPage.media.testOperation')}</label>
+            <select
+              className={styles.input}
+              data-testid="media-test-operation"
+              value={selectedTestOperationIndex}
+              onChange={(event) => {
+                const nextIndex = Number(event.target.value);
+                const nextOperation = operations[nextIndex] ?? operations[0];
+                setSelectedTestOperationIndex(nextIndex);
+                setSelectedTestModel(
+                  resolveMediaTestModels(nextOperation, models, '').upstreamModel
+                );
+                setGatewayStatus({ state: 'idle', message: '' });
+              }}
+              disabled={mutating}
+            >
+              {operations.map((operation, index) => (
+                <option key={`${operation.name}-${index}`} value={index}>
+                  {mediaTestOperationLabel(operation)}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className={styles.field}>
+            <label className={styles.label}>{t('providersPage.media.testModel')}</label>
+            <select
+              className={styles.input}
+              data-testid="media-test-model"
+              value={resolvedTestModels.upstreamModel}
+              onChange={(event) => {
+                setSelectedTestModel(event.target.value);
+                setGatewayStatus({ state: 'idle', message: '' });
+              }}
+              disabled={mutating || selectedTestOperation.modelMode === 'none'}
+            >
+              {selectedTestOperation.modelMode === 'none' ? (
+                <option value="">{t('providersPage.media.modelNone')}</option>
+              ) : null}
+              {testModelOptions.map((model) => (
+                <option key={model.name} value={model.name}>
+                  {describeMediaTestModel(model)}
+                </option>
+              ))}
+              {!testModelOptions.length && resolvedTestModels.upstreamModel ? (
+                <option value={resolvedTestModels.upstreamModel}>
+                  {resolvedTestModels.upstreamModel}
+                </option>
+              ) : null}
+            </select>
+          </div>
+        </div>
+        <span className={styles.labelHint}>
+          {t('providersPage.media.gatewayRoute')}: <code>{gatewayPath}</code>
+        </span>
         <div className={styles.connectivityRow}>
           <button
             type="button"
             className={styles.connectivityBtn}
-            onClick={() => void runTest(0)}
-            disabled={mutating || statuses.some((status) => status.state === 'loading')}
+            onClick={() => void runGatewayTest()}
+            disabled={mutating || gatewayStatus.state === 'loading'}
           >
-            {statuses[0]?.state === 'loading' ? <IconLoader2 size={14} /> : null}
-            <span>{t('providersPage.media.testProvider')}</span>
+            {gatewayStatus.state === 'loading' ? <IconLoader2 size={14} /> : null}
+            <span>{t('providersPage.media.testGateway')}</span>
           </button>
-          <ConnectivityStatusIcon state={statuses[0]?.state ?? 'idle'} />
-          {statuses[0]?.state === 'success' ? (
-            <span className={styles.connectivityHintSuccess}>
-              {t('providersPage.connectivity.success')}
-            </span>
+          <ConnectivityStatusIcon state={gatewayStatus.state} />
+          {gatewayStatus.state === 'success' ? (
+            <span className={styles.connectivityHintSuccess}>{gatewayStatus.message}</span>
           ) : null}
         </div>
-        {statuses[0]?.state === 'error' ? (
-          <div className={styles.connectivityError}>{statuses[0].message}</div>
+        {gatewayStatus.state === 'error' ? (
+          <div className={styles.connectivityError}>{gatewayStatus.message}</div>
         ) : null}
+        <span className={styles.labelHint}>{t('providersPage.media.directKeyTestHint')}</span>
       </div>
 
       <Collapsible
@@ -547,35 +802,61 @@ export function MediaProviderForm({
 
       <Collapsible
         label={t('providersPage.form.modelsSection')}
-        hint={`${models.filter((model) => model.name.trim()).length}`}
+        hint={`${existingModelNames.size}`}
       >
-        <ModelEntriesEditor
-          models={models}
-          supportsImage={false}
-          supportsThinking={false}
-          mediaCapabilities={mediaCapabilities}
-          capabilityLabels={Object.fromEntries(
-            mediaCapabilities.map((capability) => [
-              capability,
-              t(`providersPage.media.capabilityNames.${capability}`),
-            ])
-          )}
-          mutating={mutating}
-          removeDisabled={models.length <= 1}
-          onUpdate={(index, patch) =>
-            updateField(
-              'models',
-              models.map((model, idx) => (idx === index ? { ...model, ...patch } : model))
-            )
-          }
-          onAdd={() => updateField('models', [...models, emptyModel()])}
-          onRemove={(index) =>
-            updateField(
-              'models',
-              models.filter((_model, idx) => idx !== index)
-            )
-          }
-        />
+        <div className={styles.entriesList}>
+          <div className={styles.entriesToolbar}>
+            <button
+              type="button"
+              className={styles.connectivityBtn}
+              onClick={openDiscovery}
+              disabled={mutating}
+            >
+              <IconDownload size={14} />
+              <span>{t('providersPage.discovery.openButton')}</span>
+            </button>
+          </div>
+          {discoveryOpen ? (
+            <ModelDiscoveryPanel
+              loading={discovery.loading}
+              error={discovery.error}
+              models={discovery.models}
+              hasFetched={discovery.hasFetched}
+              existingNames={existingModelNames}
+              mutating={mutating}
+              onApply={applyDiscoveredModels}
+              onReload={() => void discovery.fetch()}
+              onClose={() => setDiscoveryOpen(false)}
+            />
+          ) : null}
+          <ModelEntriesEditor
+            models={models}
+            supportsImage={false}
+            supportsThinking={false}
+            mediaCapabilities={mediaCapabilities}
+            capabilityLabels={Object.fromEntries(
+              mediaCapabilities.map((capability) => [
+                capability,
+                t(`providersPage.media.capabilityNames.${capability}`),
+              ])
+            )}
+            mutating={mutating}
+            removeDisabled={models.length <= 1}
+            onUpdate={(index, patch) =>
+              updateField(
+                'models',
+                models.map((model, idx) => (idx === index ? { ...model, ...patch } : model))
+              )
+            }
+            onAdd={() => updateField('models', [...models, emptyModel()])}
+            onRemove={(index) =>
+              updateField(
+                'models',
+                models.filter((_model, idx) => idx !== index)
+              )
+            }
+          />
+        </div>
       </Collapsible>
 
       <Collapsible

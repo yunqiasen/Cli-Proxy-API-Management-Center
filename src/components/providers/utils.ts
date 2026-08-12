@@ -224,6 +224,18 @@ const getProviderRecentUsageEntry = (
   return findCompatibleRecentUsageEntry(providerBucket, normalizedApiKey, baseUrl);
 };
 
+const getProviderUnassignedRecentUsageEntry = (
+  usageByProvider: ProviderRecentUsageMap,
+  provider: string,
+  baseUrl?: string
+): RecentRequestUsageEntry => {
+  const providerBucket = usageByProvider.get(normalizeProviderRecentKey(provider));
+  if (!providerBucket) return EMPTY_RECENT_USAGE_ENTRY;
+  return (
+    providerBucket.get(buildRecentRequestCompositeKey(baseUrl, '')) ?? EMPTY_RECENT_USAGE_ENTRY
+  );
+};
+
 const getProviderRecentBuckets = (
   usageByProvider: ProviderRecentUsageMap,
   provider: string,
@@ -278,8 +290,10 @@ const getProviderApiKeysUsageSummary = (
   apiKeys: readonly string[],
   baseUrl?: string
 ) =>
-  aggregateProviderUsageByApiKeys(apiKeys, (apiKey) =>
-    getProviderRecentUsageEntry(usageByProvider, provider, apiKey, baseUrl)
+  aggregateProviderUsageByApiKeys(
+    apiKeys,
+    (apiKey) => getProviderRecentUsageEntry(usageByProvider, provider, apiKey, baseUrl),
+    () => getProviderUnassignedRecentUsageEntry(usageByProvider, provider, baseUrl)
   );
 
 export function getProviderApiKeysRecentWindowStats(

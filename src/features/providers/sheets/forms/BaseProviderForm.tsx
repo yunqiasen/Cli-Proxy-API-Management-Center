@@ -265,6 +265,7 @@ export function BaseProviderForm({
     {
       brand,
       baseUrl: form.baseUrl,
+      proxyUrl: form.proxyUrl,
       testModel: form.testModel,
       models: form.models,
       formHeaders: form.headers,
@@ -272,6 +273,8 @@ export function BaseProviderForm({
       apiKey: connectivityApiKey,
       fallbackApiKey,
       authIndex: fallbackAuthIndex,
+      cloak: form.cloak,
+      rebuildMidSystemMessage: form.rebuildMidSystemMessage,
     },
     connectivityMessages
   );

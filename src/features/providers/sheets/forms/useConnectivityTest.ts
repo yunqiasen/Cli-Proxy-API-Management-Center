@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { apiCallApi, getApiCallErrorMessage } from '@/services/api';
 import {
-  buildClaudeMessagesEndpoint,
+  aggregateClaudeConnectivityStatuses,
+  apiCallApi,
+  getApiCallErrorMessage,
+  providerConnectivityApi,
+  resolveClaudeConnectivityCredential,
+} from '@/services/api';
+import {
   buildGeminiGenerateContentEndpoint,
   buildInteractionsEndpoint,
   buildInteractionsProbePayload,
@@ -11,14 +16,10 @@ import {
 import { buildHeaderObject, hasHeader } from '@/utils/headers';
 import { getErrorMessage } from '@/utils/helpers';
 import type { ApiKeyEntryInput, ModelEntryInput, ProviderBrand } from '../../types';
-import {
-  getCodexProbeEntryIndices,
-  simulateCodexProvider,
-} from '../../codexProviderProbe';
+import { getCodexProbeEntryIndices, simulateCodexProvider } from '../../codexProviderProbe';
 import { createRequestGeneration } from '../../requestGeneration';
 
 const DEFAULT_TIMEOUT_MS = 30_000;
-const DEFAULT_ANTHROPIC_VERSION = '2023-06-01';
 
 export type ConnectivityState = 'idle' | 'loading' | 'success' | 'error';
 
@@ -51,16 +52,10 @@ const pickModel = (testModel: string | undefined, models: ModelEntryInput[]): st
   return '';
 };
 
-const resolveBearerToken = (headers: Record<string, string>): string => {
-  const auth = Object.entries(headers).find(([k]) => k.toLowerCase() === 'authorization')?.[1];
-  if (!auth) return '';
-  const match = String(auth).match(/^Bearer\s+(.+)$/i);
-  return match ? match[1].trim() : '';
-};
-
 export interface UseConnectivityTestArgs {
   brand: ProviderBrand;
   baseUrl: string;
+  proxyUrl?: string;
   testModel?: string;
   models: ModelEntryInput[];
   formHeaders: Array<{ key: string; value: string }>;
@@ -68,6 +63,13 @@ export interface UseConnectivityTestArgs {
   apiKey?: string;
   fallbackApiKey?: string;
   authIndex?: string;
+  cloak?: {
+    mode: string;
+    strictMode: boolean;
+    sensitiveWordsText: string;
+    cacheUserId: boolean;
+  };
+  rebuildMidSystemMessage?: boolean;
 }
 
 export interface ConnectivityErrorMessages {
@@ -91,7 +93,7 @@ export interface UseConnectivityTestResult {
   runNativeAllKeys: () => Promise<void>;
   runCodex: (entryIndex?: number, testAll?: boolean) => Promise<void>;
   runGemini: () => Promise<void>;
-  runClaude: () => Promise<void>;
+  runClaude: (entryIndex?: number, updateGlobal?: boolean) => Promise<ConnectivityStatus>;
 }
 
 export function useConnectivityTest(
@@ -101,6 +103,7 @@ export function useConnectivityTest(
   const {
     brand,
     baseUrl,
+    proxyUrl,
     testModel,
     models,
     formHeaders,
@@ -108,6 +111,8 @@ export function useConnectivityTest(
     apiKey,
     fallbackApiKey,
     authIndex,
+    cloak,
+    rebuildMidSystemMessage,
   } = args;
 
   const entriesCount = apiKeyEntries?.length ?? 0;
@@ -169,14 +174,32 @@ export function useConnectivityTest(
     return [
       brand,
       baseUrl,
+      proxyUrl ?? '',
       (testModel ?? '').trim(),
       apiKey ?? '',
       fallbackApiKey ?? '',
       authIndex ?? '',
+      cloak?.mode ?? '',
+      String(cloak?.strictMode ?? false),
+      cloak?.sensitiveWordsText ?? '',
+      String(cloak?.cacheUserId ?? false),
+      String(rebuildMidSystemMessage ?? false),
       h,
       m,
     ].join('||');
-  }, [apiKey, authIndex, baseUrl, brand, fallbackApiKey, testModel, formHeaders, models]);
+  }, [
+    apiKey,
+    authIndex,
+    baseUrl,
+    brand,
+    cloak,
+    proxyUrl,
+    fallbackApiKey,
+    formHeaders,
+    models,
+    rebuildMidSystemMessage,
+    testModel,
+  ]);
 
   const lastSignatureRef = useRef(signature);
   useEffect(() => {
@@ -456,7 +479,10 @@ export function useConnectivityTest(
             data: JSON.stringify(
               brand === 'interactions'
                 ? buildInteractionsProbePayload(model)
-                : { contents: [{ parts: [{ text: 'Hi' }] }], generationConfig: { maxOutputTokens: 8 } }
+                : {
+                    contents: [{ parts: [{ text: 'Hi' }] }],
+                    generationConfig: { maxOutputTokens: 8 },
+                  }
             ),
           },
           { timeout: DEFAULT_TIMEOUT_MS }
@@ -466,7 +492,8 @@ export function useConnectivityTest(
         }
         if (!requestGenerationRef.current.isCurrent(generation)) return;
         setGeminiStatus({ state: 'success', message: '' });
-        if (entryIndex !== undefined) updateOpenaiStatus(entryIndex, { state: 'success', message: '' });
+        if (entryIndex !== undefined)
+          updateOpenaiStatus(entryIndex, { state: 'success', message: '' });
       } catch (err) {
         if (!requestGenerationRef.current.isCurrent(generation)) return;
         const failure = { state: 'error' as const, message: requestFailureMessage(err, messages) };
@@ -492,78 +519,77 @@ export function useConnectivityTest(
   );
 
   const runClaude = useCallback(
-    async (entryIndex?: number): Promise<void> => {
-      if (brand !== 'claude' && brand !== 'claudeApi') return;
+    async (entryIndex?: number, updateGlobal = true): Promise<ConnectivityStatus> => {
+      if (brand !== 'claude' && brand !== 'claudeApi') return IDLE;
 
       const generation = requestGenerationRef.current.begin();
-      const endpoint = buildClaudeMessagesEndpoint(baseUrl ?? '');
-      if (!endpoint) {
-        setClaudeStatus({ state: 'error', message: messages.endpointInvalid });
-        return;
-      }
-      const model = pickModel(testModel, models);
-      if (!model) {
-        setClaudeStatus({ state: 'error', message: messages.modelRequired });
-        return;
-      }
-
-      const customHeaders = buildHeaderObject(formHeaders);
-      const selectedEntry = entryIndex === undefined ? undefined : apiKeyEntries?.[entryIndex];
-      const explicitKey = (selectedEntry?.apiKey ?? apiKey ?? '').trim();
-      const persistedKey = (selectedEntry?.existingApiKey ?? fallbackApiKey ?? '').trim();
-      const headerKey = resolveBearerToken(customHeaders);
-      const hasApiKeyHeader = hasHeader(customHeaders, 'x-api-key');
-      const resolvedKey = explicitKey || persistedKey || headerKey;
-      const resolvedAuthIndex =
-        (selectedEntry?.authIndex ?? '').trim() || (authIndex ?? '').trim() || undefined;
-
-      if (!resolvedKey && !hasApiKeyHeader && !resolvedAuthIndex) {
-        setClaudeStatus({ state: 'error', message: messages.apiKeyRequired });
-        return;
-      }
-
-      const headerObj: Record<string, string> = {
-        'Content-Type': 'application/json',
-        ...customHeaders,
+      const failValidation = (message: string): ConnectivityStatus => {
+        const failure = { state: 'error' as const, message };
+        if (updateGlobal) setClaudeStatus(failure);
+        if (entryIndex !== undefined) updateOpenaiStatus(entryIndex, failure);
+        return failure;
       };
-      if (!hasHeader(headerObj, 'anthropic-version')) {
-        headerObj['anthropic-version'] = DEFAULT_ANTHROPIC_VERSION;
-      }
-      if (!hasApiKeyHeader && resolvedKey) {
-        headerObj['x-api-key'] = resolvedKey;
-      } else if (!hasApiKeyHeader && resolvedAuthIndex) {
-        headerObj['x-api-key'] = '$TOKEN$';
-      }
+      const model = pickModel(testModel, models);
+      if (!model) return failValidation(messages.modelRequired);
 
-      setClaudeStatus({ state: 'loading', message: '' });
+      const { explicitKey, resolvedKey, resolvedAuthIndex, resolvedProxyUrl } =
+        resolveClaudeConnectivityCredential({
+          entryIndex,
+          apiKeyEntries,
+          apiKey,
+          fallbackApiKey,
+          authIndex,
+          proxyUrl,
+        });
+      if (!resolvedKey && !resolvedAuthIndex) return failValidation(messages.apiKeyRequired);
+
+      if (updateGlobal) setClaudeStatus({ state: 'loading', message: '' });
+      if (entryIndex !== undefined) {
+        updateOpenaiStatus(entryIndex, { state: 'loading', message: '' });
+      }
       setInFlight((n) => n + 1);
       try {
-        const result = await apiCallApi.request(
+        const result = await providerConnectivityApi.requestClaude(
           {
             authIndex: resolvedAuthIndex,
-            method: 'POST',
-            url: endpoint,
-            header: headerObj,
-            data: JSON.stringify({
-              model,
-              max_tokens: 8,
-              messages: [{ role: 'user', content: 'Hi' }],
-            }),
+            model,
+            ...((explicitKey || !resolvedAuthIndex) && resolvedKey
+              ? { apiKey: explicitKey || resolvedKey }
+              : {}),
+            baseUrl,
+            proxyUrl: resolvedProxyUrl,
+            headers: buildHeaderObject(formHeaders),
+            ...(cloak
+              ? {
+                  cloak: {
+                    mode: cloak.mode,
+                    strictMode: cloak.strictMode,
+                    sensitiveWords: cloak.sensitiveWordsText
+                      .split(/[\n,]+/)
+                      .map((word) => word.trim())
+                      .filter(Boolean),
+                    cacheUserId: cloak.cacheUserId,
+                  },
+                }
+              : {}),
+            ...(rebuildMidSystemMessage !== undefined ? { rebuildMidSystemMessage } : {}),
           },
           { timeout: DEFAULT_TIMEOUT_MS }
         );
         if (result.statusCode < 200 || result.statusCode >= 300) {
           throw new Error(getApiCallErrorMessage(result));
         }
-        if (!requestGenerationRef.current.isCurrent(generation)) return;
-        setClaudeStatus({ state: 'success', message: '' });
-        if (entryIndex !== undefined)
-          updateOpenaiStatus(entryIndex, { state: 'success', message: '' });
+        const success = { state: 'success' as const, message: '' };
+        if (!requestGenerationRef.current.isCurrent(generation)) return success;
+        if (updateGlobal) setClaudeStatus(success);
+        if (entryIndex !== undefined) updateOpenaiStatus(entryIndex, success);
+        return success;
       } catch (err) {
-        if (!requestGenerationRef.current.isCurrent(generation)) return;
         const failure = { state: 'error' as const, message: requestFailureMessage(err, messages) };
-        setClaudeStatus(failure);
+        if (!requestGenerationRef.current.isCurrent(generation)) return failure;
+        if (updateGlobal) setClaudeStatus(failure);
         if (entryIndex !== undefined) updateOpenaiStatus(entryIndex, failure);
+        return failure;
       } finally {
         setInFlight((n) => n - 1);
       }
@@ -574,10 +600,13 @@ export function useConnectivityTest(
       authIndex,
       baseUrl,
       brand,
+      cloak,
       fallbackApiKey,
       formHeaders,
       messages,
       models,
+      proxyUrl,
+      rebuildMidSystemMessage,
       testModel,
       updateOpenaiStatus,
     ]
@@ -588,7 +617,7 @@ export function useConnectivityTest(
       updateOpenaiStatus(idx, { state: 'loading', message: '' });
       if (brand === 'codex' || brand === 'xai') await runCodex(idx);
       else if (brand === 'gemini') await runGemini(idx);
-      else if (brand === 'claude') await runClaude(idx);
+      else if (brand === 'claude') await runClaude(idx, true);
     },
     [brand, runClaude, runCodex, runGemini, updateOpenaiStatus]
   );
@@ -599,8 +628,18 @@ export function useConnectivityTest(
       return;
     }
     const entries = apiKeyEntries ?? [];
+    if (brand === 'claude') {
+      if (!entries.length) return;
+      const generation = requestGenerationRef.current.begin();
+      setClaudeStatus({ state: 'loading', message: '' });
+      const statuses = await Promise.all(entries.map((_, idx) => runClaude(idx, false)));
+      if (requestGenerationRef.current.isCurrent(generation)) {
+        setClaudeStatus(aggregateClaudeConnectivityStatuses(statuses));
+      }
+      return;
+    }
     await Promise.all(entries.map((_, idx) => runNativeKey(idx)));
-  }, [apiKeyEntries, brand, runCodex, runNativeKey]);
+  }, [apiKeyEntries, brand, runClaude, runCodex, runNativeKey]);
 
   return {
     openaiStatuses,

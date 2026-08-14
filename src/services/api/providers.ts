@@ -5,7 +5,10 @@
 import { apiClient } from './client';
 import { isRecord } from '@/utils/helpers';
 import { normalizeOpenAIProvider, normalizeProviderKeyConfig } from './transformers';
-import { serializeNativeProviderPayload } from './nativeProviderContracts';
+import {
+  normalizeNativeProviderSectionPayload,
+  serializeNativeProviderPayload,
+} from './nativeProviderContracts';
 import { serializeMediaProviderPayload } from './mediaProviderContracts';
 import { normalizeMediaProviderPayload } from './mediaProviderContracts';
 import type {
@@ -423,6 +426,11 @@ const mutateMediaProviderList = async (
 };
 
 export const providersApi = {
+  async getGeminiKeys(): Promise<GeminiKeyConfig[]> {
+    const data = await apiClient.get('/gemini-api-key');
+    return normalizeNativeProviderSectionPayload(data, 'gemini-api-key') as GeminiKeyConfig[];
+  },
+
   createGeminiKey: (config: GeminiKeyConfig) =>
     mutateLatestProviderList('gemini-api-key', (latestItems) =>
       appendLatestProviderRecord(latestItems, serializeGeminiKey(config), (raw, payload) =>
@@ -455,6 +463,11 @@ export const providersApi = {
 
   deleteGeminiKey: (apiKey: string, baseUrl?: string) =>
     apiClient.delete(`/gemini-api-key${buildProviderDeleteQuery(apiKey, baseUrl)}`),
+
+  async getInteractionsKeys(): Promise<GeminiKeyConfig[]> {
+    const data = await apiClient.get('/interactions-api-key');
+    return normalizeNativeProviderSectionPayload(data, 'interactions-api-key') as GeminiKeyConfig[];
+  },
 
   createInteractionsKey: (config: GeminiKeyConfig) =>
     mutateLatestProviderList('interactions-api-key', (latestItems) =>
@@ -489,6 +502,11 @@ export const providersApi = {
   deleteInteractionsKey: (apiKey: string, baseUrl?: string) =>
     apiClient.delete(`/interactions-api-key${buildProviderDeleteQuery(apiKey, baseUrl)}`),
 
+  async getCodexConfigs(): Promise<ProviderKeyConfig[]> {
+    const data = await apiClient.get('/codex-api-key');
+    return normalizeNativeProviderSectionPayload(data, 'codex-api-key') as ProviderKeyConfig[];
+  },
+
   createCodexConfig: (config: ProviderKeyConfig) =>
     mutateLatestProviderList('codex-api-key', (latestItems) =>
       appendLatestProviderRecord(latestItems, serializeProviderKey(config), (raw, payload) =>
@@ -522,6 +540,11 @@ export const providersApi = {
   deleteCodexConfig: (apiKey: string, baseUrl?: string) =>
     apiClient.delete(`/codex-api-key${buildProviderDeleteQuery(apiKey, baseUrl)}`),
 
+  async getXAIConfigs(): Promise<ProviderKeyConfig[]> {
+    const data = await apiClient.get('/xai-api-key');
+    return normalizeNativeProviderSectionPayload(data, 'xai-api-key') as ProviderKeyConfig[];
+  },
+
   createXAIConfig: (config: ProviderKeyConfig) =>
     mutateLatestProviderList('xai-api-key', (latestItems) =>
       appendLatestProviderRecord(latestItems, serializeProviderKey(config), (raw, payload) =>
@@ -541,6 +564,11 @@ export const providersApi = {
 
   deleteXAIConfig: (apiKey: string, baseUrl?: string) =>
     apiClient.delete(`/xai-api-key${buildProviderDeleteQuery(apiKey, baseUrl)}`),
+
+  async getClaudeConfigs(): Promise<ProviderKeyConfig[]> {
+    const data = await apiClient.get('/claude-api-key');
+    return normalizeNativeProviderSectionPayload(data, 'claude-api-key') as ProviderKeyConfig[];
+  },
 
   createClaudeConfig: (config: ProviderKeyConfig) =>
     mutateLatestProviderList('claude-api-key', (latestItems) =>

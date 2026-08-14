@@ -160,6 +160,26 @@ export function normalizeNativeProviderPayload(item: unknown): NativeProviderCon
   return config;
 }
 
+export function normalizeNativeProviderSectionPayload(
+  payload: unknown,
+  section: string
+): NativeProviderConfig[] {
+  if (!isRecord(payload)) return [];
+  const items = payload[section];
+  if (!Array.isArray(items)) return [];
+
+  return items.reduce<NativeProviderConfig[]>((out, item) => {
+    const config = normalizeNativeProviderPayload(item);
+    if (!config) return out;
+    if (isRecord(item)) {
+      const weight = normalizeNumber(item.weight);
+      if (weight !== undefined) config.weight = weight;
+    }
+    out.push(config);
+    return out;
+  }, []);
+}
+
 const serializeModels = (models?: ModelAlias[]) => {
   const payload = (models ?? [])
     .map((model) => {
@@ -186,9 +206,7 @@ const serializeCloak = (cloak?: CloakConfig): Record<string, unknown> | undefine
   return Object.keys(payload).length ? payload : undefined;
 };
 
-export const serializeNativeApiKeyEntry = (
-  entry: NativeApiKeyEntry
-): Record<string, unknown> => {
+export const serializeNativeApiKeyEntry = (entry: NativeApiKeyEntry): Record<string, unknown> => {
   const payload: Record<string, unknown> = { 'api-key': entry.apiKey.trim() };
   if (entry.priority !== undefined) payload.priority = entry.priority;
   if (entry.weight !== undefined) payload.weight = entry.weight;

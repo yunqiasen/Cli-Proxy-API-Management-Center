@@ -612,14 +612,44 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
     setIsFetching(true);
     setErrorMessage(null);
     try {
-      const [configResult, vertexResult, openaiResult, mediaResult] = await Promise.allSettled([
+      const [
+        configResult,
+        geminiResult,
+        interactionsResult,
+        codexResult,
+        xaiResult,
+        claudeResult,
+        vertexResult,
+        openaiResult,
+        mediaResult,
+      ] = await Promise.allSettled([
         fetchConfig(true),
+        providersApi.getGeminiKeys(),
+        providersApi.getInteractionsKeys(),
+        providersApi.getCodexConfigs(),
+        providersApi.getXAIConfigs(),
+        providersApi.getClaudeConfigs(),
         providersApi.getVertexConfigs(),
         providersApi.getOpenAIProviders(),
         providersApi.getMediaProviders(),
       ]);
       if (configResult.status !== 'fulfilled') {
         throw configResult.reason;
+      }
+      if (geminiResult.status === 'fulfilled') {
+        updateConfigValue('gemini-api-key', geminiResult.value || []);
+      }
+      if (interactionsResult.status === 'fulfilled') {
+        updateConfigValue('interactions-api-key', interactionsResult.value || []);
+      }
+      if (codexResult.status === 'fulfilled') {
+        updateConfigValue('codex-api-key', codexResult.value || []);
+      }
+      if (xaiResult.status === 'fulfilled') {
+        updateConfigValue('xai-api-key', xaiResult.value || []);
+      }
+      if (claudeResult.status === 'fulfilled') {
+        updateConfigValue('claude-api-key', claudeResult.value || []);
       }
       if (vertexResult.status === 'fulfilled') {
         updateConfigValue('vertex-api-key', vertexResult.value || []);

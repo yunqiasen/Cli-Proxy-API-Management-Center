@@ -1,6 +1,7 @@
 import {
   apiCallApi,
   getApiCallErrorMessage,
+  providerConnectivityApi,
   type ApiCallRequest,
   type ApiCallResult,
 } from '@/services/api';
@@ -47,6 +48,15 @@ export interface CodexProbeOptions {
   request?: (payload: ApiCallRequest, config?: { timeout?: number }) => Promise<ApiCallResult>;
 }
 
+type CodexProbeKeyEntry = NonNullable<ProviderKeyConfig['apiKeyEntries']>[number] & {
+  explicitApiKey?: string;
+};
+
+export type CodexProbeProviderConfig = Omit<ProviderKeyConfig, 'apiKeyEntries'> & {
+  apiKeyEntries?: CodexProbeKeyEntry[];
+  explicitApiKey?: string;
+};
+
 const DEFAULT_TIMEOUT_MS = 30_000;
 
 export const getCodexProbeEntryIndices = (
@@ -60,7 +70,7 @@ const errorMessage = (error: unknown, fallback: string): string => {
   return fallback;
 };
 
-const pickModel = (config: ProviderKeyConfig): string => {
+const pickModel = (config: CodexProbeProviderConfig): string => {
   for (const model of config.models ?? []) {
     const name = (model.name ?? '').trim();
     if (name) return name;
@@ -68,12 +78,15 @@ const pickModel = (config: ProviderKeyConfig): string => {
   return '';
 };
 
-const getEntries = (config: ProviderKeyConfig) => {
+const getEntries = (config: CodexProbeProviderConfig) => {
   if (config.apiKeyEntries?.length) {
     const useLegacyAuthIndex = config.apiKeyEntries.length === 1;
     return config.apiKeyEntries.map((entry, index) => ({
       index,
       apiKey: entry.apiKey?.trim() ?? '',
+      explicitApiKey:
+        typeof entry.explicitApiKey === 'string' ? entry.explicitApiKey.trim() : undefined,
+      proxyUrl: entry.proxyUrl?.trim() ?? '',
       authIndex:
         entry.authIndex?.trim() || (useLegacyAuthIndex ? config.authIndex?.trim() : '') || '',
     }));
@@ -83,13 +96,20 @@ const getEntries = (config: ProviderKeyConfig) => {
   const authIndex = config.authIndex?.trim() ?? '';
   const hasStandaloneAuthorization = Object.entries(config.headers ?? {}).some(
     ([name, value]) =>
-      name.toLowerCase() === 'authorization' &&
-      value.trim() !== '' &&
-      !value.includes('$TOKEN$')
+      name.toLowerCase() === 'authorization' && value.trim() !== '' && !value.includes('$TOKEN$')
   );
   if (!apiKey && !authIndex && !hasStandaloneAuthorization) return [];
 
-  return [{ index: 0, apiKey, authIndex }];
+  return [
+    {
+      index: 0,
+      apiKey,
+      explicitApiKey:
+        typeof config.explicitApiKey === 'string' ? config.explicitApiKey.trim() : undefined,
+      proxyUrl: config.proxyUrl?.trim() ?? '',
+      authIndex,
+    },
+  ];
 };
 
 const summarizeMessage = (entries: CodexProbeEntryResult[], fallback: string): string => {
@@ -99,12 +119,12 @@ const summarizeMessage = (entries: CodexProbeEntryResult[], fallback: string): s
   return failures.length > 1 ? `${first} (+${failures.length - 1})` : first;
 };
 
-export function pickCodexProbeModel(config: ProviderKeyConfig): string {
+export function pickCodexProbeModel(config: CodexProbeProviderConfig): string {
   return pickModel(config);
 }
 
 export async function simulateCodexProvider(
-  config: ProviderKeyConfig,
+  config: CodexProbeProviderConfig,
   messages: CodexProbeMessages,
   options: CodexProbeOptions = {}
 ): Promise<CodexProbeResult> {
@@ -192,7 +212,13 @@ export async function simulateCodexProvider(
     });
     const resolvedKey =
       entry.apiKey || (allEntries.length === 1 ? (config.apiKey?.trim() ?? '') : '');
-    if (!resolvedKey && !hasAuthorization && !entry.authIndex) {
+    const requestKey =
+      entry.explicitApiKey !== undefined
+        ? entry.explicitApiKey || (entry.authIndex ? '' : resolvedKey)
+        : entry.authIndex
+          ? ''
+          : resolvedKey;
+    if (!requestKey && !hasAuthorization && !entry.authIndex) {
       return {
         index: entry.index,
         state: 'error',
@@ -206,20 +232,33 @@ export async function simulateCodexProvider(
       ...customHeaders,
     };
     if (!hasAuthorization) {
-      headers.Authorization = resolvedKey ? `Bearer ${resolvedKey}` : 'Bearer $TOKEN$';
+      headers.Authorization = requestKey ? `Bearer ${requestKey}` : 'Bearer $TOKEN$';
     }
     const probe = createCodexConnectivityRequest(model, headers);
     try {
-      const result = await request(
-        {
-          authIndex: entry.authIndex || undefined,
-          method: 'POST',
-          url: endpoint,
-          header: probe.headers,
-          data: JSON.stringify(probe.body),
-        },
-        { timeout: timeoutMs }
-      );
+      const result = options.request
+        ? await request(
+            {
+              authIndex: entry.authIndex || undefined,
+              method: 'POST',
+              url: endpoint,
+              header: probe.headers,
+              data: JSON.stringify(probe.body),
+            },
+            { timeout: timeoutMs }
+          )
+        : await providerConnectivityApi.requestCodex(
+            {
+              authIndex: entry.authIndex || undefined,
+              model,
+              ...(requestKey ? { apiKey: requestKey } : {}),
+              baseUrl,
+              proxyUrl: entry.proxyUrl || config.proxyUrl,
+              headers: customHeaders,
+              disableImageGeneration: config.disableImageGeneration === true,
+            },
+            { timeout: timeoutMs }
+          );
       if (
         result.statusCode < 200 ||
         result.statusCode >= 300 ||

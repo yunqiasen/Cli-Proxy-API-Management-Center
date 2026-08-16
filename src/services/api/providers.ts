@@ -42,8 +42,12 @@ const PROVIDER_COMMON_KEY_FIELDS = [
 
 const GEMINI_KEY_FIELDS = PROVIDER_COMMON_KEY_FIELDS;
 const INTERACTIONS_KEY_FIELDS = PROVIDER_COMMON_KEY_FIELDS;
-const CODEX_KEY_FIELDS = [...PROVIDER_COMMON_KEY_FIELDS, 'websockets'] as const;
-const XAI_KEY_FIELDS = CODEX_KEY_FIELDS;
+const CODEX_KEY_FIELDS = [
+  ...PROVIDER_COMMON_KEY_FIELDS,
+  'websockets',
+  'disable-image-generation',
+] as const;
+const XAI_KEY_FIELDS = [...PROVIDER_COMMON_KEY_FIELDS, 'websockets'] as const;
 const CLAUDE_KEY_FIELDS = [
   ...PROVIDER_COMMON_KEY_FIELDS,
   'cloak',

@@ -147,6 +147,8 @@ export function normalizeNativeProviderPayload(item: unknown): NativeProviderCon
   if (authIndex) config.authIndex = authIndex;
   const websockets = normalizeBoolean(record.websockets);
   if (websockets !== undefined) config.websockets = websockets;
+  const disableImageGeneration = normalizeBoolean(record['disable-image-generation']);
+  if (disableImageGeneration !== undefined) config.disableImageGeneration = disableImageGeneration;
   const cloak = normalizeCloak(record.cloak);
   if (cloak) config.cloak = cloak;
   const experimentalCchSigning = normalizeBoolean(record['experimental-cch-signing']);
@@ -227,6 +229,7 @@ export function serializeNativeProviderPayload(
   if (config.proxyUrl?.trim()) payload['proxy-url'] = config.proxyUrl.trim();
   const providerConfig = config as ProviderKeyConfig;
   if (providerConfig.websockets !== undefined) payload.websockets = providerConfig.websockets;
+  if (providerConfig.disableImageGeneration) payload['disable-image-generation'] = true;
   if (config.disableCooling) payload['disable-cooling'] = true;
   if (config.apiKeyEntries?.length) {
     payload['api-key-entries'] = config.apiKeyEntries.map(serializeNativeApiKeyEntry);

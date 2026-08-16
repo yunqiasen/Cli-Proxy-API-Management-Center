@@ -1628,6 +1628,8 @@
       "disabled": "Disable this entry",
       "disabledHint": "Disabled entries won't be used by the gateway",
       "websockets": "Enable WebSockets",
+      "disableImageGeneration": "Disable ImageGen tools",
+      "disableImageGenerationHint": "Remove image_generation and image_gen.imagegen before this relay, and skip automatic injection",
       "testModel": "Test model",
       "testModelClaudeHint": "Used for connectivity testing only; not saved",
       "testModelAutoWith": "Auto · {{name}}",

@@ -122,6 +122,8 @@ export function buildNativeProviderFormInput(
       : [emptyHeader()],
     excludedModelsText: excludedModels.join('\n'),
     websockets: brand === 'codex' ? providerConfig?.websockets === true : undefined,
+    disableImageGeneration:
+      brand === 'codex' ? providerConfig?.disableImageGeneration === true : undefined,
     cloak:
       brand === 'claude'
         ? {
@@ -179,7 +181,10 @@ export function buildNativeProviderConfig(
     disableCooling: input.disableCooling === true,
   };
 
-  if (brand === 'codex') next.websockets = input.websockets === true;
+  if (brand === 'codex') {
+    next.websockets = input.websockets === true;
+    next.disableImageGeneration = input.disableImageGeneration === true;
+  }
   if (brand === 'claude') {
     if (input.cloak) {
       const existingCloak = (existing as ProviderKeyConfig | undefined)?.cloak;

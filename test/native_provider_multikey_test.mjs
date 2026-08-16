@@ -62,6 +62,7 @@ test('normalizes and serializes named grouped native provider keys', () => {
       { 'api-key': 'key-b', priority: 20, weight: 0, 'proxy-url': 'http://key-proxy' },
     ],
     websockets: true,
+    'disable-image-generation': true,
     models: [
       {
         name: 'gpt-5.6',
@@ -80,6 +81,7 @@ test('normalizes and serializes named grouped native provider keys', () => {
   assert.equal(config.apiKeyEntries?.[1]?.weight, 0);
   assert.equal(config.apiKeyEntries?.[1]?.proxyUrl, 'http://key-proxy');
   assert.equal(config.websockets, true);
+  assert.equal(config.disableImageGeneration, true);
   assert.equal(config.models?.[0]?.alias, 'codex-main');
   assert.deepEqual(config.models?.[0]?.thinking, { min: 128, max: 8192, dynamic_allowed: true });
 
@@ -89,6 +91,7 @@ test('normalizes and serializes named grouped native provider keys', () => {
     priority: 7,
     'proxy-url': 'http://provider-proxy',
     websockets: true,
+    'disable-image-generation': true,
     'api-key-entries': [
       { 'api-key': 'key-a', priority: 0, weight: 3, 'auth-index': 'auth-a' },
       { 'api-key': 'key-b', priority: 20, weight: 0, 'proxy-url': 'http://key-proxy' },
@@ -192,6 +195,7 @@ test('preserves Claude, Codex, and Gemini protocol fields through form conversio
     name: 'codex-relay',
     apiKeyEntries: [{ apiKey: 'codex-a' }],
     websockets: true,
+    disableImageGeneration: true,
   };
   const gemini = {
     apiKey: '',
@@ -221,6 +225,7 @@ test('preserves Claude, Codex, and Gemini protocol fields through form conversio
   assert.equal(claudeSaved.experimentalCchSigning, true);
   assert.equal(claudeSaved.rebuildMidSystemMessage, true);
   assert.equal(codexSaved.websockets, true);
+  assert.equal(codexSaved.disableImageGeneration, true);
   assert.equal(geminiSaved.disableCooling, true);
   assert.deepEqual(geminiSaved.headers, { 'X-Test': 'kept' });
 });

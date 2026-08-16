@@ -1606,6 +1606,8 @@
       "disabled": "Отключить эту запись",
       "disabledHint": "Отключённые записи не используются шлюзом",
       "websockets": "Включить WebSockets",
+      "disableImageGeneration": "Отключить инструменты ImageGen",
+      "disableImageGenerationHint": "Удалять image_generation и image_gen.imagegen перед этим relay и не добавлять их автоматически",
       "testModel": "Тестовая модель",
       "testModelClaudeHint": "Используется только для проверки соединения; не сохраняется",
       "testModelAutoWith": "Авто · {{name}}",

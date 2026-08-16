@@ -64,6 +64,7 @@ export interface ProviderKeyConfig {
   models?: ModelAlias[];
   excludedModels?: string[];
   disableCooling?: boolean;
+  disableImageGeneration?: boolean;
   cloak?: CloakConfig;
   experimentalCchSigning?: boolean;
   rebuildMidSystemMessage?: boolean;

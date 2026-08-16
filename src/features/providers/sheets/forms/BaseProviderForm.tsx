@@ -275,6 +275,7 @@ export function BaseProviderForm({
       authIndex: fallbackAuthIndex,
       cloak: form.cloak,
       rebuildMidSystemMessage: form.rebuildMidSystemMessage,
+      disableImageGeneration: form.disableImageGeneration,
     },
     connectivityMessages
   );
@@ -717,6 +718,22 @@ export function BaseProviderForm({
             />
             <span className={styles.checkboxText}>
               <span>{t('providersPage.form.websockets')}</span>
+            </span>
+          </label>
+        ) : null}
+
+        {brand === 'codex' ? (
+          <label className={styles.checkboxRow}>
+            <input
+              type="checkbox"
+              className={styles.checkboxBox}
+              checked={form.disableImageGeneration ?? false}
+              disabled={mutating}
+              onChange={(e) => updateField('disableImageGeneration', e.target.checked)}
+            />
+            <span className={styles.checkboxText}>
+              <span>{t('providersPage.form.disableImageGeneration')}</span>
+              <small>{t('providersPage.form.disableImageGenerationHint')}</small>
             </span>
           </label>
         ) : null}

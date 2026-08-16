@@ -78,7 +78,7 @@ Check the CLI Proxy API server documentation/config comments for the full authen
 - **AI Providers**:
   - Gemini/Codex/Claude/Vertex key entries (base URL, headers, proxy, model aliases, excluded models, prefix).
   - OpenAI-compatible providers (multiple API keys, custom headers, model alias import via `/v1/models`, optional browser-side "chat/completions" test).
-  - Codex providers support per-resource and bounded bulk simulation through the management API, with per-key results.
+  - Codex providers support per-resource and bounded bulk tests through the CPA executor, with per-key results and provider-level ImageGen suppression.
 - **Media Providers**: image, video, and audio use dedicated management entries with multi-key credentials, model capabilities, required/optional/model-free operations, JSON/multipart/binary requests, and async polling. They are no longer duplicated in the general AI Providers category list.
 - **Auth Files**: upload/download/delete JSON credentials, filter/search/pagination, runtime-only indicators, view supported models per credential (when the server supports it), manage OAuth excluded models (supports `*` wildcards), configure OAuth model alias mappings.
 - **OAuth**: start OAuth/device flows for Codex, Anthropic/Claude, Antigravity, Kimi, and xAI/Grok; poll status; submit callback URLs or xAI/Grok displayed codes; import Vertex JSON credentials and iFlow cookies.

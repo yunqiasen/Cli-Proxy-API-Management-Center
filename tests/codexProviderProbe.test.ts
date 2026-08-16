@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import type { ApiCallRequest, ApiCallResult } from '@/services/api';
+import { providerConnectivityApi, type ApiCallRequest, type ApiCallResult } from '@/services/api';
 import {
   getCodexProbeEntryIndices,
   pickCodexProbeModel,
@@ -36,7 +36,6 @@ const groupedConfig = (): ProviderKeyConfig => ({
 });
 
 describe('simulateCodexProvider', () => {
-
   test('selects all entries for the edit-sheet all-keys action', () => {
     expect(getCodexProbeEntryIndices(undefined, true)).toBeUndefined();
     expect(getCodexProbeEntryIndices(undefined, false)).toEqual([0]);
@@ -61,8 +60,8 @@ describe('simulateCodexProvider', () => {
       'https://relay.example/v1/responses',
       'https://relay.example/v1/responses',
     ]);
-    expect(requests[0]?.header?.Authorization).toBe('Bearer key-a');
-    expect(requests[1]?.header?.Authorization).toBe('Bearer key-b');
+    expect(requests[0]?.header?.Authorization).toBe('Bearer $TOKEN$');
+    expect(requests[1]?.header?.Authorization).toBe('Bearer $TOKEN$');
     expect(requests[0]?.header?.['X-Custom']).toBe('kept');
 
     for (const request of requests) {
@@ -110,7 +109,7 @@ describe('simulateCodexProvider', () => {
 
     expect(result.total).toBe(1);
     expect(result.entries[0]?.index).toBe(1);
-    expect(requests[0]?.header?.Authorization).toBe('Bearer key-b');
+    expect(requests[0]?.header?.Authorization).toBe('Bearer $TOKEN$');
 
     const invalid = await simulateCodexProvider(
       { apiKey: 'key', baseUrl: 'https://relay.example/v1', models: [] },
@@ -174,6 +173,60 @@ describe('simulateCodexProvider', () => {
     expect(JSON.parse(requestBody).model).toBe('gpt-selected');
   });
 
+  test('uses the CPA executor probe and forwards the provider ImageGen switch by default', async () => {
+    const originalRequestCodex = providerConnectivityApi.requestCodex;
+    const calls: Parameters<typeof providerConnectivityApi.requestCodex>[0][] = [];
+    providerConnectivityApi.requestCodex = async (input) => {
+      calls.push(input);
+      return okResult();
+    };
+
+    try {
+      const config = groupedConfig();
+      config.proxyUrl = 'http://provider-proxy';
+      config.disableImageGeneration = true;
+      const result = await simulateCodexProvider(config, messages, { entryIndices: [0] });
+
+      expect(result.state).toBe('success');
+      expect(calls).toEqual([
+        {
+          authIndex: 'auth-a',
+          model: 'gpt-upstream',
+          baseUrl: 'https://relay.example/v1',
+          proxyUrl: 'http://provider-proxy',
+          headers: { 'X-Custom': 'kept' },
+          disableImageGeneration: true,
+        },
+      ]);
+    } finally {
+      providerConnectivityApi.requestCodex = originalRequestCodex;
+    }
+  });
+
+  test('sends a newly entered key even when the saved credential has an auth index', async () => {
+    const originalRequestCodex = providerConnectivityApi.requestCodex;
+    const calls: Parameters<typeof providerConnectivityApi.requestCodex>[0][] = [];
+    providerConnectivityApi.requestCodex = async (input) => {
+      calls.push(input);
+      return okResult();
+    };
+
+    try {
+      const config = groupedConfig() as ProviderKeyConfig & {
+        apiKeyEntries: Array<NonNullable<ProviderKeyConfig['apiKeyEntries']>[number] & {
+          explicitApiKey?: string;
+        }>;
+      };
+      config.apiKeyEntries[0].explicitApiKey = 'new-key';
+      const result = await simulateCodexProvider(config, messages, { entryIndices: [0] });
+
+      expect(result.state).toBe('success');
+      expect(calls[0]?.apiKey).toBe('new-key');
+    } finally {
+      providerConnectivityApi.requestCodex = originalRequestCodex;
+    }
+  });
+
   test('uses the upstream model name instead of its public alias', () => {
     expect(pickCodexProbeModel(groupedConfig())).toBe('gpt-upstream');
   });
@@ -182,10 +235,7 @@ describe('simulateCodexProvider', () => {
 test('does not reuse a provider auth index for grouped entries without their own auth index', async () => {
   const config = groupedConfig();
   config.authIndex = 'provider-auth';
-  config.apiKeyEntries = [
-    { apiKey: 'key-a', authIndex: 'auth-a' },
-    { apiKey: 'key-b' },
-  ];
+  config.apiKeyEntries = [{ apiKey: 'key-a', authIndex: 'auth-a' }, { apiKey: 'key-b' }];
   const authIndices: Array<string | undefined> = [];
 
   await simulateCodexProvider(config, messages, {

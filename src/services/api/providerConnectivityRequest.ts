@@ -119,6 +119,42 @@ export const buildClaudeProviderConnectivityPayload = (
     : {}),
 });
 
+export interface CodexProviderConnectivityInput {
+  authIndex?: string;
+  model: string;
+  apiKey?: string;
+  baseUrl?: string;
+  proxyUrl?: string;
+  headers?: Record<string, string>;
+  disableImageGeneration?: boolean;
+}
+
+export interface CodexProviderConnectivityPayload {
+  provider: 'codex';
+  auth_index?: string;
+  model: string;
+  api_key?: string;
+  base_url?: string;
+  proxy_url?: string;
+  header?: Record<string, string>;
+  disable_image_generation?: boolean;
+}
+
+export const buildCodexProviderConnectivityPayload = (
+  input: CodexProviderConnectivityInput
+): CodexProviderConnectivityPayload => ({
+  provider: 'codex',
+  ...(input.authIndex?.trim() ? { auth_index: input.authIndex.trim() } : {}),
+  model: input.model.trim(),
+  ...(input.apiKey !== undefined ? { api_key: input.apiKey.trim() } : {}),
+  ...(input.baseUrl !== undefined ? { base_url: input.baseUrl.trim() } : {}),
+  ...(input.proxyUrl !== undefined ? { proxy_url: input.proxyUrl.trim() } : {}),
+  ...(input.headers !== undefined ? { header: input.headers } : {}),
+  ...(input.disableImageGeneration !== undefined
+    ? { disable_image_generation: input.disableImageGeneration }
+    : {}),
+});
+
 const normalizeBody = (input: unknown): { bodyText: string; body: unknown | null } => {
   if (input === undefined || input === null) return { bodyText: '', body: null };
   if (typeof input === 'string') {

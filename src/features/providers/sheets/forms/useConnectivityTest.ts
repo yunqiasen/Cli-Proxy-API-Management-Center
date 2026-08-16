@@ -70,6 +70,7 @@ export interface UseConnectivityTestArgs {
     cacheUserId: boolean;
   };
   rebuildMidSystemMessage?: boolean;
+  disableImageGeneration?: boolean;
 }
 
 export interface ConnectivityErrorMessages {
@@ -113,6 +114,7 @@ export function useConnectivityTest(
     authIndex,
     cloak,
     rebuildMidSystemMessage,
+    disableImageGeneration,
   } = args;
 
   const entriesCount = apiKeyEntries?.length ?? 0;
@@ -184,6 +186,7 @@ export function useConnectivityTest(
       cloak?.sensitiveWordsText ?? '',
       String(cloak?.cacheUserId ?? false),
       String(rebuildMidSystemMessage ?? false),
+      String(disableImageGeneration ?? false),
       h,
       m,
     ].join('||');
@@ -198,6 +201,7 @@ export function useConnectivityTest(
     formHeaders,
     models,
     rebuildMidSystemMessage,
+    disableImageGeneration,
     testModel,
   ]);
 
@@ -334,16 +338,23 @@ export function useConnectivityTest(
       if (brand !== 'codex' && brand !== 'xai') return;
 
       const generation = requestGenerationRef.current.begin();
-      const normalizedEntries = (apiKeyEntries ?? []).map((entry, index) => ({
-        apiKey:
-          (entry.apiKey ?? '').trim() ||
-          (entry.existingApiKey ?? '').trim() ||
-          (index === 0 ? (fallbackApiKey ?? '').trim() : ''),
-        priority: entry.priority,
-        proxyUrl: entry.proxyUrl?.trim() || undefined,
-        authIndex: entry.authIndex?.trim() || (index === 0 ? authIndex?.trim() : '') || undefined,
-      }));
-      const legacyKey = (apiKey ?? '').trim() || (fallbackApiKey ?? '').trim();
+      const normalizedEntries = (apiKeyEntries ?? []).map((entry, index) => {
+        const explicitApiKey = (entry.apiKey ?? '').trim();
+        const resolvedAuthIndex =
+          entry.authIndex?.trim() || (index === 0 ? authIndex?.trim() : '') || undefined;
+        return {
+          apiKey:
+            explicitApiKey ||
+            (entry.existingApiKey ?? '').trim() ||
+            (index === 0 ? (fallbackApiKey ?? '').trim() : ''),
+          explicitApiKey,
+          priority: entry.priority,
+          proxyUrl: entry.proxyUrl?.trim() || undefined,
+          authIndex: resolvedAuthIndex,
+        };
+      });
+      const explicitLegacyKey = (apiKey ?? '').trim();
+      const legacyKey = explicitLegacyKey || (fallbackApiKey ?? '').trim();
       const selectedIndices = getCodexProbeEntryIndices(entryIndex, testAll);
 
       setCodexStatus({ state: 'loading', message: '' });
@@ -359,6 +370,7 @@ export function useConnectivityTest(
         const result = await simulateCodexProvider(
           {
             apiKey: legacyKey,
+            explicitApiKey: explicitLegacyKey,
             apiKeyEntries: normalizedEntries.length ? normalizedEntries : undefined,
             baseUrl,
             headers: buildHeaderObject(formHeaders),
@@ -369,12 +381,15 @@ export function useConnectivityTest(
               testModel: model.testModel,
             })),
             authIndex: authIndex?.trim() || undefined,
+            proxyUrl,
+            disableImageGeneration: disableImageGeneration === true,
           },
           messages,
           {
             entryIndices: selectedIndices,
             model: (testModel ?? '').trim() || undefined,
             timeoutMs: DEFAULT_TIMEOUT_MS,
+            request: brand === 'xai' ? apiCallApi.request : undefined,
           }
         );
         const status: ConnectivityStatus = {
@@ -412,10 +427,12 @@ export function useConnectivityTest(
       authIndex,
       baseUrl,
       brand,
+      disableImageGeneration,
       fallbackApiKey,
       formHeaders,
       messages,
       models,
+      proxyUrl,
       testModel,
       updateOpenaiStatus,
     ]

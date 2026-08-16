@@ -264,6 +264,7 @@ export interface ProviderEntryFormInput {
 
   /** Codex 专属 */
   websockets?: boolean;
+  disableImageGeneration?: boolean;
   /** Claude 专属 */
   cloak?: CloakInput;
   experimentalCchSigning?: boolean;

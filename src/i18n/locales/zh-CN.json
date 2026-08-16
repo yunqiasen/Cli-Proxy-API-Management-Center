@@ -1628,6 +1628,8 @@
       "disabled": "停用此条目",
       "disabledHint": "停用后不会被网关使用",
       "websockets": "启用 WebSockets",
+      "disableImageGeneration": "禁用 ImageGen 工具",
+      "disableImageGenerationHint": "发送到此中转站前移除 image_generation 与 image_gen.imagegen，且不再自动注入",
       "testModel": "测试模型",
       "testModelClaudeHint": "仅用于连通性测试,不会被保存",
       "testModelAutoWith": "自动 · {{name}}",

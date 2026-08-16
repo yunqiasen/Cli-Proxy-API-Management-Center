@@ -78,7 +78,7 @@ bun run build
 - **AI 提供商**：
   - Gemini/Codex/Claude/Vertex 配置（Base URL、Headers、代理、模型别名、排除模型、Prefix）。
   - OpenAI 兼容提供商（多 Key、Header、自助从 `/v1/models` 拉取并导入模型别名、可选浏览器侧 `chat/completions` 测试）。
-  - Codex 提供商支持通过管理 API 按供应商模拟测试，也支持有界并发的全部供应商测试，并显示逐 Key 结果。
+  - Codex 提供商测试经过 CPA 执行器，支持有界并发的全部 Key 测试、逐 Key 结果，以及按供应商过滤 ImageGen 工具。
 - **媒体供应商**：图片、视频、音频分别使用独立管理入口，支持多 Key、模型能力、模型可选/必填/无模型操作、JSON/Multipart/Binary 请求和异步任务轮询；不再重复显示在“AI 提供商”分类中。
 - **认证文件**：上传/下载/删除 JSON 凭据，筛选/搜索/分页，标记 runtime-only；查看单个凭据可用模型（依赖后端支持）；管理 OAuth 排除模型（支持 `*` 通配符）；配置 OAuth 模型别名映射。
 - **OAuth**：对 Codex、Anthropic/Claude、Antigravity、Kimi、xAI/Grok 发起 OAuth/设备码流程并轮询状态；支持提交回调 URL 或 xAI/Grok 页面显示的 code；包含 Vertex JSON 凭据导入与 iFlow Cookie 导入。

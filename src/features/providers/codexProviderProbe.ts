@@ -7,6 +7,7 @@ import {
 } from '@/services/api';
 import { buildCodexResponsesEndpoint } from '@/components/providers/utils';
 import type { ProviderKeyConfig } from '@/types';
+import { isRecord } from '@/utils/helpers';
 import { createCodexConnectivityRequest } from './sheets/forms/codexConnectivityRequest';
 
 export type CodexProbeState = 'idle' | 'loading' | 'success' | 'error';
@@ -68,6 +69,91 @@ const errorMessage = (error: unknown, fallback: string): string => {
   if (error instanceof Error && error.message.trim()) return error.message.trim();
   if (typeof error === 'string' && error.trim()) return error.trim();
   return fallback;
+};
+
+const codexResponseFailed = (body: Record<string, unknown>): boolean =>
+  body.error != null || (typeof body.status === 'string' && body.status !== 'completed');
+
+const codexProbeErrorBody = (body: Record<string, unknown> | undefined, fallback: string) => {
+  const error = body?.error;
+  const details = body?.incomplete_details;
+  const message = [
+    isRecord(error) ? error.message : error,
+    body?.message,
+    isRecord(details) ? details.reason : undefined,
+    isRecord(error) ? error.code : undefined,
+  ].find((value): value is string => typeof value === 'string' && Boolean(value.trim()));
+  return { error: { message: message || fallback } };
+};
+
+const isCodexFailureEvent = (type: unknown): boolean =>
+  type === 'error' ||
+  type === 'response.failed' ||
+  type === 'response.incomplete' ||
+  type === 'response.cancelled';
+
+const codexProbeEventBody = (
+  event: Record<string, unknown>,
+  fallback: string,
+  eventName = ''
+): Record<string, unknown> | undefined => {
+  const type = typeof event.type === 'string' ? event.type : eventName;
+  const response = isRecord(event.response) ? event.response : undefined;
+  if (isCodexFailureEvent(type) || isCodexFailureEvent(eventName) || event.error != null) {
+    return codexProbeErrorBody(response || event, fallback);
+  }
+  if (type === 'response.completed') {
+    return response && !codexResponseFailed(response)
+      ? response
+      : codexProbeErrorBody(response, fallback);
+  }
+  return undefined;
+};
+
+const codexProbeBody = (body: unknown, fallback: string): unknown => {
+  if (typeof body !== 'string') {
+    if (!isRecord(body)) return body;
+    const eventBody = codexProbeEventBody(body, fallback);
+    if (eventBody) return eventBody;
+    const isResponseEvent = typeof body.type === 'string' && body.type.startsWith('response.');
+    return isResponseEvent || codexResponseFailed(body)
+      ? codexProbeErrorBody(body, fallback)
+      : body;
+  }
+
+  let sawStream = false;
+  let completed: Record<string, unknown> | undefined;
+  const streamBody = body.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
+  for (const frame of streamBody.split('\n\n')) {
+    const data: string[] = [];
+    let eventName = '';
+    for (const line of frame.split('\n')) {
+      if (line.startsWith('data:')) {
+        sawStream = true;
+        data.push(line.slice(5).replace(/^ /, ''));
+      } else if (line.startsWith('event:')) {
+        sawStream = true;
+        eventName = line.slice(6).trim();
+      }
+    }
+    if (!data.length) continue;
+    const payload = data.join('\n');
+    if (!payload.trim() || payload.trim() === '[DONE]') continue;
+
+    let event: unknown;
+    try {
+      event = JSON.parse(payload);
+    } catch {
+      return codexProbeErrorBody(undefined, fallback);
+    }
+    if (!isRecord(event)) return codexProbeErrorBody(undefined, fallback);
+    const eventBody = codexProbeEventBody(event, fallback, eventName);
+    if (eventBody?.error != null) return eventBody;
+    if (eventBody) completed = eventBody;
+  }
+
+  // HTTP success and partial output alone do not establish stream completion.
+  return sawStream ? completed || codexProbeErrorBody(undefined, fallback) : body;
 };
 
 const pickModel = (config: CodexProbeProviderConfig): string => {
@@ -259,16 +345,17 @@ export async function simulateCodexProvider(
             },
             { timeout: timeoutMs }
           );
+      const responseBody = codexProbeBody(result.body, messages.requestFailed);
       if (
         result.statusCode < 200 ||
         result.statusCode >= 300 ||
-        typeof result.body !== 'object' ||
-        result.body === null
+        !isRecord(responseBody) ||
+        responseBody.error != null
       ) {
         return {
           index: entry.index,
           state: 'error',
-          message: getApiCallErrorMessage(result),
+          message: getApiCallErrorMessage({ ...result, body: responseBody }),
           statusCode: result.statusCode,
           durationMs: Date.now() - entryStartedAt,
         };

@@ -229,7 +229,7 @@ export function ProvidersWorkbenchPage({ fixedBrand }: ProvidersWorkbenchPagePro
         ...previous,
         [resource.id]: {
           state: 'loading',
-          total: resource.apiKeyEntryCount,
+          total: Math.min(1, resource.apiKeyEntryCount),
           successCount: 0,
           failureCount: 0,
           message: '',
@@ -250,9 +250,9 @@ export function ProvidersWorkbenchPage({ fixedBrand }: ProvidersWorkbenchPagePro
             ...previous,
             [resource.id]: {
               state: 'error',
-              total: resource.apiKeyEntryCount,
+              total: Math.min(1, resource.apiKeyEntryCount),
               successCount: 0,
-              failureCount: resource.apiKeyEntryCount,
+              failureCount: Math.min(1, resource.apiKeyEntryCount),
               message,
             },
           }));
@@ -282,7 +282,7 @@ export function ProvidersWorkbenchPage({ fixedBrand }: ProvidersWorkbenchPagePro
       resources.forEach((resource) => {
         next[resource.id] = {
           state: 'loading',
-          total: resource.apiKeyEntryCount,
+          total: Math.min(1, resource.apiKeyEntryCount),
           successCount: 0,
           failureCount: 0,
           message: '',
@@ -522,7 +522,7 @@ export function ProvidersWorkbenchPage({ fixedBrand }: ProvidersWorkbenchPagePro
     });
   }, [closeSheet, refreshRecentRequests, showNotification, t]);
 
-  // 加载状态
+  // Loading state
   if (!workbench.snapshot && workbench.isPending) {
     return (
       <div className={styles.page}>

@@ -8,6 +8,7 @@ import {
 import { buildCodexResponsesEndpoint } from '@/components/providers/utils';
 import type { ProviderKeyConfig } from '@/types';
 import { isRecord } from '@/utils/helpers';
+import { serializeCodexProviderDraft } from '@/services/api/nativeProviderContracts';
 import { createCodexConnectivityRequest } from './sheets/forms/codexConnectivityRequest';
 
 export type CodexProbeState = 'idle' | 'loading' | 'success' | 'error';
@@ -43,9 +44,12 @@ export interface CodexProbeResult extends CodexProbeStatus {
 }
 
 export interface CodexProbeOptions {
+  // Only the legacy xAI raw transport opts out of the Codex completion contract.
+  requireCompleted?: boolean;
   timeoutMs?: number;
   model?: string;
   entryIndices?: number[];
+  testAll?: boolean;
   request?: (payload: ApiCallRequest, config?: { timeout?: number }) => Promise<ApiCallResult>;
 }
 
@@ -71,8 +75,12 @@ const errorMessage = (error: unknown, fallback: string): string => {
   return fallback;
 };
 
-const codexResponseFailed = (body: Record<string, unknown>): boolean =>
-  body.error != null || (typeof body.status === 'string' && body.status !== 'completed');
+const codexResponseFailed = (
+  body: Record<string, unknown>,
+  requireCompleted: boolean
+): boolean =>
+  body.error != null ||
+  ((requireCompleted || typeof body.status === 'string') && body.status !== 'completed');
 
 const codexProbeErrorBody = (body: Record<string, unknown> | undefined, fallback: string) => {
   const error = body?.error;
@@ -95,7 +103,8 @@ const isCodexFailureEvent = (type: unknown): boolean =>
 const codexProbeEventBody = (
   event: Record<string, unknown>,
   fallback: string,
-  eventName = ''
+  eventName = '',
+  requireCompleted = true
 ): Record<string, unknown> | undefined => {
   const type = typeof event.type === 'string' ? event.type : eventName;
   const response = isRecord(event.response) ? event.response : undefined;
@@ -103,20 +112,20 @@ const codexProbeEventBody = (
     return codexProbeErrorBody(response || event, fallback);
   }
   if (type === 'response.completed') {
-    return response && !codexResponseFailed(response)
+    return response && !codexResponseFailed(response, requireCompleted)
       ? response
       : codexProbeErrorBody(response, fallback);
   }
   return undefined;
 };
 
-const codexProbeBody = (body: unknown, fallback: string): unknown => {
+const codexProbeBody = (body: unknown, fallback: string, requireCompleted = true): unknown => {
   if (typeof body !== 'string') {
     if (!isRecord(body)) return body;
-    const eventBody = codexProbeEventBody(body, fallback);
+    const eventBody = codexProbeEventBody(body, fallback, '', requireCompleted);
     if (eventBody) return eventBody;
     const isResponseEvent = typeof body.type === 'string' && body.type.startsWith('response.');
-    return isResponseEvent || codexResponseFailed(body)
+    return isResponseEvent || codexResponseFailed(body, requireCompleted)
       ? codexProbeErrorBody(body, fallback)
       : body;
   }
@@ -147,7 +156,7 @@ const codexProbeBody = (body: unknown, fallback: string): unknown => {
       return codexProbeErrorBody(undefined, fallback);
     }
     if (!isRecord(event)) return codexProbeErrorBody(undefined, fallback);
-    const eventBody = codexProbeEventBody(event, fallback, eventName);
+    const eventBody = codexProbeEventBody(event, fallback, eventName, requireCompleted);
     if (eventBody?.error != null) return eventBody;
     if (eventBody) completed = eventBody;
   }
@@ -162,6 +171,13 @@ const pickModel = (config: CodexProbeProviderConfig): string => {
     if (name) return name;
   }
   return '';
+};
+
+const publicProbeModel = (config: CodexProbeProviderConfig, model: string): string => {
+  const mapping = config.models?.find((candidate) => candidate.name.trim() === model);
+  const routed = mapping?.alias?.trim() || model;
+  const prefix = config.prefix?.trim();
+  return prefix && !routed.startsWith(`${prefix}/`) ? `${prefix}/${routed}` : routed;
 };
 
 const getEntries = (config: CodexProbeProviderConfig) => {
@@ -228,7 +244,9 @@ export async function simulateCodexProvider(
   const selectedIndices = options.entryIndices ? new Set(options.entryIndices) : undefined;
   const entries = selectedIndices
     ? allEntries.filter((entry) => selectedIndices.has(entry.index))
-    : allEntries;
+    : options.testAll
+      ? allEntries
+      : allEntries.slice(0, 1);
 
   let validEndpoint = false;
   try {
@@ -283,6 +301,8 @@ export async function simulateCodexProvider(
     };
   }
 
+  const codexConfig = serializeCodexProviderDraft(config);
+
   const runEntry = async (entry: (typeof entries)[number]): Promise<CodexProbeEntryResult> => {
     const entryStartedAt = Date.now();
     const customHeaders = { ...(config.headers ?? {}) };
@@ -336,16 +356,21 @@ export async function simulateCodexProvider(
         : await providerConnectivityApi.requestCodex(
             {
               authIndex: entry.authIndex || undefined,
-              model,
+              model: publicProbeModel(config, model),
+              codexConfig,
               ...(requestKey ? { apiKey: requestKey } : {}),
               baseUrl,
               proxyUrl: entry.proxyUrl || config.proxyUrl,
               headers: customHeaders,
               disableImageGeneration: config.disableImageGeneration === true,
             },
-            { timeout: timeoutMs }
+            { timeout: 0 }
           );
-      const responseBody = codexProbeBody(result.body, messages.requestFailed);
+      const responseBody = codexProbeBody(
+        result.body,
+        messages.requestFailed,
+        !options.request || options.requireCompleted !== false
+      );
       if (
         result.statusCode < 200 ||
         result.statusCode >= 300 ||

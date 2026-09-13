@@ -15,6 +15,7 @@ import {
 } from '@/components/providers/utils';
 import { buildHeaderObject, hasHeader } from '@/utils/headers';
 import { getErrorMessage } from '@/utils/helpers';
+import type { ProviderKeyConfig } from '@/types';
 import type { ApiKeyEntryInput, ModelEntryInput, ProviderBrand } from '../../types';
 import { getCodexProbeEntryIndices, simulateCodexProvider } from '../../codexProviderProbe';
 import { createRequestGeneration } from '../../requestGeneration';
@@ -71,6 +72,7 @@ export interface UseConnectivityTestArgs {
   };
   rebuildMidSystemMessage?: boolean;
   disableImageGeneration?: boolean;
+  buildCodexDraft?: () => ProviderKeyConfig;
 }
 
 export interface ConnectivityErrorMessages {
@@ -115,6 +117,7 @@ export function useConnectivityTest(
     cloak,
     rebuildMidSystemMessage,
     disableImageGeneration,
+    buildCodexDraft,
   } = args;
 
   const entriesCount = apiKeyEntries?.length ?? 0;
@@ -172,7 +175,7 @@ export function useConnectivityTest(
 
   const signature = useMemo(() => {
     const h = formHeaders.map((it) => `${it.key}:${it.value}`).join('|');
-    const m = models.map((it) => `${it.name}:${it.alias ?? ''}`).join('|');
+    const m = JSON.stringify(models);
     return [
       brand,
       baseUrl,
@@ -367,19 +370,23 @@ export function useConnectivityTest(
       }
       setInFlight((n) => n + 1);
       try {
+        const draft = buildCodexDraft?.();
         const result = await simulateCodexProvider(
           {
+            ...draft,
             apiKey: legacyKey,
             explicitApiKey: explicitLegacyKey,
             apiKeyEntries: normalizedEntries.length ? normalizedEntries : undefined,
             baseUrl,
             headers: buildHeaderObject(formHeaders),
-            models: models.map((model) => ({
-              name: model.name,
-              alias: model.alias,
-              priority: model.priority,
-              testModel: model.testModel,
-            })),
+            models: draft
+              ? draft.models
+              : models.map((model) => ({
+                  name: model.name,
+                  alias: model.alias,
+                  priority: model.priority,
+                  testModel: model.testModel,
+                })),
             authIndex: authIndex?.trim() || undefined,
             proxyUrl,
             disableImageGeneration: disableImageGeneration === true,
@@ -387,9 +394,11 @@ export function useConnectivityTest(
           messages,
           {
             entryIndices: selectedIndices,
+            testAll,
             model: (testModel ?? '').trim() || undefined,
             timeoutMs: DEFAULT_TIMEOUT_MS,
             request: brand === 'xai' ? apiCallApi.request : undefined,
+            requireCompleted: brand !== 'xai',
           }
         );
         const status: ConnectivityStatus = {
@@ -427,6 +436,7 @@ export function useConnectivityTest(
       authIndex,
       baseUrl,
       brand,
+      buildCodexDraft,
       disableImageGeneration,
       fallbackApiKey,
       formHeaders,

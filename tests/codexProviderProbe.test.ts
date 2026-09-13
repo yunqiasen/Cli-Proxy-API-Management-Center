@@ -19,8 +19,8 @@ const messages: CodexProbeMessages = {
 const okResult = (statusCode = 200): ApiCallResult => ({
   statusCode,
   header: {},
-  bodyText: '{}',
-  body: {},
+  bodyText: '{"status":"completed","output":[]}',
+  body: { status: 'completed', output: [] },
 });
 
 const groupedConfig = (): ProviderKeyConfig => ({
@@ -45,6 +45,7 @@ describe('simulateCodexProvider', () => {
     const requests: ApiCallRequest[] = [];
 
     const result = await simulateCodexProvider(groupedConfig(), messages, {
+      testAll: true,
       request: async (payload) => {
         requests.push(payload);
         return okResult();
@@ -80,6 +81,7 @@ describe('simulateCodexProvider', () => {
 
   test('keeps testing remaining keys and summarizes partial failures', async () => {
     const result = await simulateCodexProvider(groupedConfig(), messages, {
+      testAll: true,
       request: async (payload) =>
         payload.authIndex === 'auth-a'
           ? okResult()
@@ -130,6 +132,7 @@ describe('simulateCodexProvider', () => {
     }));
 
     const result = await simulateCodexProvider(config, messages, {
+      testAll: true,
       request: async () => {
         active += 1;
         maxActive = Math.max(maxActive, active);
@@ -191,11 +194,26 @@ describe('simulateCodexProvider', () => {
       expect(calls).toEqual([
         {
           authIndex: 'auth-a',
-          model: 'gpt-upstream',
+          model: 'cpa-model',
           baseUrl: 'https://relay.example/v1',
           proxyUrl: 'http://provider-proxy',
           headers: { 'X-Custom': 'kept' },
           disableImageGeneration: true,
+          codexConfig: {
+            name: 'Codex relays',
+            priority: null,
+            weight: null,
+            prefix: null,
+            'excluded-models': null,
+            'disable-cooling': null,
+            websockets: null,
+            'responses-first-output-timeout-seconds': null,
+            'base-url': 'https://relay.example/v1',
+            'proxy-url': 'http://provider-proxy',
+            'disable-image-generation': true,
+            headers: { 'X-Custom': 'kept' },
+            models: [{ name: 'gpt-upstream', alias: 'cpa-model' }, { name: 'gpt-fallback' }],
+          },
         },
       ]);
     } finally {
@@ -213,9 +231,11 @@ describe('simulateCodexProvider', () => {
 
     try {
       const config = groupedConfig() as ProviderKeyConfig & {
-        apiKeyEntries: Array<NonNullable<ProviderKeyConfig['apiKeyEntries']>[number] & {
-          explicitApiKey?: string;
-        }>;
+        apiKeyEntries: Array<
+          NonNullable<ProviderKeyConfig['apiKeyEntries']>[number] & {
+            explicitApiKey?: string;
+          }
+        >;
       };
       config.apiKeyEntries[0].explicitApiKey = 'new-key';
       const result = await simulateCodexProvider(config, messages, { entryIndices: [0] });
@@ -239,6 +259,7 @@ test('does not reuse a provider auth index for grouped entries without their own
   const authIndices: Array<string | undefined> = [];
 
   await simulateCodexProvider(config, messages, {
+    testAll: true,
     request: async (payload) => {
       authIndices.push(payload.authIndex);
       return okResult();

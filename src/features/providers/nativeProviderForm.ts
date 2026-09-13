@@ -151,16 +151,27 @@ export function buildNativeProviderConfig(
   if (validation === 'api-key-required') throw new Error('Native provider API key is required');
   if (validation === 'duplicate-api-key') throw new Error('Duplicate native provider API key');
 
+  return buildNativeProviderDraft(brand, input, existing);
+}
+
+// Probes use the save draft without validating credentials they will not send.
+export function buildNativeProviderDraft(
+  brand: NativeProviderBrand,
+  input: ProviderEntryFormInput,
+  existing?: GeminiKeyConfig | ProviderKeyConfig | null
+): GeminiKeyConfig | ProviderKeyConfig {
   const entries = normalizedEntries(input.apiKeyEntries);
   const headers = headersFromEntries(input.headers);
-  const models = buildModels(input.models);
+  const models = buildModels(input.models).map((model) => {
+    const extras = existing?.models?.find((saved) => saved.name.trim() === model.name)?.wireExtras;
+    return extras ? { ...model, wireExtras: extras } : model;
+  });
   const excludedModels = parseTextList(input.excludedModelsText).filter((model) => model !== '*');
   if (input.disabled) excludedModels.unshift('*');
 
   const existingGrouped = Boolean(existing?.apiKeyEntries?.length);
   const hasEntryOverrides = entries.some(
-    (entry) =>
-      entry.priority !== undefined || entry.weight !== undefined || Boolean(entry.proxyUrl)
+    (entry) => entry.priority !== undefined || entry.weight !== undefined || Boolean(entry.proxyUrl)
   );
   const useGrouped =
     existingGrouped || Boolean(input.name.trim()) || entries.length > 1 || hasEntryOverrides;

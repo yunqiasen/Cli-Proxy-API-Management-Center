@@ -192,6 +192,7 @@ test('preserves independent results for grouped keys with different stream outco
     },
     messages,
     {
+      testAll: true,
       request: async (request) =>
         normalizeProviderConnectivityResult({
           status_code: 200,
@@ -244,4 +245,20 @@ test('does not hide an explicit named error behind a completed data type', async
 
   expect(result.state).toBe('error');
   expect(result.successCount).toBe(0);
+});
+
+test('keeps the legacy xAI raw transport statusless-response behavior separate', async () => {
+  const statusless: Record<string, unknown> = { ...completedResponse };
+  delete statusless.status;
+  for (const body of [statusless, sse({ type: 'response.completed', response: statusless })]) {
+    const result = await simulateCodexProvider(
+      { apiKey: 'fixture', baseUrl: 'https://xai.example/v1', models: [{ name: 'grok-fixture' }] },
+      messages,
+      {
+        requireCompleted: false,
+        request: async () => ({ statusCode: 200, headers: {}, body }),
+      }
+    );
+    expect(result.state).toBe('success');
+  }
 });

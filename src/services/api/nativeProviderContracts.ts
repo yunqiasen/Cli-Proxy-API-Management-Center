@@ -6,6 +6,28 @@ import type {
   ProviderKeyConfig,
 } from '../../types/provider.ts';
 
+export const PROVIDER_COMMON_KEY_FIELDS = [
+  'name',
+  'api-key',
+  'api-key-entries',
+  'priority',
+  'weight',
+  'prefix',
+  'base-url',
+  'proxy-url',
+  'headers',
+  'models',
+  'excluded-models',
+  'disable-cooling',
+] as const;
+
+export const CODEX_KEY_FIELDS = [
+  ...PROVIDER_COMMON_KEY_FIELDS,
+  'websockets',
+  'disable-image-generation',
+  'responses-first-output-timeout-seconds',
+] as const;
+
 type NativeProviderConfig = GeminiKeyConfig & ProviderKeyConfig;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -54,6 +76,15 @@ const normalizeHeaders = (value: unknown): Record<string, string> | undefined =>
   return Object.keys(headers).length ? headers : undefined;
 };
 
+// Preserve server fields not exposed by this form in both saves and probes.
+const extraFields = (
+  record: Record<string, unknown>,
+  known: string[]
+): Record<string, unknown> | undefined => {
+  const extra = Object.fromEntries(Object.entries(record).filter(([key]) => !known.includes(key)));
+  return Object.keys(extra).length ? extra : undefined;
+};
+
 const normalizeModels = (value: unknown): ModelAlias[] | undefined => {
   if (!Array.isArray(value)) return undefined;
   const models = value
@@ -66,6 +97,8 @@ const normalizeModels = (value: unknown): ModelAlias[] | undefined => {
       const name = normalizeString(item.name);
       if (!name) return null;
       const model: ModelAlias = { name };
+      const extras = extraFields(item, ['name', 'alias', 'priority', 'test-model', 'thinking']);
+      if (extras) model.wireExtras = extras;
       const alias = normalizeString(item.alias);
       if (alias && alias !== name) model.alias = alias;
       const priority = normalizeNumber(item.priority);
@@ -124,6 +157,14 @@ export function normalizeNativeProviderPayload(item: unknown): NativeProviderCon
   if (!apiKey && !apiKeyEntries?.length) return null;
 
   const config: NativeProviderConfig = { apiKey };
+  const extras = extraFields(record, [
+    ...CODEX_KEY_FIELDS,
+    'auth-index',
+    'cloak',
+    'experimental-cch-signing',
+    'rebuild-mid-system-message',
+  ]);
+  if (extras) config.wireExtras = extras;
   const name = normalizeString(record.name);
   if (name) config.name = name;
   if (apiKeyEntries) config.apiKeyEntries = apiKeyEntries;
@@ -149,6 +190,9 @@ export function normalizeNativeProviderPayload(item: unknown): NativeProviderCon
   if (websockets !== undefined) config.websockets = websockets;
   const disableImageGeneration = normalizeBoolean(record['disable-image-generation']);
   if (disableImageGeneration !== undefined) config.disableImageGeneration = disableImageGeneration;
+  const firstOutputTimeout = normalizeNumber(record['responses-first-output-timeout-seconds']);
+  if (firstOutputTimeout !== undefined)
+    config.responsesFirstOutputTimeoutSeconds = firstOutputTimeout;
   const cloak = normalizeCloak(record.cloak);
   if (cloak) config.cloak = cloak;
   const experimentalCchSigning = normalizeBoolean(record['experimental-cch-signing']);
@@ -187,7 +231,7 @@ const serializeModels = (models?: ModelAlias[]) => {
     .map((model) => {
       const name = model.name.trim();
       if (!name) return null;
-      const entry: Record<string, unknown> = { name };
+      const entry: Record<string, unknown> = { ...model.wireExtras, name };
       if (model.alias?.trim() && model.alias.trim() !== name) entry.alias = model.alias.trim();
       if (model.priority !== undefined) entry.priority = model.priority;
       if (model.testModel?.trim()) entry['test-model'] = model.testModel.trim();
@@ -220,7 +264,8 @@ export const serializeNativeApiKeyEntry = (entry: NativeApiKeyEntry): Record<str
 export function serializeNativeProviderPayload(
   config: GeminiKeyConfig | ProviderKeyConfig
 ): Record<string, unknown> {
-  const payload: Record<string, unknown> = {};
+  const payload: Record<string, unknown> = { ...config.wireExtras };
+  if (config.weight !== undefined) payload.weight = config.weight;
   if (config.name?.trim()) payload.name = config.name.trim();
   if (config.apiKey.trim()) payload['api-key'] = config.apiKey.trim();
   if (config.priority !== undefined) payload.priority = config.priority;
@@ -230,6 +275,10 @@ export function serializeNativeProviderPayload(
   const providerConfig = config as ProviderKeyConfig;
   if (providerConfig.websockets !== undefined) payload.websockets = providerConfig.websockets;
   if (providerConfig.disableImageGeneration) payload['disable-image-generation'] = true;
+  if (providerConfig.responsesFirstOutputTimeoutSeconds !== undefined) {
+    payload['responses-first-output-timeout-seconds'] =
+      providerConfig.responsesFirstOutputTimeoutSeconds;
+  }
   if (config.disableCooling) payload['disable-cooling'] = true;
   if (config.apiKeyEntries?.length) {
     payload['api-key-entries'] = config.apiKeyEntries.map(serializeNativeApiKeyEntry);
@@ -242,5 +291,17 @@ export function serializeNativeProviderPayload(
   if (cloak) payload.cloak = cloak;
   if (providerConfig.experimentalCchSigning) payload['experimental-cch-signing'] = true;
   if (providerConfig.rebuildMidSystemMessage) payload['rebuild-mid-system-message'] = true;
+  return payload;
+}
+
+// Missing managed fields clear saved values, just like the save API merger.
+// The credential selection is carried separately and never includes the key pool.
+export function serializeCodexProviderDraft(config: ProviderKeyConfig): Record<string, unknown> {
+  const payload = serializeNativeProviderPayload(config);
+  for (const field of CODEX_KEY_FIELDS) {
+    if (!(field in payload)) payload[field] = null;
+  }
+  delete payload['api-key'];
+  delete payload['api-key-entries'];
   return payload;
 }

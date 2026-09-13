@@ -1,11 +1,11 @@
-/**
- * AI 提供商相关 API
- */
+/** AI provider Management API. */
 
 import { apiClient } from './client';
 import { isRecord } from '@/utils/helpers';
 import { normalizeOpenAIProvider, normalizeProviderKeyConfig } from './transformers';
 import {
+  PROVIDER_COMMON_KEY_FIELDS,
+  CODEX_KEY_FIELDS,
   normalizeNativeProviderSectionPayload,
   serializeNativeProviderPayload,
 } from './nativeProviderContracts';
@@ -25,28 +25,8 @@ const serializeHeaders = (headers?: Record<string, string>) =>
 
 const RESPONSE_ONLY_FIELDS = ['auth-index'] as const;
 
-const PROVIDER_COMMON_KEY_FIELDS = [
-  'name',
-  'api-key',
-  'api-key-entries',
-  'priority',
-  'weight',
-  'prefix',
-  'base-url',
-  'proxy-url',
-  'headers',
-  'models',
-  'excluded-models',
-  'disable-cooling',
-] as const;
-
 const GEMINI_KEY_FIELDS = PROVIDER_COMMON_KEY_FIELDS;
 const INTERACTIONS_KEY_FIELDS = PROVIDER_COMMON_KEY_FIELDS;
-const CODEX_KEY_FIELDS = [
-  ...PROVIDER_COMMON_KEY_FIELDS,
-  'websockets',
-  'disable-image-generation',
-] as const;
 const XAI_KEY_FIELDS = [...PROVIDER_COMMON_KEY_FIELDS, 'websockets'] as const;
 const CLAUDE_KEY_FIELDS = [
   ...PROVIDER_COMMON_KEY_FIELDS,

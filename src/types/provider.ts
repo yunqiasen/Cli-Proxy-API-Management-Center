@@ -1,9 +1,7 @@
-/**
- * AI 提供商相关类型
- * 基于原项目 src/modules/ai-providers.js
- */
+/** AI provider configuration contracts. */
 
 export interface ModelAlias {
+  wireExtras?: Record<string, unknown>;
   name: string;
   alias?: string;
   priority?: number;
@@ -35,6 +33,7 @@ export interface CloakConfig {
 }
 
 export interface GeminiKeyConfig {
+  wireExtras?: Record<string, unknown>;
   name?: string;
   apiKey: string;
   apiKeyEntries?: NativeApiKeyEntry[];
@@ -51,6 +50,7 @@ export interface GeminiKeyConfig {
 }
 
 export interface ProviderKeyConfig {
+  wireExtras?: Record<string, unknown>;
   name?: string;
   apiKey: string;
   apiKeyEntries?: NativeApiKeyEntry[];
@@ -65,6 +65,7 @@ export interface ProviderKeyConfig {
   excludedModels?: string[];
   disableCooling?: boolean;
   disableImageGeneration?: boolean;
+  responsesFirstOutputTimeoutSeconds?: number;
   cloak?: CloakConfig;
   experimentalCchSigning?: boolean;
   rebuildMidSystemMessage?: boolean;

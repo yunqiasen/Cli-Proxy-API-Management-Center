@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import {
+  CODEX_KEY_FIELDS,
   normalizeNativeProviderPayload,
   serializeNativeProviderPayload,
 } from '../src/services/api/nativeProviderContracts.ts';
@@ -51,7 +52,6 @@ test('marks the Codex wire field as managed so turning the switch off removes st
     new URL('../src/services/api/providers.ts', import.meta.url),
     'utf8'
   );
-  const codexFields = source.match(/const CODEX_KEY_FIELDS = \[([\s\S]*?)\] as const;/)?.[1] ?? '';
-
-  assert.match(codexFields, /'disable-image-generation'/);
+  assert.ok(CODEX_KEY_FIELDS.includes('disable-image-generation'));
+  assert.match(source, /CODEX_KEY_FIELDS/);
 });

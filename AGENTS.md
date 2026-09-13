@@ -31,3 +31,11 @@ Git history follows Conventional Commit style, for example `feat: add support fo
 ## Architecture & Configuration Notes
 
 This UI is not the proxy; it talks to the backend Management API under `/v0/management`. Treat backend contracts as the source of truth. For OAuth/provider changes, inspect `../CLIProxyAPI` before changing route names, provider keys, callback parameters, or auth-file semantics. Store no secrets in the repo; management keys are entered at runtime and persisted only in browser storage.
+
+## Codex Request and Probe Parity
+
+- Provider-row and key-row probes use the CPA production Responses executor through `provider-connectivity-test`, never an independent raw HTTP compatibility implementation. Keep xAI's existing transport separate.
+- Probe drafts reuse the native save builder/serializer and managed-field list, including clears, thinking and unknown server options. Do not hand-copy a new provider setting into a second probe schema.
+- Default to one selected key, never rotate on probe failure, and send no credential pool in `codex_config`. Only the explicitly labeled all-keys action tests a pool. Live diagnostics pin one key per affected provider.
+- Require a completed Responses result; HTTP 200, `{}`, partial output and `[DONE]` alone are failures. Codex timing belongs to the production executor, not a separate browser whole-response timeout.
+- A request behavior change needs both executor-path and probe-path regression coverage. Build the single-file panel and deliver it with the corresponding backend contract.

@@ -120,6 +120,7 @@ export const buildClaudeProviderConnectivityPayload = (
 });
 
 export interface CodexProviderConnectivityInput {
+  codexConfig?: Record<string, unknown>;
   authIndex?: string;
   model: string;
   apiKey?: string;
@@ -130,6 +131,7 @@ export interface CodexProviderConnectivityInput {
 }
 
 export interface CodexProviderConnectivityPayload {
+  codex_config?: Record<string, unknown>;
   provider: 'codex';
   auth_index?: string;
   model: string;
@@ -144,6 +146,7 @@ export const buildCodexProviderConnectivityPayload = (
   input: CodexProviderConnectivityInput
 ): CodexProviderConnectivityPayload => ({
   provider: 'codex',
+  ...(input.codexConfig !== undefined ? { codex_config: input.codexConfig } : {}),
   ...(input.authIndex?.trim() ? { auth_index: input.authIndex.trim() } : {}),
   model: input.model.trim(),
   ...(input.apiKey !== undefined ? { api_key: input.apiKey.trim() } : {}),

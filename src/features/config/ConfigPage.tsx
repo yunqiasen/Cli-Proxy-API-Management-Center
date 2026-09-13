@@ -25,7 +25,7 @@ import {
   resolveDirtyTabs,
   resolveStatus,
 } from './uiState';
-import { useConfigDocument } from './hooks/useConfigDocument';
+import { shouldReloadVisualDraft, useConfigDocument } from './hooks/useConfigDocument';
 import { useFieldJump } from './hooks/useFieldJump';
 import { useSourceSearch } from './hooks/useSourceSearch';
 import { ConfigHeader } from './components/ConfigHeader';
@@ -45,7 +45,7 @@ import { SectionQuota } from './components/sections/SectionQuota';
 import { SectionStreaming } from './components/sections/SectionStreaming';
 import styles from './ConfigPage.module.scss';
 
-/** 首载入场预算：卡片延迟 0.28s + 0.45s 动画，之后关闭 animateIn，切 tab 不再重播。 */
+/** Initial entrance budget: 0.28s delay plus 0.45s animation, disabled on later tab switches. */
 const ENTRANCE_BUDGET_MS = 800;
 
 export function ConfigPage() {
@@ -76,14 +76,14 @@ export function ConfigPage() {
   const [activeSection, setActiveSection] = useState<ConfigTabId>(() =>
     readSavedSection(localStorage.getItem(CONFIG_SECTION_STORAGE_KEY))
   );
-  // 首载入场：挂载后一个预算周期内为 true；此后切 tab 新挂载的卡片不再播入场。
+  // Enable entrance animation only during the first mounting budget.
   const [animateCards, setAnimateCards] = useState(true);
   useEffect(() => {
     const timer = window.setTimeout(() => setAnimateCards(false), ENTRANCE_BUDGET_MS);
     return () => window.clearTimeout(timer);
   }, []);
 
-  // 旧「简单/完整」双模式已退役，清掉遗留的持久化键。
+  // Remove the persisted key for the retired simple/full modes.
   useEffect(() => {
     localStorage.removeItem(LEGACY_EDITOR_MODE_STORAGE_KEY);
   }, []);
@@ -119,7 +119,7 @@ export function ConfigPage() {
     dialog: unsavedChangesDialog,
   });
 
-  // YAML 解析失败：切换到源码模式；修复后仍可重试进入可视化模式。
+  // Switch parse failures to source mode; allow retrying visual mode after correction.
   useEffect(() => {
     if (mode !== 'visual' || !visualParseError) return;
 
@@ -131,9 +131,9 @@ export function ConfigPage() {
     );
   }, [mode, showNotification, t, visualParseError]);
 
-  // 可视化 ↔ 源码切换的 dirty 交接（语义与旧 handleTabChange 逐行一致）：
-  // → 源码：仅当可视化有脏字段时把它们写进源码草稿（保留注释/未覆盖字段）；
-  // → 可视化：重新解析草稿，失败则报错并留在源码模式。
+  // Preserve edit ownership when switching between visual and source modes:
+  // Source: materialize visual dirty fields without recording a user source edit.
+  // Visual: parse actual source edits, otherwise preserve field-level dirty state and merge policy.
   const handleModeChange = useCallback(
     (nextMode: ConfigEditorMode) => {
       if (nextMode === mode) return;
@@ -142,11 +142,10 @@ export function ConfigPage() {
         if (visualDirty) {
           const nextContent = applyVisualChangesToYaml(doc.content);
           if (nextContent !== doc.content) {
-            doc.setContent(nextContent);
-            doc.setDirty(true);
+            doc.syncContentFromVisual(nextContent);
           }
         }
-      } else {
+      } else if (shouldReloadVisualDraft(doc.sourceDirty, visualParseError)) {
         const result = loadVisualValuesFromYaml(doc.content);
         if (!result.ok) {
           showNotification(
@@ -168,6 +167,7 @@ export function ConfigPage() {
       showNotification,
       t,
       visualDirty,
+      visualParseError,
     ]
   );
 
@@ -204,7 +204,7 @@ export function ConfigPage() {
     fieldCount: CONFIG_FIELD_COUNT,
     status,
     dirtyCount: visualDirtyFields.size,
-    sourceDirty: doc.dirty,
+    sourceDirty: doc.sourceDirty,
     errorCount: mode === 'visual' ? totalErrors : 0,
   });
 

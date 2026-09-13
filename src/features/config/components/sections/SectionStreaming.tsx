@@ -16,7 +16,7 @@ import { getValidationMessage } from '../blocks/shared';
 
 const Icon = CONFIG_TAB_ICONS.streaming;
 
-/** 05 流式传输：keepalive 与 bootstrap 重试；nonstream-keepalive-interval 是顶层 YAML 键。 */
+/** Streaming keepalive and bootstrap retries; nonstream keepalive is a top-level YAML key. */
 export function SectionStreaming({
   values,
   validationErrors,
@@ -32,12 +32,6 @@ export function SectionStreaming({
   const nonstreamKeepaliveHintId = `${nonstreamKeepaliveInputId}-hint`;
   const nonstreamKeepaliveErrorId = `${nonstreamKeepaliveInputId}-error`;
 
-  const isKeepaliveDisabled =
-    values.streaming.keepaliveSeconds === '' || values.streaming.keepaliveSeconds === '0';
-  const isNonstreamKeepaliveDisabled =
-    values.streaming.nonstreamKeepaliveInterval === '' ||
-    values.streaming.nonstreamKeepaliveInterval === '0';
-
   const keepaliveError = getValidationMessage(t, validationErrors?.['streaming.keepaliveSeconds']);
   const bootstrapRetriesError = getValidationMessage(
     t,
@@ -47,6 +41,9 @@ export function SectionStreaming({
     t,
     validationErrors?.['streaming.nonstreamKeepaliveInterval']
   );
+  const isKeepaliveDisabled = !keepaliveError && Number(values.streaming.keepaliveSeconds) <= 0;
+  const isNonstreamKeepaliveDisabled =
+    !nonstreamKeepaliveError && Number(values.streaming.nonstreamKeepaliveInterval) <= 0;
 
   return (
     <SectionCard

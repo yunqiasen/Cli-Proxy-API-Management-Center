@@ -250,7 +250,7 @@ export async function simulateCodexProvider(
       ? allEntries
       : allEntries.slice(0, 1);
 
-  let validEndpoint = false;
+  let validEndpoint: boolean;
   try {
     const hasExplicitScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(baseUrl);
     const hasSupportedScheme = /^https?:\/\//i.test(baseUrl);

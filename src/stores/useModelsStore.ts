@@ -1,5 +1,5 @@
 /**
- * 模型列表状态管理（带缓存）
+ * Cached model list state.
  */
 
 import { create } from 'zustand';
@@ -25,6 +25,8 @@ interface ModelsState {
   isCacheValid: (apiBase: string, apiKey?: string) => boolean;
 }
 
+let modelsRequestToken = 0;
+
 export const useModelsStore = create<ModelsState>((set, get) => ({
   models: [],
   loading: false,
@@ -32,12 +34,13 @@ export const useModelsStore = create<ModelsState>((set, get) => ({
   cache: null,
 
   fetchModels: async (apiBase, apiKey, forceRefresh = false) => {
+    const requestId = (modelsRequestToken += 1);
     const { cache, isCacheValid } = get();
     const apiKeyScope = apiKey?.trim() || '';
 
-    // 检查缓存
+    // Check the cache.
     if (!forceRefresh && isCacheValid(apiBase, apiKeyScope) && cache) {
-      set({ models: cache.data, error: null });
+      set({ models: cache.data, loading: false, error: null });
       return cache.data;
     }
 
@@ -45,6 +48,8 @@ export const useModelsStore = create<ModelsState>((set, get) => ({
 
     try {
       const list = await modelsApi.fetchModels(apiBase, apiKeyScope || undefined);
+      // After invalidation or a newer load, return stale results only to the caller, not the store.
+      if (requestId !== modelsRequestToken) return list;
       const now = Date.now();
 
       set({
@@ -55,6 +60,7 @@ export const useModelsStore = create<ModelsState>((set, get) => ({
 
       return list;
     } catch (error: unknown) {
+      if (requestId !== modelsRequestToken) throw error;
       const message =
         error instanceof Error
           ? error.message
@@ -71,7 +77,8 @@ export const useModelsStore = create<ModelsState>((set, get) => ({
   },
 
   clearCache: () => {
-    set({ cache: null, models: [] });
+    modelsRequestToken += 1;
+    set({ cache: null, models: [], loading: false, error: null });
   },
 
   isCacheValid: (apiBase, apiKey) => {

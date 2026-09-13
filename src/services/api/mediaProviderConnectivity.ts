@@ -1271,7 +1271,7 @@ export const requestMediaGatewayConnectivity = async (
     return { statusCode: response.status };
   } catch (error) {
     if (controller?.signal.aborted) {
-      throw new Error(`Request timed out after ${timeoutMs}ms`);
+      throw Object.assign(new Error(`Request timed out after ${timeoutMs}ms`), { cause: error });
     }
     throw error;
   } finally {

@@ -18,7 +18,7 @@ import { getValidationMessage } from '../blocks/shared';
 
 const Icon = CONFIG_TAB_ICONS.network;
 
-/** 02 网络配置：代理、重试、路由策略、图像生成开关与网络行为开关。 */
+/** Network configuration: proxy, retries, routing, image generation and network flags. */
 export function SectionNetwork({
   values,
   validationErrors,
@@ -101,6 +101,7 @@ export function SectionNetwork({
               value={values.maxRetryInterval}
               onChange={(e) => onChange({ maxRetryInterval: e.target.value })}
               disabled={disabled}
+              hint={t('config_management.visual.sections.network.max_retry_interval_hint')}
               error={maxRetryIntervalError}
             />
           </FieldAnchor>

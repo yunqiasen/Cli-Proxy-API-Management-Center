@@ -18,6 +18,7 @@ import { getErrorMessage } from '@/utils/helpers';
 import type { ProviderKeyConfig } from '@/types';
 import type { ApiKeyEntryInput, ModelEntryInput, ProviderBrand } from '../../types';
 import { getCodexProbeEntryIndices, simulateCodexProvider } from '../../codexProviderProbe';
+import { serializeCodexProviderDraft } from '@/services/api/nativeProviderContracts';
 import { createRequestGeneration } from '../../requestGeneration';
 
 const DEFAULT_TIMEOUT_MS = 30_000;
@@ -130,6 +131,17 @@ export function useConnectivityTest(
   const [claudeStatus, setClaudeStatus] = useState<ConnectivityStatus>(IDLE);
   const [inFlight, setInFlight] = useState(0);
   const requestGenerationRef = useRef(createRequestGeneration());
+  const codexAbortRef = useRef<AbortController | null>(null);
+  useEffect(
+    () => () => {
+      requestGenerationRef.current.invalidate();
+      codexAbortRef.current?.abort();
+    },
+    []
+  );
+  const codexDraftSignature = buildCodexDraft
+    ? JSON.stringify(serializeCodexProviderDraft(buildCodexDraft()))
+    : '';
 
   const entrySignatures = useMemo(
     () =>
@@ -146,7 +158,6 @@ export function useConnectivityTest(
 
   const lastEntrySignaturesRef = useRef<string[]>(entrySignatures);
   useEffect(() => {
-    requestGenerationRef.current.invalidate();
     const prev = lastEntrySignaturesRef.current;
     const curr = entrySignatures;
     lastEntrySignaturesRef.current = curr;
@@ -159,7 +170,7 @@ export function useConnectivityTest(
       const next = statuses.slice(0, nextLen);
       while (next.length < nextLen) next.push(IDLE);
       for (let i = 0; i < nextLen; i++) {
-        if (prev[i] !== undefined && prev[i] !== curr[i] && next[i].state !== 'idle') {
+        if (entriesChanged && next[i].state !== 'idle') {
           next[i] = IDLE;
           mutated = true;
         }
@@ -167,6 +178,8 @@ export function useConnectivityTest(
       return mutated ? next : statuses;
     });
     if (entriesChanged) {
+      requestGenerationRef.current.invalidate();
+      codexAbortRef.current?.abort();
       setCodexStatus(IDLE);
       setGeminiStatus(IDLE);
       setClaudeStatus(IDLE);
@@ -178,6 +191,7 @@ export function useConnectivityTest(
     const m = JSON.stringify(models);
     return [
       brand,
+      codexDraftSignature,
       baseUrl,
       proxyUrl ?? '',
       (testModel ?? '').trim(),
@@ -196,6 +210,7 @@ export function useConnectivityTest(
   }, [
     apiKey,
     authIndex,
+    codexDraftSignature,
     baseUrl,
     brand,
     cloak,
@@ -212,6 +227,7 @@ export function useConnectivityTest(
   useEffect(() => {
     if (lastSignatureRef.current === signature) return;
     requestGenerationRef.current.invalidate();
+    codexAbortRef.current?.abort();
     lastSignatureRef.current = signature;
     setOpenaiStatuses((prev) => prev.map(() => IDLE));
     setCodexStatus(IDLE);
@@ -340,6 +356,9 @@ export function useConnectivityTest(
     async (entryIndex?: number, testAll = false): Promise<void> => {
       if (brand !== 'codex' && brand !== 'xai') return;
 
+      codexAbortRef.current?.abort();
+      const controller = new AbortController();
+      codexAbortRef.current = controller;
       const generation = requestGenerationRef.current.begin();
       const normalizedEntries = (apiKeyEntries ?? []).map((entry, index) => {
         const explicitApiKey = (entry.apiKey ?? '').trim();
@@ -360,6 +379,9 @@ export function useConnectivityTest(
       const legacyKey = explicitLegacyKey || (fallbackApiKey ?? '').trim();
       const selectedIndices = getCodexProbeEntryIndices(entryIndex, testAll);
 
+      setOpenaiStatuses((prev) =>
+        prev.map((status) => (status.state === 'loading' ? IDLE : status))
+      );
       setCodexStatus({ state: 'loading', message: '' });
       if (testAll) {
         (apiKeyEntries ?? []).forEach((_, index) =>
@@ -397,6 +419,7 @@ export function useConnectivityTest(
             testAll,
             model: (testModel ?? '').trim() || undefined,
             timeoutMs: DEFAULT_TIMEOUT_MS,
+            signal: controller.signal,
             request: brand === 'xai' ? apiCallApi.request : undefined,
             requireCompleted: brand !== 'xai',
           }
@@ -405,7 +428,8 @@ export function useConnectivityTest(
           state: result.state,
           message: result.message,
         };
-        if (!requestGenerationRef.current.isCurrent(generation)) return;
+        if (controller.signal.aborted || !requestGenerationRef.current.isCurrent(generation))
+          return;
         setCodexStatus(status);
         if (testAll) {
           result.entries.forEach((entry) =>
@@ -415,7 +439,8 @@ export function useConnectivityTest(
           updateOpenaiStatus(entryIndex, status);
         }
       } catch (error) {
-        if (!requestGenerationRef.current.isCurrent(generation)) return;
+        if (controller.signal.aborted || !requestGenerationRef.current.isCurrent(generation))
+          return;
         const status: ConnectivityStatus = {
           state: 'error',
           message: requestFailureMessage(error, messages),

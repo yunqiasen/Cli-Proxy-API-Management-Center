@@ -47,10 +47,14 @@ export interface CodexProbeOptions {
   // Only the legacy xAI raw transport opts out of the Codex completion contract.
   requireCompleted?: boolean;
   timeoutMs?: number;
+  signal?: AbortSignal;
   model?: string;
   entryIndices?: number[];
   testAll?: boolean;
-  request?: (payload: ApiCallRequest, config?: { timeout?: number }) => Promise<ApiCallResult>;
+  request?: (
+    payload: ApiCallRequest,
+    config?: { timeout?: number; signal?: AbortSignal }
+  ) => Promise<ApiCallResult>;
 }
 
 type CodexProbeKeyEntry = NonNullable<ProviderKeyConfig['apiKeyEntries']>[number] & {
@@ -75,10 +79,7 @@ const errorMessage = (error: unknown, fallback: string): string => {
   return fallback;
 };
 
-const codexResponseFailed = (
-  body: Record<string, unknown>,
-  requireCompleted: boolean
-): boolean =>
+const codexResponseFailed = (body: Record<string, unknown>, requireCompleted: boolean): boolean =>
   body.error != null ||
   ((requireCompleted || typeof body.status === 'string') && body.status !== 'completed');
 
@@ -230,6 +231,7 @@ export async function simulateCodexProvider(
   messages: CodexProbeMessages,
   options: CodexProbeOptions = {}
 ): Promise<CodexProbeResult> {
+  options.signal?.throwIfAborted();
   const startedAt = Date.now();
   const timeoutCandidate = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const timeoutMs =
@@ -304,6 +306,7 @@ export async function simulateCodexProvider(
   const codexConfig = serializeCodexProviderDraft(config);
 
   const runEntry = async (entry: (typeof entries)[number]): Promise<CodexProbeEntryResult> => {
+    options.signal?.throwIfAborted();
     const entryStartedAt = Date.now();
     const customHeaders = { ...(config.headers ?? {}) };
     let hasAuthorization = false;
@@ -351,7 +354,7 @@ export async function simulateCodexProvider(
               header: probe.headers,
               data: JSON.stringify(probe.body),
             },
-            { timeout: timeoutMs }
+            { timeout: timeoutMs, ...(options.signal ? { signal: options.signal } : {}) }
           )
         : await providerConnectivityApi.requestCodex(
             {
@@ -364,8 +367,9 @@ export async function simulateCodexProvider(
               headers: customHeaders,
               disableImageGeneration: config.disableImageGeneration === true,
             },
-            { timeout: 0 }
+            { timeout: 0, ...(options.signal ? { signal: options.signal } : {}) }
           );
+      options.signal?.throwIfAborted();
       const responseBody = codexProbeBody(
         result.body,
         messages.requestFailed,
@@ -393,6 +397,7 @@ export async function simulateCodexProvider(
         durationMs: Date.now() - entryStartedAt,
       };
     } catch (error) {
+      options.signal?.throwIfAborted();
       const rawMessage = errorMessage(error, messages.requestFailed);
       const errorCode =
         typeof error === 'object' && error !== null && 'code' in error

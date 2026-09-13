@@ -241,3 +241,75 @@ test('the executor probe uses the public alias so alias-scoped payload rules als
     providerConnectivityApi.requestCodex = previous;
   }
 });
+
+test('Codex probe propagates caller cancellation without adding a response deadline', async () => {
+  const previous = providerConnectivityApi.requestCodex;
+  const controller = new AbortController();
+  let received: AbortSignal | undefined;
+  let timeout: number | undefined;
+  providerConnectivityApi.requestCodex = async (_input, config) => {
+    received = config?.signal as AbortSignal;
+    timeout = config?.timeout;
+    controller.abort();
+    return success;
+  };
+  try {
+    await expect(
+      simulateCodexProvider(
+        { apiKey: 'selected', baseUrl: 'https://relay.test', models: [{ name: 'm' }] },
+        messages,
+        { signal: controller.signal }
+      )
+    ).rejects.toThrow();
+    expect(received).toBe(controller.signal);
+    expect(timeout).toBe(0);
+  } finally {
+    providerConnectivityApi.requestCodex = previous;
+  }
+});
+
+test('already canceled Codex probes never send requests', async () => {
+  const controller = new AbortController();
+  controller.abort();
+  let calls = 0;
+  await expect(
+    simulateCodexProvider(
+      { apiKey: 'selected', baseUrl: 'https://relay.test', models: [{ name: 'm' }] },
+      messages,
+      {
+        signal: controller.signal,
+        request: async () => {
+          calls++;
+          return success;
+        },
+      }
+    )
+  ).rejects.toThrow();
+  expect(calls).toBe(0);
+});
+
+test('canceling an explicit all-key probe stops queued keys rather than rotating', async () => {
+  const controller = new AbortController();
+  const calls: string[] = [];
+  await expect(
+    simulateCodexProvider(
+      {
+        apiKey: '',
+        baseUrl: 'https://relay.test',
+        models: [{ name: 'm' }],
+        apiKeyEntries: Array.from({ length: 8 }, (_, i) => ({ apiKey: `key-${i}` })),
+      },
+      messages,
+      {
+        signal: controller.signal,
+        testAll: true,
+        request: async (payload) => {
+          calls.push(payload.header?.Authorization ?? '');
+          controller.abort();
+          return success;
+        },
+      }
+    )
+  ).rejects.toThrow();
+  expect(calls).toEqual(['Bearer key-0']);
+});

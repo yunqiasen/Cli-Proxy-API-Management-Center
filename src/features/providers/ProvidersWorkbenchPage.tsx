@@ -139,6 +139,7 @@ export function ProvidersWorkbenchPage({ fixedBrand }: ProvidersWorkbenchPagePro
   const codexBulkTestingRef = useRef(false);
   const codexProbeGenerationRef = useRef(0);
   const codexRunningResourcesRef = useRef(createResourceLeaseRegistry());
+  const codexProbeAbortRef = useRef(new AbortController());
 
   const connected = connectionStatus === 'connected';
   const { usageByProvider, refreshRecentRequests } = useProviderRecentRequests({
@@ -146,11 +147,16 @@ export function ProvidersWorkbenchPage({ fixedBrand }: ProvidersWorkbenchPagePro
   });
 
   useEffect(() => {
+    codexProbeAbortRef.current = new AbortController();
     codexProbeGenerationRef.current += 1;
     codexRunningResourcesRef.current.clear();
     codexBulkTestingRef.current = false;
     setCodexBulkTesting(false);
     setCodexProbeStatuses({});
+    return () => {
+      codexProbeGenerationRef.current += 1;
+      codexProbeAbortRef.current.abort();
+    };
   }, [workbench.snapshot?.fetchedAt]);
 
   const handleRefresh = useCallback(async () => {
@@ -238,7 +244,8 @@ export function ProvidersWorkbenchPage({ fixedBrand }: ProvidersWorkbenchPagePro
       try {
         const result = await simulateCodexProvider(
           resource.raw as ProviderKeyConfig,
-          codexProbeMessages
+          codexProbeMessages,
+          { signal: codexProbeAbortRef.current.signal }
         );
         if (generation === codexProbeGenerationRef.current) {
           setCodexProbeStatuses((previous) => ({ ...previous, [resource.id]: result }));

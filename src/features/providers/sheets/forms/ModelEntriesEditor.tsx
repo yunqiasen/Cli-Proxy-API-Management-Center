@@ -1,3 +1,4 @@
+import { Select } from '@/components/ui/Select';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { IconChevronDown, IconPlus, IconX } from '@/components/ui/icons';
@@ -97,9 +98,18 @@ export function ModelEntriesEditor({
                     {t('providersPage.form.modelBadgeImage')}
                   </span>
                 ) : null}
-                {supportsThinking && !expanded && hasThinking ? (
+                {supportsThinking && !entry.type && !expanded && hasThinking ? (
                   <span className={styles.entryBadge}>
                     {t('providersPage.form.modelBadgeThinking')}
+                  </span>
+                ) : null}
+                {supportsImage && !expanded && entry.type ? (
+                  <span className={styles.entryBadge}>
+                    {t(
+                      entry.type === 'embeddings'
+                        ? 'providersPage.form.modelEndpointEmbeddings'
+                        : 'providersPage.form.modelEndpointRerank'
+                    )}
                   </span>
                 ) : null}
                 {hasExtendedOptions ? (
@@ -161,6 +171,50 @@ export function ModelEntriesEditor({
                   </div>
                 ) : null}
                 {supportsImage ? (
+                  <>
+                    <div className={styles.field}>
+                      <label className={styles.label}>
+                        {t('providersPage.form.modelEndpoint')}
+                      </label>
+                      <Select
+                        value={entry.type ?? ''}
+                        ariaLabel={t('providersPage.form.modelEndpoint')}
+                        disabled={mutating}
+                        options={[
+                          { value: '', label: t('providersPage.form.modelEndpointDefault') },
+                          {
+                            value: 'embeddings',
+                            label: t('providersPage.form.modelEndpointEmbeddings'),
+                          },
+                          { value: 'rerank', label: t('providersPage.form.modelEndpointRerank') },
+                        ]}
+                        onChange={(value) =>
+                          onUpdate(idx, {
+                            type: value === 'embeddings' || value === 'rerank' ? value : undefined,
+                            image: value ? false : entry.image,
+                          })
+                        }
+                      />
+                    </div>
+                    {entry.type ? (
+                      <div className={styles.field}>
+                        <label className={styles.label} htmlFor={`retrieval-path-${idx}`}>
+                          {t('providersPage.form.modelUpstreamPath')}
+                        </label>
+                        <input
+                          id={`retrieval-path-${idx}`}
+                          className={styles.input}
+                          value={entry.upstreamPath ?? ''}
+                          disabled={mutating}
+                          placeholder={`/${entry.type}`}
+                          onChange={(event) => onUpdate(idx, { upstreamPath: event.target.value })}
+                        />
+                        <small>{t('providersPage.form.modelUpstreamPathHint')}</small>
+                      </div>
+                    ) : null}
+                  </>
+                ) : null}
+                {supportsImage && !entry.type ? (
                   <label className={styles.checkboxRow}>
                     <input
                       type="checkbox"
@@ -175,9 +229,11 @@ export function ModelEntriesEditor({
                     </span>
                   </label>
                 ) : null}
-                {supportsThinking ? (
+                {supportsThinking && !entry.type ? (
                   <fieldset className={styles.thinkingFieldset}>
-                    <legend className={styles.label}>{t('providersPage.form.thinkingConfig')}</legend>
+                    <legend className={styles.label}>
+                      {t('providersPage.form.thinkingConfig')}
+                    </legend>
                     <div className={styles.thinkingLevelGrid}>
                       {THINKING_LEVELS.map((level) => (
                         <SelectionCheckbox

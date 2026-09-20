@@ -1,3 +1,9 @@
+import {
+  OPENAI_PROVIDER_FIELDS,
+  OPENAI_MODEL_ALIAS_FIELDS,
+  serializeOpenAIProvider,
+} from './openAIProviderContracts';
+export { serializeOpenAIProvider } from './openAIProviderContracts';
 /** AI provider Management API. */
 
 import { apiClient } from './client';
@@ -15,7 +21,6 @@ import type {
   GeminiKeyConfig,
   OpenAIProviderConfig,
   ProviderKeyConfig,
-  ApiKeyEntry,
   ModelAlias,
   MediaProviderConfig,
 } from '@/types';
@@ -46,21 +51,7 @@ const VERTEX_KEY_FIELDS = [
   'excluded-models',
 ] as const;
 
-const OPENAI_PROVIDER_FIELDS = [
-  'name',
-  'priority',
-  'disabled',
-  'prefix',
-  'base-url',
-  'api-key-entries',
-  'headers',
-  'models',
-  'test-model',
-  'disable-cooling',
-] as const;
-
 const MODEL_ALIAS_FIELDS = ['name', 'alias', 'priority', 'test-model', 'thinking'] as const;
-const OPENAI_MODEL_ALIAS_FIELDS = [...MODEL_ALIAS_FIELDS, 'image'] as const;
 
 const API_KEY_ENTRY_FIELDS = ['api-key', 'proxy-url', 'weight'] as const;
 const NATIVE_API_KEY_ENTRY_FIELDS = ['api-key', 'priority', 'proxy-url'] as const;
@@ -110,6 +101,20 @@ const mergeKnownFields = (
   return next;
 };
 
+// Existing records keep the latest server-managed options, not a stale form snapshot.
+const mergeEditedFields = (
+  raw: unknown,
+  payload: Record<string, unknown>,
+  knownFields: readonly string[]
+) =>
+  mergeKnownFields(
+    raw,
+    isRecord(raw)
+      ? Object.fromEntries(Object.entries(payload).filter(([key]) => knownFields.includes(key)))
+      : payload,
+    knownFields
+  );
+
 const findRawRecord = (
   rawRecords: Array<Record<string, unknown> | undefined>,
   usedIndexes: Set<number>,
@@ -146,7 +151,8 @@ const mergeKnownRecordList = (
   payloadItems: Record<string, unknown>[],
   knownFields: readonly string[],
   getIdentity: (record: Record<string, unknown>) => string,
-  fallbackByIndex = true
+  fallbackByIndex = true,
+  mergeFields = mergeKnownFields
 ) => {
   const rawRecords = Array.isArray(rawItems)
     ? rawItems.map((item) => (isRecord(item) ? item : undefined))
@@ -162,7 +168,7 @@ const mergeKnownRecordList = (
       getIdentity,
       fallbackByIndex
     );
-    return mergeKnownFields(raw, payload, knownFields);
+    return mergeFields(raw, payload, knownFields);
   });
 };
 
@@ -222,7 +228,8 @@ const matchesOpenAIProvider = (record: Record<string, unknown>, name: string) =>
 const mergeModelPayloads = (
   raw: unknown,
   models: unknown,
-  knownFields: readonly string[] = MODEL_ALIAS_FIELDS
+  knownFields: readonly string[] = MODEL_ALIAS_FIELDS,
+  mergeFields = mergeKnownFields
 ) =>
   Array.isArray(models)
     ? mergeKnownRecordList(
@@ -230,7 +237,8 @@ const mergeModelPayloads = (
         models.filter(isRecord),
         knownFields,
         modelIdentity,
-        false
+        false,
+        mergeFields
       )
     : undefined;
 
@@ -263,7 +271,7 @@ const mergeProviderKeyPayload = (
 };
 
 const mergeOpenAIProviderPayload = (raw: unknown, payload: Record<string, unknown>) => {
-  const next = mergeKnownFields(raw, payload, OPENAI_PROVIDER_FIELDS);
+  const next = mergeEditedFields(raw, payload, OPENAI_PROVIDER_FIELDS);
   const rawApiKeyEntries = isRecord(raw) ? raw['api-key-entries'] : undefined;
   const apiKeyEntries = payload['api-key-entries'];
   if (Array.isArray(apiKeyEntries)) {
@@ -274,7 +282,12 @@ const mergeOpenAIProviderPayload = (raw: unknown, payload: Record<string, unknow
       apiKeyEntryIdentity
     );
   }
-  const models = mergeModelPayloads(raw, payload.models, OPENAI_MODEL_ALIAS_FIELDS);
+  const models = mergeModelPayloads(
+    raw,
+    payload.models,
+    OPENAI_MODEL_ALIAS_FIELDS,
+    mergeEditedFields
+  );
   if (models) next.models = models;
   return next;
 };
@@ -290,39 +303,6 @@ const buildProviderDeleteQuery = (apiKey: string, baseUrl?: string) => {
   params.set('api-key', apiKey.trim());
   params.set('base-url', (baseUrl ?? '').trim());
   return `?${params.toString()}`;
-};
-
-const serializeModelAliases = (models?: ModelAlias[], includeOpenAIFields = false) =>
-  Array.isArray(models)
-    ? models
-        .map((model) => {
-          if (!model?.name) return null;
-          const payload: Record<string, unknown> = { name: model.name };
-          if (model.alias && model.alias !== model.name) {
-            payload.alias = model.alias;
-          }
-          if (model.priority !== undefined) {
-            payload.priority = model.priority;
-          }
-          if (model.testModel) {
-            payload['test-model'] = model.testModel;
-          }
-          if (includeOpenAIFields && model.image) {
-            payload.image = true;
-          }
-          if (model.thinking) {
-            payload.thinking = model.thinking;
-          }
-          return payload;
-        })
-        .filter(Boolean)
-    : undefined;
-
-const serializeApiKeyEntry = (entry: ApiKeyEntry) => {
-  const payload: Record<string, unknown> = { 'api-key': entry.apiKey };
-  if (entry.proxyUrl) payload['proxy-url'] = entry.proxyUrl;
-  if (entry.weight !== undefined) payload.weight = entry.weight;
-  return payload;
 };
 
 const serializeProviderKey = (config: ProviderKeyConfig) => {
@@ -367,26 +347,6 @@ const serializeVertexKey = (config: ProviderKeyConfig) => {
 const serializeGeminiKey = (config: GeminiKeyConfig) => {
   const payload = serializeNativeProviderPayload(config);
   if (config.weight !== undefined) payload.weight = config.weight;
-  return payload;
-};
-
-const serializeOpenAIProvider = (provider: OpenAIProviderConfig) => {
-  const payload: Record<string, unknown> = {
-    name: provider.name,
-    'base-url': provider.baseUrl,
-    'api-key-entries': Array.isArray(provider.apiKeyEntries)
-      ? provider.apiKeyEntries.map((entry) => serializeApiKeyEntry(entry))
-      : [],
-  };
-  if (provider.prefix?.trim()) payload.prefix = provider.prefix.trim();
-  if (provider.disabled !== undefined) payload.disabled = provider.disabled;
-  const headers = serializeHeaders(provider.headers);
-  if (headers) payload.headers = headers;
-  const models = serializeModelAliases(provider.models, true);
-  if (models && models.length) payload.models = models;
-  if (provider.priority !== undefined) payload.priority = provider.priority;
-  if (provider.testModel) payload['test-model'] = provider.testModel;
-  if (provider.disableCooling) payload['disable-cooling'] = true;
   return payload;
 };
 

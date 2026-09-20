@@ -1671,7 +1671,13 @@
       "inheritedProxyHint": "Пустое значение наследует прокси провайдера",
       "multiKeyCount": "{{count}} ключей",
       "rebuildMidSystemMessage": "Переносить промежуточные системные сообщения",
-      "rebuildMidSystemMessageHint": "Переносить системные сообщения в верхнее поле Claude system"
+      "rebuildMidSystemMessageHint": "Переносить системные сообщения в верхнее поле Claude system",
+      "modelEndpoint": "Тип API",
+      "modelEndpointDefault": "Чат / изображения (как раньше)",
+      "modelEndpointEmbeddings": "Векторизация Embeddings",
+      "modelEndpointRerank": "Ранжирование Rerank",
+      "modelUpstreamPath": "Путь API провайдера",
+      "modelUpstreamPathHint": "Необязательный путь после базового URL провайдера. Пустое значение использует стандартный путь."
     },
     "delete": {
       "title": "Удалить ресурс",

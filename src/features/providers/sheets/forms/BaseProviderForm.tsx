@@ -22,6 +22,7 @@ import type { GeminiKeyConfig, OpenAIProviderConfig, ProviderKeyConfig } from '@
 import type { ModelInfo } from '@/utils/models';
 import { PROVIDER_DESCRIPTORS } from '../../descriptors';
 import { readThinkingLevels } from '../../thinkingLevels';
+import { buildOpenAIConfig } from '../../providerFormSerialization';
 import type {
   ApiKeyEntryInput,
   ModelEntryInput,
@@ -138,6 +139,9 @@ function buildInitialForm(
             priority: m.priority,
             testModel: m.testModel,
             image: m.image === true,
+            wireExtras: m.wireExtras,
+            type: m.type,
+            upstreamPath: m.upstreamPath,
             thinkingJson: formatJsonObject(m.thinking),
             thinkingLevels: readThinkingLevels(m.thinking),
           }))
@@ -267,6 +271,11 @@ export function BaseProviderForm({
     [form, resource]
   );
 
+  const buildOpenAIDraft = useCallback(
+    () => buildOpenAIConfig(form, resource?.raw as OpenAIProviderConfig | undefined),
+    [form, resource]
+  );
+
   const connectivity = useConnectivityTest(
     {
       brand,
@@ -283,6 +292,14 @@ export function BaseProviderForm({
       rebuildMidSystemMessage: form.rebuildMidSystemMessage,
       disableImageGeneration: form.disableImageGeneration,
       buildCodexDraft: brand === 'codex' ? buildCodexDraft : undefined,
+      buildOpenAIDraft: brand === 'openaiCompatibility' ? buildOpenAIDraft : undefined,
+      openAISettingsSignature: JSON.stringify([
+        form.name,
+        form.prefix,
+        form.disabled,
+        form.disableCooling,
+        (resource?.raw as OpenAIProviderConfig | undefined)?.wireExtras,
+      ]),
     },
     connectivityMessages
   );

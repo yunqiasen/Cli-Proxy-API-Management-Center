@@ -7,6 +7,8 @@ export interface ModelAlias {
   priority?: number;
   testModel?: string;
   image?: boolean;
+  type?: 'embeddings' | 'rerank';
+  upstreamPath?: string;
   thinking?: Record<string, unknown>;
 }
 
@@ -73,6 +75,7 @@ export interface ProviderKeyConfig {
 }
 
 export interface OpenAIProviderConfig {
+  wireExtras?: Record<string, unknown>;
   name: string;
   prefix?: string;
   baseUrl: string;

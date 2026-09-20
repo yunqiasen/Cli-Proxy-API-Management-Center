@@ -1719,7 +1719,13 @@
       "inheritedProxyHint": "留空繼承提供商代理",
       "multiKeyCount": "{{count}} 個金鑰",
       "rebuildMidSystemMessage": "重建對話中段系統訊息",
-      "rebuildMidSystemMessageHint": "將對話中段的 system 訊息移入 Claude 頂層 system 欄位"
+      "rebuildMidSystemMessageHint": "將對話中段的 system 訊息移入 Claude 頂層 system 欄位",
+      "modelEndpoint": "介面類型",
+      "modelEndpointDefault": "聊天 / 圖片（原有行為）",
+      "modelEndpointEmbeddings": "向量嵌入 Embeddings",
+      "modelEndpointRerank": "重排 Rerank",
+      "modelUpstreamPath": "上游路徑",
+      "modelUpstreamPathHint": "選填，接在供應商基礎位址後。留空使用標準介面路徑。"
     },
     "delete": {
       "title": "刪除資源",

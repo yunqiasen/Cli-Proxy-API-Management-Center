@@ -173,11 +173,14 @@ export interface SponsorProviderRaw {
  * Gemini/Codex/Claude/Vertex/OpenAI 共用基础字段,各自启用 advanced 区。
  */
 export interface ModelEntryInput {
+  wireExtras?: Record<string, unknown>;
   name: string;
   alias?: string;
   priority?: number;
   testModel?: string;
   image?: boolean;
+  type?: 'embeddings' | 'rerank';
+  upstreamPath?: string;
   /** Original backend value, preserved until the standard-level selector is changed. */
   thinkingJson?: string;
   displayName?: string;

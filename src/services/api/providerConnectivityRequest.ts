@@ -1,3 +1,5 @@
+import type { OpenAIProviderConfig } from '@/types';
+import { resolveOpenAIProbeModel, serializeOpenAIProviderDraft } from './openAIProviderContracts';
 import type { ApiCallResult } from './apiCall.ts';
 
 export interface ClaudeConnectivityCredentialEntry {
@@ -185,5 +187,26 @@ export const normalizeProviderConnectivityResult = (
     header: (response?.header ?? {}) as Record<string, string[]>,
     bodyText,
     body,
+  };
+};
+
+export interface OpenAIProviderConnectivityInput {
+  providerConfig: OpenAIProviderConfig;
+  model: string;
+  apiKey?: string;
+  authIndex?: string;
+  proxyUrl?: string;
+}
+
+export const buildOpenAIProviderConnectivityPayload = (input: OpenAIProviderConnectivityInput) => {
+  const draft = serializeOpenAIProviderDraft(input.providerConfig);
+  const { model } = resolveOpenAIProbeModel(input.providerConfig, input.model);
+  return {
+    provider: 'openai-compatibility',
+    model,
+    ...(input.apiKey !== undefined ? { api_key: input.apiKey.trim() } : {}),
+    ...(input.authIndex?.trim() ? { auth_index: input.authIndex.trim() } : {}),
+    ...(input.proxyUrl !== undefined ? { proxy_url: input.proxyUrl.trim() } : {}),
+    openai_config: draft,
   };
 };

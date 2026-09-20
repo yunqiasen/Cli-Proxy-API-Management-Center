@@ -10,7 +10,6 @@ import {
 } from '@/components/providers/utils';
 import type {
   GeminiKeyConfig,
-  ModelAlias,
   OpenAIProviderConfig,
   ProviderKeyConfig,
   MediaProviderConfig,
@@ -35,7 +34,11 @@ import {
   xaiToResource,
 } from './adapters';
 import { PROVIDER_BRAND_ORDER } from './descriptors';
-import { buildThinkingFromLevels } from './thinkingLevels';
+import {
+  buildOpenAIConfig,
+  buildModelAliases,
+  headersFromEntries,
+} from './providerFormSerialization';
 import type {
   ProviderBrand,
   ProviderEntryFormInput,
@@ -115,28 +118,6 @@ const parseTextList = (text: string): string[] =>
     .map((item) => item.trim())
     .filter(Boolean);
 
-const headersFromEntries = (
-  entries: Array<{ key: string; value: string }>
-): Record<string, string> => {
-  const out: Record<string, string> = {};
-  entries.forEach((entry) => {
-    const key = entry.key.trim();
-    if (!key) return;
-    out[key] = entry.value;
-  });
-  return out;
-};
-
-const parseThinkingJson = (value: string | undefined): Record<string, unknown> | undefined => {
-  const trimmed = (value ?? '').trim();
-  if (!trimmed) return undefined;
-  const parsed = JSON.parse(trimmed) as unknown;
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new Error('Thinking config must be a JSON object');
-  }
-  return parsed as Record<string, unknown>;
-};
-
 /**
  * `'*'` 是「该 provider 已停用」的编码，其唯一所有者是 `form.disabled`：
  * 载入时 `stripDisableAllModelsRule` 把它剥进该 flag，保存时仅凭该 flag 重新追加。
@@ -158,28 +139,6 @@ export const buildExcludedModels = (
   }
   return filtered.length ? filtered : undefined;
 };
-
-const buildModelAliases = (
-  models: ProviderEntryFormInput['models'] | undefined,
-  includeImage = false
-): ModelAlias[] =>
-  (models ?? [])
-    .map((m) => {
-      const entry: ModelAlias = {
-        name: m.name.trim(),
-        alias: m.alias?.trim() || undefined,
-        priority: m.priority,
-        testModel: m.testModel,
-        thinking: m.thinkingLevelsTouched
-          ? buildThinkingFromLevels(m.thinkingLevels)
-          : parseThinkingJson(m.thinkingJson),
-      };
-      if (includeImage) {
-        entry.image = m.image === true;
-      }
-      return entry;
-    })
-    .filter((m) => m.name);
 
 const buildProviderKeyConfig = (
   brand: 'gemini' | 'interactions' | 'codex' | 'xai' | 'claude' | 'vertex',
@@ -423,41 +382,6 @@ const buildMediaProviderConfig = (
     models: models.length ? models : undefined,
     operations: operations.length ? operations : undefined,
   });
-};
-
-const buildOpenAIConfig = (
-  input: ProviderEntryFormInput,
-  existing?: OpenAIProviderConfig | null
-): OpenAIProviderConfig => {
-  const headers = headersFromEntries(input.headers);
-  const models = buildModelAliases(input.models, true);
-  const apiKeyEntries =
-    input.apiKeyEntries
-      ?.map((entry, index) => {
-        const fallbackApiKey =
-          entry.existingApiKey?.trim() || existing?.apiKeyEntries?.[index]?.apiKey?.trim() || '';
-        return {
-          apiKey: entry.apiKey.trim() || fallbackApiKey,
-          proxyUrl: entry.proxyUrl.trim() || undefined,
-          weight: entry.weight,
-          authIndex: entry.authIndex?.trim() || undefined,
-        };
-      })
-      .filter((entry) => entry.apiKey) ?? [];
-
-  return {
-    ...(existing ?? {}),
-    name: input.name.trim(),
-    baseUrl: input.baseUrl.trim(),
-    prefix: input.prefix.trim() || undefined,
-    apiKeyEntries,
-    disabled: input.disabled,
-    disableCooling: input.disableCooling === true,
-    headers: Object.keys(headers).length ? headers : undefined,
-    models: models.length ? models : undefined,
-    priority: input.priority,
-    testModel: input.testModel?.trim() || undefined,
-  };
 };
 
 const sponsorEntryApiKey = (entry: SponsorKeyEntryInput): string =>

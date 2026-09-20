@@ -1693,7 +1693,13 @@
       "inheritedProxyHint": "Blank inherits provider proxy",
       "multiKeyCount": "{{count}} keys",
       "rebuildMidSystemMessage": "Rebuild mid-conversation system messages",
-      "rebuildMidSystemMessageHint": "Move mid-conversation system messages into the top-level Claude system field"
+      "rebuildMidSystemMessageHint": "Move mid-conversation system messages into the top-level Claude system field",
+      "modelEndpoint": "Endpoint type",
+      "modelEndpointDefault": "Chat / image (existing behavior)",
+      "modelEndpointEmbeddings": "Embeddings",
+      "modelEndpointRerank": "Rerank",
+      "modelUpstreamPath": "Upstream path",
+      "modelUpstreamPathHint": "Optional path appended to the provider base URL. Leave empty for the standard endpoint."
     },
     "delete": {
       "title": "Delete resource",

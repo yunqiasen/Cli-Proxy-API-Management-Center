@@ -39,3 +39,5 @@ This UI is not the proxy; it talks to the backend Management API under `/v0/mana
 - Default to one selected key, never rotate on probe failure, and send no credential pool in `codex_config`. Only the explicitly labeled all-keys action tests a pool. Live diagnostics pin one key per affected provider.
 - Require a completed Responses result; HTTP 200, `{}`, partial output and `[DONE]` alone are failures. Codex timing belongs to the production executor, not a separate browser whole-response timeout.
 - A request behavior change needs both executor-path and probe-path regression coverage. Build the single-file panel and deliver it with the corresponding backend contract.
+
+- OpenAI-compatible embeddings/rerank probes also use `provider-connectivity-test` and the production retrieval executor. Reuse `providerFormSerialization.ts` and `openAIProviderContracts.ts` for save/probe fields and clears. Preserve unknown server options, exclude the draft credential pool, and cancel obsolete probes. Existing Chat probe behavior stays separate.

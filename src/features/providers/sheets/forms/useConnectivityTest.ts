@@ -1,3 +1,4 @@
+import type { OpenAIProviderConfig } from '@/types';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   aggregateClaudeConnectivityStatuses,
@@ -20,6 +21,7 @@ import type { ApiKeyEntryInput, ModelEntryInput, ProviderBrand } from '../../typ
 import { getCodexProbeEntryIndices, simulateCodexProvider } from '../../codexProviderProbe';
 import { serializeCodexProviderDraft } from '@/services/api/nativeProviderContracts';
 import { createRequestGeneration } from '../../requestGeneration';
+import { resolveOpenAIProbeModel } from '@/services/api/openAIProviderContracts';
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 
@@ -74,6 +76,8 @@ export interface UseConnectivityTestArgs {
   rebuildMidSystemMessage?: boolean;
   disableImageGeneration?: boolean;
   buildCodexDraft?: () => ProviderKeyConfig;
+  buildOpenAIDraft?: () => OpenAIProviderConfig;
+  openAISettingsSignature?: string;
 }
 
 export interface ConnectivityErrorMessages {
@@ -119,6 +123,8 @@ export function useConnectivityTest(
     rebuildMidSystemMessage,
     disableImageGeneration,
     buildCodexDraft,
+    buildOpenAIDraft,
+    openAISettingsSignature,
   } = args;
 
   const entriesCount = apiKeyEntries?.length ?? 0;
@@ -132,12 +138,18 @@ export function useConnectivityTest(
   const [inFlight, setInFlight] = useState(0);
   const requestGenerationRef = useRef(createRequestGeneration());
   const codexAbortRef = useRef<AbortController | null>(null);
+  const retrievalAbortRef = useRef(new Set<AbortController>());
+  const abortRetrievalTests = useCallback(() => {
+    retrievalAbortRef.current.forEach((controller) => controller.abort());
+    retrievalAbortRef.current.clear();
+  }, []);
   useEffect(
     () => () => {
       requestGenerationRef.current.invalidate();
       codexAbortRef.current?.abort();
+      abortRetrievalTests();
     },
-    []
+    [abortRetrievalTests]
   );
   const codexDraftSignature = buildCodexDraft
     ? JSON.stringify(serializeCodexProviderDraft(buildCodexDraft()))
@@ -180,11 +192,12 @@ export function useConnectivityTest(
     if (entriesChanged) {
       requestGenerationRef.current.invalidate();
       codexAbortRef.current?.abort();
+      abortRetrievalTests();
       setCodexStatus(IDLE);
       setGeminiStatus(IDLE);
       setClaudeStatus(IDLE);
     }
-  }, [entrySignatures]);
+  }, [entrySignatures, abortRetrievalTests]);
 
   const signature = useMemo(() => {
     const h = formHeaders.map((it) => `${it.key}:${it.value}`).join('|');
@@ -192,6 +205,7 @@ export function useConnectivityTest(
     return [
       brand,
       codexDraftSignature,
+      openAISettingsSignature,
       baseUrl,
       proxyUrl ?? '',
       (testModel ?? '').trim(),
@@ -211,6 +225,7 @@ export function useConnectivityTest(
     apiKey,
     authIndex,
     codexDraftSignature,
+    openAISettingsSignature,
     baseUrl,
     brand,
     cloak,
@@ -228,12 +243,13 @@ export function useConnectivityTest(
     if (lastSignatureRef.current === signature) return;
     requestGenerationRef.current.invalidate();
     codexAbortRef.current?.abort();
+    abortRetrievalTests();
     lastSignatureRef.current = signature;
     setOpenaiStatuses((prev) => prev.map(() => IDLE));
     setCodexStatus(IDLE);
     setGeminiStatus(IDLE);
     setClaudeStatus(IDLE);
-  }, [signature]);
+  }, [signature, abortRetrievalTests]);
 
   const updateOpenaiStatus = useCallback((idx: number, value: ConnectivityStatus) => {
     setOpenaiStatuses((prev) => {
@@ -296,24 +312,40 @@ export function useConnectivityTest(
         }
       }
 
+      const controller = new AbortController();
+      retrievalAbortRef.current.add(controller);
       updateOpenaiStatus(idx, { state: 'loading', message: '' });
       setInFlight((n) => n + 1);
       try {
-        const result = await apiCallApi.request(
-          {
-            authIndex: resolvedAuthIndex,
-            method: 'POST',
-            url: endpoint,
-            header: headerObj,
-            data: JSON.stringify({
-              model,
-              messages: [{ role: 'user', content: 'Hi' }],
-              stream: false,
-              max_tokens: 5,
-            }),
-          },
-          { timeout: DEFAULT_TIMEOUT_MS }
-        );
+        const draft = buildOpenAIDraft?.();
+        const selectedModel = draft ? resolveOpenAIProbeModel(draft, model) : undefined;
+        const result =
+          draft && selectedModel?.type
+            ? await providerConnectivityApi.requestOpenAI(
+                {
+                  providerConfig: draft,
+                  model,
+                  apiKey: entryKey || undefined,
+                  authIndex: resolvedAuthIndex,
+                  proxyUrl: entry?.proxyUrl?.trim() ?? '',
+                },
+                { timeout: 0, signal: controller.signal }
+              )
+            : await apiCallApi.request(
+                {
+                  authIndex: resolvedAuthIndex,
+                  method: 'POST',
+                  url: endpoint,
+                  header: headerObj,
+                  data: JSON.stringify({
+                    model,
+                    messages: [{ role: 'user', content: 'Hi' }],
+                    stream: false,
+                    max_tokens: 5,
+                  }),
+                },
+                { timeout: DEFAULT_TIMEOUT_MS }
+              );
         if (result.statusCode < 200 || result.statusCode >= 300) {
           throw new Error(getApiCallErrorMessage(result));
         }
@@ -329,10 +361,12 @@ export function useConnectivityTest(
         }
         return false;
       } finally {
+        retrievalAbortRef.current.delete(controller);
         setInFlight((n) => n - 1);
       }
     },
     [
+      buildOpenAIDraft,
       apiKeyEntries,
       authIndex,
       baseUrl,

@@ -1,3 +1,8 @@
+import {
+  OPENAI_PROVIDER_FIELDS,
+  OPENAI_MODEL_ALIAS_FIELDS,
+  openAIWireExtras,
+} from './openAIProviderContracts';
 import type {
   ApiKeyEntry,
   GeminiKeyConfig,
@@ -19,7 +24,7 @@ const normalizeBoolean = (value: unknown): boolean | undefined =>
 const normalizeRecord = (value: unknown): Record<string, unknown> | undefined =>
   isRecord(value) ? value : undefined;
 
-const normalizeModelAliases = (models: unknown): ModelAlias[] => {
+const normalizeModelAliases = (models: unknown, includeOpenAIFields = false): ModelAlias[] => {
   if (!Array.isArray(models)) return [];
   return models
     .map((item) => {
@@ -38,6 +43,9 @@ const normalizeModelAliases = (models: unknown): ModelAlias[] => {
       const image = normalizeBoolean(item.image);
       const thinking = normalizeRecord(item.thinking);
       const entry: ModelAlias = { name: String(name) };
+      if (includeOpenAIFields) entry.wireExtras = openAIWireExtras(item, OPENAI_MODEL_ALIAS_FIELDS);
+      if (item.type === 'embeddings' || item.type === 'rerank') entry.type = item.type;
+      if (typeof item['upstream-path'] === 'string') entry.upstreamPath = item['upstream-path'];
       if (alias && alias !== name) {
         entry.alias = String(alias);
       }
@@ -158,12 +166,13 @@ const normalizeOpenAIProvider = (
     : [];
 
   const headers = normalizeHeaders(provider.headers);
-  const models = normalizeModelAliases(provider.models);
+  const models = normalizeModelAliases(provider.models, true);
   const priority = provider.priority;
   const testModel = provider['test-model'];
 
   const result: OpenAIProviderConfig = {
     name: String(name),
+    wireExtras: openAIWireExtras(provider, OPENAI_PROVIDER_FIELDS),
     baseUrl: String(baseUrl),
     apiKeyEntries,
   };

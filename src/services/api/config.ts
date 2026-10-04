@@ -22,7 +22,8 @@ export const configApi = {
   /**
    * 请求日志开关
    */
-  updateRequestLog: (enabled: boolean) => apiClient.put('/request-log', { value: enabled }),
+  updateRequestLog: (enabled: boolean) =>
+    apiClient.put('/config/observability/logs/request-log', enabled),
 
   async getRequestLogRetentionDays(): Promise<number> {
     const response = await apiClient.get('/request-log-retention-days');

@@ -2,7 +2,9 @@
  * 日志相关 API
  */
 
+import type { ApiError } from '@/types';
 import { apiClient } from './client';
+import { parseApiErrorResponse } from './apiError';
 import { LOGS_TIMEOUT_MS } from '@/utils/constants';
 import { isRecord } from '@/utils/helpers';
 
@@ -12,6 +14,7 @@ export interface LogsQuery {
   after?: LogCursor;
   cursor?: string;
   limit?: number;
+  offset?: number;
 }
 
 export interface HomeLogRecord {
@@ -40,7 +43,11 @@ export interface ErrorLogFile {
 }
 
 export interface ErrorLogsResponse {
-  files?: ErrorLogFile[];
+  files: ErrorLogFile[];
+}
+
+export interface LogsRequestOptions {
+  signal?: AbortSignal;
 }
 
 const stringValue = (value: unknown): string => (typeof value === 'string' ? value.trim() : '');
@@ -89,8 +96,8 @@ const normalizeCPALogs = (data: Record<string, unknown>): LogsResponse => {
   return {
     lines,
     latestAfter: latestTimestamp > 0 ? latestTimestamp : undefined,
-    nextCursor: stringValue(data['next-cursor']) || undefined,
-    cursorReset: booleanValue(data['cursor-reset']),
+    nextCursor: typeof data['next-cursor'] === 'string' ? data['next-cursor'] : undefined,
+    cursorReset: booleanValue(data['cursor-reset']) || false,
   };
 };
 
@@ -131,12 +138,73 @@ const normalizeLogsResponse = (data: unknown): LogsResponse => {
   }
   if (Array.isArray(data.logs)) return normalizeHomeLogs(data);
   if (Array.isArray(data.lines)) return normalizeCPALogs(data);
-  return { lines: [] };
+  return { lines: [], latestAfter: undefined, nextCursor: undefined, cursorReset: false };
+};
+
+const normalizeErrorLogsResponse = (data: unknown): ErrorLogsResponse => {
+  if (!isRecord(data) || !Array.isArray(data.files)) return { files: [] };
+  return {
+    files: data.files.flatMap((file): ErrorLogFile[] => {
+      if (!isRecord(file) || typeof file.name !== 'string' || !file.name.trim()) return [];
+      return [
+        {
+          name: file.name,
+          size:
+            typeof file.size === 'number' && Number.isFinite(file.size) && file.size >= 0
+              ? file.size
+              : undefined,
+          modified: unixSecondsFromValue(file.modified) || undefined,
+        },
+      ];
+    }),
+  };
+};
+
+/** Decode download bodies without interpreting successful log contents as API errors. */
+export const responseDataToText = async (data: unknown): Promise<string> => {
+  if (data instanceof Blob) return data.text();
+  if (data instanceof ArrayBuffer || ArrayBuffer.isView(data)) {
+    return new TextDecoder().decode(data);
+  }
+  if (typeof data === 'string') return data;
+  if (data === undefined || data === null) return '';
+  try {
+    return JSON.stringify(data, null, 2) ?? String(data);
+  } catch {
+    return String(data);
+  }
+};
+
+const downloadLog = async (path: string, options: LogsRequestOptions) => {
+  try {
+    return await apiClient.getRaw(path, {
+      ...options,
+      responseType: 'blob',
+      timeout: LOGS_TIMEOUT_MS,
+    });
+  } catch (error: unknown) {
+    if (error instanceof Error) {
+      const apiError = error as ApiError;
+      const body = apiError.data instanceof Blob ? apiError.data : apiError.details;
+      if (body instanceof Blob) {
+        try {
+          const text = await responseDataToText(body);
+          const parsed = parseApiErrorResponse(JSON.parse(text), apiError.message);
+          apiError.message = parsed.message;
+          if (parsed.apiCode !== undefined) apiError.apiCode = parsed.apiCode;
+        } catch {
+          // Unreadable/non-JSON bodies must not mask the original transport failure.
+        }
+      }
+    }
+    throw error;
+  }
 };
 
 const fetchCompleteHomeLogs = async (
   firstPage: Record<string, unknown>,
-  params: LogsQuery
+  params: LogsQuery,
+  options: LogsRequestOptions = {},
 ): Promise<Record<string, unknown>> => {
   const requestedLimit = positiveNumberValue(params.limit);
   const firstPageLimit = positiveNumberValue(firstPage.limit);
@@ -167,13 +235,14 @@ const fetchCompleteHomeLogs = async (
 
   const pages = await Promise.all(
     pageRequests.map(async ({ offset, limit }) => {
-      const data = await apiClient.get('/logs', {
+      const data = await apiClient.get('/observability/logs', {
+        ...options,
         params: { ...params, limit, offset },
         timeout: LOGS_TIMEOUT_MS,
       });
       if (!isRecord(data) || !Array.isArray(data.logs)) return [];
       return homeRecordsFromPayload(data);
-    })
+    }),
   );
 
   pages.forEach((pageRecords) => records.push(...pageRecords));
@@ -182,29 +251,35 @@ const fetchCompleteHomeLogs = async (
 };
 
 export const logsApi = {
-  async fetchLogs(params: LogsQuery = {}): Promise<LogsResponse> {
-    const data = await apiClient.get('/logs', { params, timeout: LOGS_TIMEOUT_MS });
+  async fetchLogs(
+    params: LogsQuery = {},
+    options: LogsRequestOptions = {},
+  ): Promise<LogsResponse> {
+    const data = await apiClient.get('/observability/logs', {
+      ...options,
+      params,
+      timeout: LOGS_TIMEOUT_MS,
+    });
     if (isRecord(data) && Array.isArray(data.logs)) {
-      return normalizeLogsResponse(await fetchCompleteHomeLogs(data, params));
+      return normalizeLogsResponse(await fetchCompleteHomeLogs(data, params, options));
     }
     return normalizeLogsResponse(data);
   },
 
-  clearLogs: () => apiClient.delete('/logs'),
+  clearLogs: (options: LogsRequestOptions = {}) =>
+    apiClient.delete('/observability/logs', options),
 
-  fetchErrorLogs: (): Promise<ErrorLogsResponse> =>
-    apiClient.get('/request-error-logs', { timeout: LOGS_TIMEOUT_MS }),
-
-  downloadErrorLog: (filename: string) =>
-    apiClient.getRaw(`/request-error-logs/${encodeURIComponent(filename)}`, {
-      responseType: 'blob',
+  async fetchErrorLogs(options: LogsRequestOptions = {}): Promise<ErrorLogsResponse> {
+    const data = await apiClient.get('/observability/logs/errors', {
+      ...options,
       timeout: LOGS_TIMEOUT_MS,
-    }),
+    });
+    return normalizeErrorLogsResponse(data);
+  },
 
-  downloadRequestLogById: (id: string, homeIp?: string) =>
-    apiClient.getRaw(`/request-log-by-id/${encodeURIComponent(id)}`, {
-      params: homeIp ? { home_ip: homeIp } : undefined,
-      responseType: 'blob',
-      timeout: LOGS_TIMEOUT_MS,
-    }),
+  downloadErrorLog: (filename: string, options: LogsRequestOptions = {}) =>
+    downloadLog(`/observability/logs/errors/${encodeURIComponent(filename)}`, options),
+
+  downloadRequestLogById: (id: string, options: LogsRequestOptions = {}) =>
+    downloadLog(`/observability/logs/requests/${encodeURIComponent(id)}`, options),
 };

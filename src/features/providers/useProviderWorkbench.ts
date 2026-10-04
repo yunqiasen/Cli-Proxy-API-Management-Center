@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { buildMediaProviderConfig, buildMediaProviderFormInput } from './mediaProviderForm';
+import { buildOpenAIConfig } from './providerFormSerialization';
 import { providersApi } from '@/services/api';
-import { mergeEditedMediaProviderConfig } from '@/services/api/mediaProviderContracts';
 import { getErrorMessage } from '@/utils/helpers';
 import { useAuthStore, useConfigStore } from '@/stores';
 import {
@@ -9,40 +10,35 @@ import {
   withoutDisableAllModelsRule,
 } from '@/components/providers/utils';
 import type {
+  Config,
+  MediaProviderConfig,
   GeminiKeyConfig,
+  ModelAlias,
   OpenAIProviderConfig,
   ProviderKeyConfig,
-  MediaProviderConfig,
-  MediaOperationConfig,
 } from '@/types';
 import {
   apiKeyFunToResource,
-  claudeApiToResource,
   claudeToResource,
-  code0ToResource,
   codexToResource,
   fennoAIToResource,
   geminiToResource,
   interactionsToResource,
+  mediaToResource,
+  metaToResource,
   openaiToResource,
   qiniuCloudToResource,
-  lmuAIToResource,
-  infistarToResource,
   kimiToResource,
-  mediaToResource,
   vertexToResource,
   xaiToResource,
 } from './adapters';
-import { PROVIDER_BRAND_ORDER } from './descriptors';
-import {
-  buildOpenAIConfig,
-  buildModelAliases,
-  headersFromEntries,
-} from './providerFormSerialization';
+import { PROVIDER_BRAND_ORDER, PROVIDER_DESCRIPTORS } from './descriptors';
+import { buildRuntimePolicy } from './runtimePolicy';
+import { buildModelOptions } from './modelOptions';
+import { pickProviderBehavior } from './providerBehavior';
 import type {
   ProviderBrand,
   ProviderEntryFormInput,
-  MediaOperationInput,
   ProviderGroup,
   ProviderResource,
   ProviderSnapshot,
@@ -56,14 +52,6 @@ import {
   isApiKeyFunCodexProvider,
   isApiKeyFunOpenAIProvider,
 } from './sponsor';
-import { CLAUDE_API_BASE_URL, isClaudeApiProvider } from './claudeApi';
-import {
-  buildCode0Raw,
-  isCode0ClaudeProvider,
-  isCode0CodexProvider,
-  isCode0GeminiProvider,
-  isCode0OpenAIProvider,
-} from './code0';
 import { buildFennoAIRaw, isFennoAIClaudeProvider, isFennoAICodexProvider } from './fennoAI';
 import {
   buildQiniuCloudRaw,
@@ -73,20 +61,11 @@ import {
   isQiniuCloudOpenAIProvider,
 } from './qiniuCloud';
 import {
-  buildLmuAIRaw,
-  isLmuAIClaudeProvider,
-  isLmuAICodexProvider,
-  isLmuAIGeminiProvider,
-  isLmuAIOpenAIProvider,
-} from './lmuAI';
-import {
-  buildInfistarRaw,
-  isInfistarClaudeProvider,
-  isInfistarCodexProvider,
-  isInfistarGeminiProvider,
-  isInfistarOpenAIProvider,
-} from './infistar';
-import { buildKimiRaw, isKimiClaudeProvider, isKimiOpenAIProvider } from './kimi';
+  buildKimiRaw,
+  isKimiClaudeProvider,
+  isKimiCodexProvider,
+  isKimiOpenAIProvider,
+} from './kimi';
 import { getSponsorProviderDefinition, type SponsorProtocolUrls } from './sponsorDefinitions';
 import { runSponsorMutationWithRecovery } from './sponsorMutationRecovery';
 import { buildNativeProviderConfig } from './nativeProviderForm';
@@ -118,6 +97,18 @@ const parseTextList = (text: string): string[] =>
     .map((item) => item.trim())
     .filter(Boolean);
 
+const headersFromEntries = (
+  entries: Array<{ key: string; value: string }>
+): Record<string, string> => {
+  const out: Record<string, string> = {};
+  entries.forEach((entry) => {
+    const key = entry.key.trim();
+    if (!key) return;
+    out[key] = entry.value;
+  });
+  return out;
+};
+
 /**
  * `'*'` 是「该 provider 已停用」的编码，其唯一所有者是 `form.disabled`：
  * 载入时 `stripDisableAllModelsRule` 把它剥进该 flag，保存时仅凭该 flag 重新追加。
@@ -140,8 +131,29 @@ export const buildExcludedModels = (
   return filtered.length ? filtered : undefined;
 };
 
+const buildModelAliases = (
+  models: ProviderEntryFormInput['models'] | undefined,
+  includeImage = false
+): ModelAlias[] =>
+  (models ?? [])
+    .map((m) => {
+      const entry: ModelAlias = {
+        sourceIndex: m.sourceIndex ?? null,
+        name: m.name.trim(),
+        alias: m.alias?.trim() || undefined,
+        priority: m.priority,
+        testModel: m.testModel,
+        ...buildModelOptions(m),
+      };
+      if (includeImage) {
+        entry.image = m.image === true;
+      }
+      return entry;
+    })
+    .filter((m) => m.name);
+
 const buildProviderKeyConfig = (
-  brand: 'gemini' | 'interactions' | 'codex' | 'xai' | 'claude' | 'vertex',
+  brand: 'gemini' | 'interactions' | 'codex' | 'meta' | 'xai' | 'claude' | 'vertex',
   input: ProviderEntryFormInput,
   existing?: ProviderKeyConfig | GeminiKeyConfig | null
 ): ProviderKeyConfig | GeminiKeyConfig => {
@@ -150,6 +162,7 @@ const buildProviderKeyConfig = (
   const excluded = buildExcludedModels(input.excludedModelsText, input.disabled, brand);
   const apiKeyChanged = input.apiKey.trim().length > 0;
   const next: ProviderKeyConfig = {
+    source: existing?.source,
     apiKey: apiKeyChanged ? input.apiKey.trim() : (existing?.apiKey ?? ''),
     priority: input.priority,
     weight: input.weight,
@@ -159,8 +172,15 @@ const buildProviderKeyConfig = (
     models: models.length ? models : undefined,
     headers: Object.keys(headers).length ? headers : undefined,
     excludedModels: excluded,
-    disableCooling: input.disableCooling === true,
+    disableCooling: input.disableCooling,
+    ...(input.runtimePolicy
+      ? buildRuntimePolicy(
+          input.runtimePolicy,
+          PROVIDER_DESCRIPTORS[brand].supportsRequestScopedErrors
+        )
+      : {}),
     authIndex: existing?.authIndex,
+    ...pickProviderBehavior(input, brand),
   };
   if ((brand === 'codex' || brand === 'xai') && input.websockets !== undefined) {
     next.websockets = input.websockets;
@@ -174,214 +194,9 @@ const buildProviderKeyConfig = (
     };
   }
   if (brand === 'claude') {
-    next.experimentalCchSigning = input.experimentalCchSigning === true;
+    next.fingerprintProfile = input.fingerprintProfile?.trim() || undefined;
   }
   return next;
-};
-
-const buildClaudeApiConfig = (
-  input: ProviderEntryFormInput,
-  existing?: ProviderKeyConfig | null
-): ProviderKeyConfig =>
-  buildProviderKeyConfig(
-    'claude',
-    {
-      ...input,
-      baseUrl: CLAUDE_API_BASE_URL,
-    },
-    existing
-  ) as ProviderKeyConfig;
-
-const splitMediaText = (value: string): string[] =>
-  value
-    .split(/[\n,]+/)
-    .map((item) => item.trim())
-    .filter(Boolean);
-
-const emptyMediaOperation = (): MediaOperationInput => ({
-  name: '',
-  capability: '',
-  method: 'POST',
-  path: '',
-  requestFormat: 'json',
-  modelMode: 'optional',
-  model: '',
-  responseFormat: 'passthrough',
-  resultPath: '',
-  testRequestJson: '',
-  testRequestMultipartFieldsText: '',
-  asyncEnabled: false,
-  taskIdPath: '',
-  pollMethod: 'GET',
-  pollPath: '',
-  statusPath: '',
-  successValuesText: 'completed',
-  failureValuesText: 'failed',
-  asyncResultPath: '',
-  pollInterval: '3s',
-});
-
-const buildMediaProviderFormInput = (
-  brand: 'image' | 'video' | 'audio',
-  config?: MediaProviderConfig | null
-): ProviderEntryFormInput => ({
-  apiKey: '',
-  name: config?.name ?? '',
-  baseUrl: config?.baseUrl ?? '',
-  proxyUrl: config?.apiKeyEntries?.[0]?.proxyUrl ?? '',
-  prefix: config?.prefix ?? '',
-  apiKeyHeader: config?.apiKeyHeader ?? '',
-  apiKeyPrefix: config?.apiKeyPrefix ?? '',
-  disabled: config?.disabled === true,
-  disableCooling: config?.disableCooling === true,
-  priority: config?.priority,
-  mediaKind: brand,
-  headers: config?.headers
-    ? Object.entries(config.headers).map(([key, value]) => ({ key, value: String(value) }))
-    : [{ key: '', value: '' }],
-  excludedModelsText: '',
-  models: config?.models?.length
-    ? config.models.map((model) => ({
-        name: model.name,
-        alias: model.alias ?? '',
-        displayName: model.displayName ?? '',
-        forceMapping: model.forceMapping === true,
-        capabilities: [...(model.capabilities ?? [])],
-      }))
-    : [{ name: '', alias: '', capabilities: [] }],
-  operations: config?.operations?.length
-    ? config.operations.map((operation) => ({
-        name: operation.name,
-        capability: operation.capability ?? '',
-        method: operation.method,
-        path: operation.path,
-        requestFormat: operation.requestFormat,
-        modelMode: operation.modelMode,
-        model: operation.model ?? '',
-        responseFormat: operation.responseFormat,
-        resultPath: operation.resultPath ?? '',
-        testRequestJson: operation.testRequest?.json ?? '',
-        testRequestMultipartFieldsText: Object.entries(operation.testRequest?.multipartFields ?? {})
-          .map(([key, value]) => `${key}=${value}`)
-          .join('\n'),
-        asyncEnabled: Boolean(operation.async),
-        taskIdPath: operation.async?.taskIdPath ?? '',
-        pollMethod: operation.async?.pollMethod ?? 'GET',
-        pollPath: operation.async?.pollPath ?? '',
-        statusPath: operation.async?.statusPath ?? '',
-        successValuesText: operation.async?.successValues?.join('\n') ?? 'completed',
-        failureValuesText: operation.async?.failureValues?.join('\n') ?? 'failed',
-        asyncResultPath: operation.async?.resultPath ?? '',
-        pollInterval: operation.async?.pollInterval ?? '3s',
-      }))
-    : [emptyMediaOperation()],
-  apiKeyEntries: config?.apiKeyEntries?.length
-    ? config.apiKeyEntries.map((entry) => ({
-        apiKey: '',
-        existingApiKey: entry.apiKey,
-        priority: entry.priority,
-        proxyUrl: entry.proxyUrl ?? '',
-        authIndex: entry.authIndex,
-      }))
-    : [{ apiKey: '', proxyUrl: '', authIndex: config?.authIndex }],
-  testModel: '',
-  cloak: undefined,
-});
-
-const buildMediaProviderConfig = (
-  brand: 'image' | 'video' | 'audio',
-  input: ProviderEntryFormInput,
-  existing?: MediaProviderConfig | null
-): MediaProviderConfig => {
-  const apiKeyEntries = (input.apiKeyEntries ?? [])
-    .map((entry, index) => ({
-      apiKey:
-        entry.apiKey.trim() ||
-        entry.existingApiKey?.trim() ||
-        existing?.apiKeyEntries?.[index]?.apiKey?.trim() ||
-        '',
-      priority: entry.priority,
-      proxyUrl: entry.proxyUrl.trim() || undefined,
-      authIndex: entry.authIndex,
-    }))
-    .filter((entry) => entry.apiKey);
-  const headers = headersFromEntries(input.headers);
-  const models = (input.models ?? [])
-    .map((model) => ({
-      name: model.name.trim(),
-      alias: model.alias?.trim() || undefined,
-      displayName: model.displayName?.trim() || undefined,
-      forceMapping: model.forceMapping === true || undefined,
-      capabilities: (model.capabilities ?? []).map((item) => item.trim()).filter(Boolean),
-    }))
-    .filter((model) => model.name);
-  const operations = (input.operations ?? [])
-    .map((operation) => {
-      const result: MediaOperationConfig = {
-        name: operation.name.trim(),
-        capability: operation.capability.trim() || undefined,
-        method: operation.method.trim().toUpperCase() || 'POST',
-        path: operation.path.trim(),
-        requestFormat: operation.requestFormat,
-        modelMode: operation.modelMode,
-        model: operation.modelMode === 'none' ? undefined : operation.model.trim() || undefined,
-        responseFormat: operation.responseFormat,
-        resultPath: operation.resultPath.trim() || undefined,
-      };
-      const testRequestJson = operation.testRequestJson.trim();
-      const multipartFields = Object.fromEntries(
-        splitMediaText(operation.testRequestMultipartFieldsText).flatMap((line) => {
-          const separator = line.indexOf('=');
-          if (separator <= 0) return [];
-          return [[line.slice(0, separator).trim(), line.slice(separator + 1)]];
-        })
-      );
-      if (testRequestJson || Object.keys(multipartFields).length) {
-        result.testRequest = {
-          ...(testRequestJson ? { json: testRequestJson } : {}),
-          ...(Object.keys(multipartFields).length ? { multipartFields } : {}),
-        };
-      }
-      if (operation.asyncEnabled) {
-        result.async = {
-          taskIdPath: operation.taskIdPath.trim(),
-          pollMethod: operation.pollMethod.trim().toUpperCase() || 'GET',
-          pollPath: operation.pollPath.trim(),
-          statusPath: operation.statusPath.trim(),
-          successValues: splitMediaText(operation.successValuesText),
-          failureValues: splitMediaText(operation.failureValuesText),
-          resultPath: operation.asyncResultPath.trim() || undefined,
-          pollInterval: operation.pollInterval.trim() || undefined,
-        };
-      }
-      return result;
-    })
-    .filter((operation) => operation.name && operation.path);
-  const providerAuthIndex =
-    apiKeyEntries.length === 0
-      ? input.apiKeyEntries?.find((entry) => entry.authIndex?.trim())?.authIndex?.trim() ||
-        existing?.authIndex
-      : undefined;
-  return mergeEditedMediaProviderConfig(existing, {
-    ...(existing ?? {}),
-    name: input.name.trim(),
-    kind: brand,
-    baseUrl: input.baseUrl.trim(),
-    priority: input.priority,
-    disabled: input.disabled,
-    disableCooling: input.disableCooling === true,
-    prefix: input.prefix.trim() || undefined,
-    apiKeyHeader: input.apiKeyHeader?.trim() || undefined,
-    apiKeyPrefix:
-      input.apiKeyPrefix !== undefined && input.apiKeyPrefix.trim() !== ''
-        ? input.apiKeyPrefix.trim()
-        : undefined,
-    authIndex: providerAuthIndex,
-    apiKeyEntries,
-    headers: Object.keys(headers).length ? headers : undefined,
-    models: models.length ? models : undefined,
-    operations: operations.length ? operations : undefined,
-  });
 };
 
 const sponsorEntryApiKey = (entry: SponsorKeyEntryInput): string =>
@@ -412,9 +227,11 @@ const buildSponsorOpenAIConfig = (
     ...(existing ?? {}),
     name: providerName,
     baseUrl: urls.openai,
+    ...pickProviderBehavior(entry, 'openaiCompatibility'),
     prefix: entry.prefix.trim() || undefined,
     disabled: entry.disabled,
-    disableCooling: entry.disableCooling === true,
+    disableCooling: entry.disableCooling,
+    ...(entry.runtimePolicy ? buildRuntimePolicy(entry.runtimePolicy) : {}),
     priority: entry.priority,
     apiKeyEntries,
     models: models.length ? models : undefined,
@@ -438,11 +255,13 @@ const buildSponsorProviderKeyConfig = (
     ...(existing ?? {}),
     apiKey,
     baseUrl: protocol === 'claude' ? urls.anthropic : urls.codex,
+    ...pickProviderBehavior(entry, protocol),
     proxyUrl: entry.proxyUrl.trim() || undefined,
     prefix: entry.prefix.trim() || undefined,
     priority: entry.priority,
     weight: entry.weight,
-    disableCooling: entry.disableCooling === true,
+    disableCooling: entry.disableCooling,
+    ...(entry.runtimePolicy ? buildRuntimePolicy(entry.runtimePolicy) : {}),
     excludedModels: excluded,
     models: models.length ? models : undefined,
   };
@@ -468,7 +287,8 @@ const buildSponsorGeminiConfig = (
     prefix: entry.prefix.trim() || undefined,
     priority: entry.priority,
     weight: entry.weight,
-    disableCooling: entry.disableCooling === true,
+    disableCooling: entry.disableCooling,
+    ...(entry.runtimePolicy ? buildRuntimePolicy(entry.runtimePolicy) : {}),
     excludedModels: excluded,
     models: models.length ? models : undefined,
   };
@@ -507,9 +327,116 @@ const toggleSponsorConfig = async (raw: SponsorProviderRaw, disabled: boolean) =
     });
   }
   for (const item of raw.openai) {
-    await providersApi.updateOpenAIProviderDisabled(item.index, disabled);
+    await providersApi.updateOpenAIProviderDisabled(item.index, disabled, item.config.source);
   }
 };
+
+export const buildProviderGroups = (config: Config): ProviderGroup[] =>
+  PROVIDER_BRAND_ORDER.reduce<ProviderGroup[]>((groups, brand) => {
+    let resources: ProviderResource[];
+    switch (brand) {
+      case 'gemini':
+        resources = (config.geminiApiKeys ?? []).reduce<ProviderResource[]>((out, item, index) => {
+          if (!isQiniuCloudGeminiProvider(item)) {
+            out.push(geminiToResource(item, index));
+          }
+          return out;
+        }, []);
+        break;
+      case 'interactions':
+        resources = (config.interactionsApiKeys ?? []).map((item, index) =>
+          interactionsToResource(item, index)
+        );
+        break;
+      case 'codex':
+        resources = (config.codexApiKeys ?? []).reduce<ProviderResource[]>((out, item, index) => {
+          if (
+            !isApiKeyFunCodexProvider(item) &&
+            !isFennoAICodexProvider(item) &&
+            !isQiniuCloudCodexProvider(item) &&
+            !isKimiCodexProvider(item)
+          ) {
+            out.push(codexToResource(item, index));
+          }
+          return out;
+        }, []);
+        break;
+      case 'meta':
+        resources = (config.metaApiKeys ?? []).map((item, index) => metaToResource(item, index));
+        break;
+      case 'xai':
+        resources = (config.xaiApiKeys ?? []).map((item, index) => xaiToResource(item, index));
+        break;
+      case 'claude':
+        resources = (config.claudeApiKeys ?? []).reduce<ProviderResource[]>((out, item, index) => {
+          if (
+            !isApiKeyFunClaudeProvider(item) &&
+            !isFennoAIClaudeProvider(item) &&
+            !isQiniuCloudClaudeProvider(item) &&
+            !isKimiClaudeProvider(item)
+          ) {
+            out.push(claudeToResource(item, index));
+          }
+          return out;
+        }, []);
+        break;
+      case 'vertex':
+        resources = (config.vertexApiKeys ?? []).map((item, index) =>
+          vertexToResource(item, index)
+        );
+        break;
+      case 'image':
+      case 'video':
+      case 'audio':
+        resources = (config.mediaProviders ?? [])
+          .map((item, index) => ({ item, index: item.sourceIndex ?? index }))
+          .filter(({ item }) => item.kind === brand)
+          .map(({ item, index }) => mediaToResource(item, index, brand));
+        break;
+      case 'openaiCompatibility':
+        resources = (config.openaiCompatibility ?? []).reduce<ProviderResource[]>(
+          (out, item, index) => {
+            if (
+              !isApiKeyFunOpenAIProvider(item) &&
+              !isQiniuCloudOpenAIProvider(item) &&
+              !isKimiOpenAIProvider(item)
+            ) {
+              out.push(openaiToResource(item, index));
+            }
+            return out;
+          },
+          []
+        );
+        break;
+      case 'apikeyFun': {
+        const sponsorResource = apiKeyFunToResource(buildApiKeyFunRaw(config));
+        resources = sponsorResource ? [sponsorResource] : [];
+        break;
+      }
+      case 'fennoAI': {
+        const sponsorResource = fennoAIToResource(buildFennoAIRaw(config));
+        resources = sponsorResource ? [sponsorResource] : [];
+        break;
+      }
+      case 'qiniuCloud': {
+        const sponsorResource = qiniuCloudToResource(buildQiniuCloudRaw(config));
+        resources = sponsorResource ? [sponsorResource] : [];
+        break;
+      }
+      case 'kimi': {
+        const sponsorResource = kimiToResource(buildKimiRaw(config));
+        resources = sponsorResource ? [sponsorResource] : [];
+        break;
+      }
+      default:
+        return groups;
+    }
+    groups.push({
+      id: brand,
+      resources,
+    });
+    return groups;
+  }, []);
 
 /* -------------------------------------------------------------------------- */
 /* hook                                                                       */
@@ -536,17 +463,7 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
     setIsFetching(true);
     setErrorMessage(null);
     try {
-      const [
-        configResult,
-        geminiResult,
-        interactionsResult,
-        codexResult,
-        xaiResult,
-        claudeResult,
-        vertexResult,
-        openaiResult,
-        mediaResult,
-      ] = await Promise.allSettled([
+      const [configResult, geminiResult, interactionsResult, codexResult, xaiResult, claudeResult, vertexResult, openaiResult, mediaResult] = await Promise.allSettled([
         fetchConfig(true),
         providersApi.getGeminiKeys(),
         providersApi.getInteractionsKeys(),
@@ -559,6 +476,12 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
       ]);
       if (configResult.status !== 'fulfilled') {
         throw configResult.reason;
+      }
+      if (vertexResult.status === 'fulfilled') {
+        updateConfigValue('vertex-api-key', vertexResult.value || []);
+      }
+      if (openaiResult.status === 'fulfilled') {
+        updateConfigValue('openai-compatibility', openaiResult.value || []);
       }
       if (geminiResult.status === 'fulfilled') {
         updateConfigValue('gemini-api-key', geminiResult.value || []);
@@ -574,12 +497,6 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
       }
       if (claudeResult.status === 'fulfilled') {
         updateConfigValue('claude-api-key', claudeResult.value || []);
-      }
-      if (vertexResult.status === 'fulfilled') {
-        updateConfigValue('vertex-api-key', vertexResult.value || []);
-      }
-      if (openaiResult.status === 'fulfilled') {
-        updateConfigValue('openai-compatibility', openaiResult.value || []);
       }
       if (mediaResult.status === 'fulfilled') {
         updateConfigValue('media-providers', mediaResult.value || []);
@@ -608,151 +525,9 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
 
   const snapshot = useMemo<ProviderSnapshot | null>(() => {
     if (!config) return null;
-    const groups: ProviderGroup[] = PROVIDER_BRAND_ORDER.map((brand) => {
-      let resources: ProviderResource[] = [];
-      switch (brand) {
-        case 'gemini':
-          resources = (config.geminiApiKeys ?? []).reduce<ProviderResource[]>(
-            (out, item, index) => {
-              if (
-                !isCode0GeminiProvider(item) &&
-                !isQiniuCloudGeminiProvider(item) &&
-                !isLmuAIGeminiProvider(item) &&
-                !isInfistarGeminiProvider(item)
-              ) {
-                out.push(geminiToResource(item, index));
-              }
-              return out;
-            },
-            []
-          );
-          break;
-        case 'interactions':
-          resources = (config.interactionsApiKeys ?? []).map((item, index) =>
-            interactionsToResource(item, index)
-          );
-          break;
-        case 'codex':
-          resources = (config.codexApiKeys ?? []).reduce<ProviderResource[]>((out, item, index) => {
-            if (
-              !isApiKeyFunCodexProvider(item) &&
-              !isCode0CodexProvider(item) &&
-              !isFennoAICodexProvider(item) &&
-              !isQiniuCloudCodexProvider(item) &&
-              !isLmuAICodexProvider(item) &&
-              !isInfistarCodexProvider(item)
-            ) {
-              out.push(codexToResource(item, index));
-            }
-            return out;
-          }, []);
-          break;
-        case 'xai':
-          resources = (config.xaiApiKeys ?? []).map((item, index) => xaiToResource(item, index));
-          break;
-        case 'claude':
-          resources = (config.claudeApiKeys ?? []).reduce<ProviderResource[]>(
-            (out, item, index) => {
-              if (
-                !isApiKeyFunClaudeProvider(item) &&
-                !isCode0ClaudeProvider(item) &&
-                !isFennoAIClaudeProvider(item) &&
-                !isQiniuCloudClaudeProvider(item) &&
-                !isLmuAIClaudeProvider(item) &&
-                !isInfistarClaudeProvider(item) &&
-                !isKimiClaudeProvider(item) &&
-                !isClaudeApiProvider(item)
-              ) {
-                out.push(claudeToResource(item, index));
-              }
-              return out;
-            },
-            []
-          );
-          break;
-        case 'claudeApi':
-          resources = (config.claudeApiKeys ?? []).reduce<ProviderResource[]>(
-            (out, item, index) => {
-              if (isClaudeApiProvider(item)) {
-                out.push(claudeApiToResource(item, index));
-              }
-              return out;
-            },
-            []
-          );
-          break;
-        case 'vertex':
-          resources = (config.vertexApiKeys ?? []).map((c, i) => vertexToResource(c, i));
-          break;
-        case 'openaiCompatibility':
-          resources = (config.openaiCompatibility ?? []).reduce<ProviderResource[]>(
-            (out, item, index) => {
-              if (
-                !isApiKeyFunOpenAIProvider(item) &&
-                !isCode0OpenAIProvider(item) &&
-                !isQiniuCloudOpenAIProvider(item) &&
-                !isLmuAIOpenAIProvider(item) &&
-                !isInfistarOpenAIProvider(item) &&
-                !isKimiOpenAIProvider(item)
-              ) {
-                out.push(openaiToResource(item, index));
-              }
-              return out;
-            },
-            []
-          );
-          break;
-        case 'image':
-        case 'video':
-        case 'audio':
-          resources = (config.mediaProviders ?? [])
-            .filter((item) => item.kind === brand)
-            .map((item, index) => mediaToResource(item, item.sourceIndex ?? index, brand));
-          break;
-        case 'apikeyFun': {
-          const sponsorResource = apiKeyFunToResource(buildApiKeyFunRaw(config));
-          resources = sponsorResource ? [sponsorResource] : [];
-          break;
-        }
-        case 'code0': {
-          const sponsorResource = code0ToResource(buildCode0Raw(config));
-          resources = sponsorResource ? [sponsorResource] : [];
-          break;
-        }
-        case 'fennoAI': {
-          const sponsorResource = fennoAIToResource(buildFennoAIRaw(config));
-          resources = sponsorResource ? [sponsorResource] : [];
-          break;
-        }
-        case 'qiniuCloud': {
-          const sponsorResource = qiniuCloudToResource(buildQiniuCloudRaw(config));
-          resources = sponsorResource ? [sponsorResource] : [];
-          break;
-        }
-        case 'lmuAI': {
-          const sponsorResource = lmuAIToResource(buildLmuAIRaw(config));
-          resources = sponsorResource ? [sponsorResource] : [];
-          break;
-        }
-        case 'infistar': {
-          const sponsorResource = infistarToResource(buildInfistarRaw(config));
-          resources = sponsorResource ? [sponsorResource] : [];
-          break;
-        }
-        case 'kimi': {
-          const sponsorResource = kimiToResource(buildKimiRaw(config));
-          resources = sponsorResource ? [sponsorResource] : [];
-          break;
-        }
-      }
-      return {
-        id: brand,
-        resources,
-      };
-    });
     return {
       fetchedAt,
-      groups,
+      groups: buildProviderGroups(config),
     };
   }, [config, fetchedAt]);
 
@@ -764,17 +539,11 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
       const raw =
         brand === 'apikeyFun'
           ? buildApiKeyFunRaw(config)
-          : brand === 'code0'
-            ? buildCode0Raw(config)
-            : brand === 'fennoAI'
-              ? buildFennoAIRaw(config)
-              : brand === 'qiniuCloud'
-                ? buildQiniuCloudRaw(config)
-                : brand === 'lmuAI'
-                  ? buildLmuAIRaw(config)
-                  : brand === 'infistar'
-                    ? buildInfistarRaw(config)
-                    : buildKimiRaw(config);
+          : brand === 'fennoAI'
+            ? buildFennoAIRaw(config)
+            : brand === 'qiniuCloud'
+              ? buildQiniuCloudRaw(config)
+              : buildKimiRaw(config);
       const entries = normalizeSponsorKeyEntries(input.sponsorKeyEntries);
       const openaiEntry = entries.find((entry) => entry.protocol === 'openai');
       const claudeEntry = entries.find((entry) => entry.protocol === 'claude');
@@ -790,13 +559,20 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
             current?.config
           );
           if (current) {
-            await providersApi.updateGeminiKey(current.config.apiKey, current.config.baseUrl, next);
+            await providersApi.updateGeminiKey(current.config.apiKey, current.config.baseUrl, {
+              ...next,
+              source: current.config.source,
+            });
           } else {
             await providersApi.createGeminiKey(next);
           }
         } else {
           for (const item of raw.gemini) {
-            await providersApi.deleteGeminiKey(item.config.apiKey, item.config.baseUrl);
+            await providersApi.deleteGeminiKey(
+              item.config.apiKey,
+              item.config.baseUrl,
+              item.config.source
+            );
           }
         }
       }
@@ -813,14 +589,18 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
           await providersApi.updateCodexConfig(
             currentCodex.config.apiKey,
             currentCodex.config.baseUrl,
-            next
+            { ...next, source: currentCodex.config.source }
           );
         } else {
           await providersApi.createCodexConfig(next);
         }
       } else {
         for (const item of raw.codex) {
-          await providersApi.deleteCodexConfig(item.config.apiKey, item.config.baseUrl);
+          await providersApi.deleteCodexConfig(
+            item.config.apiKey,
+            item.config.baseUrl,
+            item.config.source
+          );
         }
       }
 
@@ -836,14 +616,18 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
           await providersApi.updateClaudeConfig(
             currentClaude.config.apiKey,
             currentClaude.config.baseUrl,
-            next
+            { ...next, source: currentClaude.config.source }
           );
         } else {
           await providersApi.createClaudeConfig(next);
         }
       } else {
         for (const item of raw.claude) {
-          await providersApi.deleteClaudeConfig(item.config.apiKey, item.config.baseUrl);
+          await providersApi.deleteClaudeConfig(
+            item.config.apiKey,
+            item.config.baseUrl,
+            item.config.source
+          );
         }
       }
 
@@ -865,7 +649,7 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
           await providersApi.createOpenAIProvider(next);
         }
       } else if (currentOpenAI) {
-        await providersApi.deleteOpenAIProvider(currentOpenAI.index);
+        await providersApi.deleteOpenAIProvider(currentOpenAI.index, currentOpenAI.config.source);
       }
     },
     [config]
@@ -887,6 +671,10 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
           await providersApi.createCodexConfig(
             buildNativeProviderConfig('codex', input) as ProviderKeyConfig
           );
+        } else if (brand === 'meta') {
+          await providersApi.createMetaConfig(
+            buildProviderKeyConfig('meta', input) as ProviderKeyConfig
+          );
         } else if (brand === 'xai') {
           await providersApi.createXAIConfig(
             buildProviderKeyConfig('xai', input) as ProviderKeyConfig
@@ -895,23 +683,18 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
           await providersApi.createClaudeConfig(
             buildNativeProviderConfig('claude', input) as ProviderKeyConfig
           );
-        } else if (brand === 'claudeApi') {
-          await providersApi.createClaudeConfig(buildClaudeApiConfig(input));
         } else if (brand === 'vertex') {
           await providersApi.createVertexConfig(
             buildProviderKeyConfig('vertex', input) as ProviderKeyConfig
           );
-        } else if (brand === 'openaiCompatibility') {
-          await providersApi.createOpenAIProvider(buildOpenAIConfig(input));
         } else if (brand === 'image' || brand === 'video' || brand === 'audio') {
           await providersApi.createMediaProvider(buildMediaProviderConfig(brand, input));
+        } else if (brand === 'openaiCompatibility') {
+          await providersApi.createOpenAIProvider(buildOpenAIConfig(input));
         } else if (
           brand === 'apikeyFun' ||
-          brand === 'code0' ||
           brand === 'fennoAI' ||
           brand === 'qiniuCloud' ||
-          brand === 'lmuAI' ||
-          brand === 'infistar' ||
           brand === 'kimi'
         ) {
           await runSponsorMutationWithRecovery(() => persistSponsorConfig(brand, input), refetch);
@@ -932,8 +715,9 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
         const selector = resource.selector;
         if (brand === 'gemini' && selector.brand === 'gemini') {
           const existing = resource.raw as GeminiKeyConfig;
-          await providersApi.updateGeminiKeyAtIndex(
-            selector.index,
+          await providersApi.updateGeminiKey(
+            selector.apiKey,
+            selector.baseUrl,
             buildNativeProviderConfig('gemini', input, existing) as GeminiKeyConfig
           );
         } else if (brand === 'interactions' && selector.brand === 'interactions') {
@@ -945,9 +729,17 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
           );
         } else if (brand === 'codex' && selector.brand === 'codex') {
           const existing = resource.raw as ProviderKeyConfig;
-          await providersApi.updateCodexConfigAtIndex(
-            selector.index,
+          await providersApi.updateCodexConfig(
+            selector.apiKey,
+            selector.baseUrl,
             buildNativeProviderConfig('codex', input, existing) as ProviderKeyConfig
+          );
+        } else if (brand === 'meta' && selector.brand === 'meta') {
+          const existing = resource.raw as ProviderKeyConfig;
+          await providersApi.updateMetaConfig(
+            selector.apiKey,
+            selector.baseUrl,
+            buildProviderKeyConfig('meta', input, existing) as ProviderKeyConfig
           );
         } else if (brand === 'xai' && selector.brand === 'xai') {
           const existing = resource.raw as ProviderKeyConfig;
@@ -958,15 +750,10 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
           );
         } else if (brand === 'claude' && selector.brand === 'claude') {
           const existing = resource.raw as ProviderKeyConfig;
-          await providersApi.updateClaudeConfigAtIndex(
-            selector.index,
-            buildNativeProviderConfig('claude', input, existing) as ProviderKeyConfig
-          );
-        } else if (brand === 'claudeApi' && selector.brand === 'claudeApi') {
           await providersApi.updateClaudeConfig(
             selector.apiKey,
             selector.baseUrl,
-            buildClaudeApiConfig(input, resource.raw as ProviderKeyConfig)
+            buildNativeProviderConfig('claude', input, existing) as ProviderKeyConfig
           );
         } else if (brand === 'vertex' && selector.brand === 'vertex') {
           const existing = resource.raw as ProviderKeyConfig;
@@ -975,25 +762,22 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
             selector.baseUrl,
             buildProviderKeyConfig('vertex', input, existing) as ProviderKeyConfig
           );
-        } else if (brand === 'openaiCompatibility' && selector.brand === 'openaiCompatibility') {
-          await providersApi.updateOpenAIProvider(
-            selector.name,
-            selector.index,
-            buildOpenAIConfig(input, resource.raw as OpenAIProviderConfig)
-          );
         } else if (brand === 'image' || brand === 'video' || brand === 'audio') {
           if (selector.brand !== brand) throw new Error('Media provider selector mismatch');
           await providersApi.updateMediaProvider(
             selector.index,
             buildMediaProviderConfig(brand, input, resource.raw as MediaProviderConfig)
           );
+        } else if (brand === 'openaiCompatibility' && selector.brand === 'openaiCompatibility') {
+          await providersApi.updateOpenAIProvider(
+            selector.name,
+            selector.index,
+            buildOpenAIConfig(input, resource.raw as OpenAIProviderConfig, true)
+          );
         } else if (
           brand === 'apikeyFun' ||
-          brand === 'code0' ||
           brand === 'fennoAI' ||
           brand === 'qiniuCloud' ||
-          brand === 'lmuAI' ||
-          brand === 'infistar' ||
           brand === 'kimi'
         ) {
           await runSponsorMutationWithRecovery(() => persistSponsorConfig(brand, input), refetch);
@@ -1012,68 +796,113 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
       try {
         const sel = resource.selector;
         if (sel.brand === 'gemini') {
-          await providersApi.deleteGeminiKeyAtIndex(sel.index);
+          await providersApi.deleteGeminiKey(
+            sel.apiKey,
+            sel.baseUrl,
+            (resource.raw as ProviderKeyConfig).source
+          );
           const next = (config?.geminiApiKeys ?? []).filter((_, i) => i !== sel.index);
           updateConfigValue('gemini-api-key', next);
         } else if (sel.brand === 'interactions') {
-          await providersApi.deleteInteractionsKey(sel.apiKey, sel.baseUrl);
+          await providersApi.deleteInteractionsKey(
+            sel.apiKey,
+            sel.baseUrl,
+            (resource.raw as ProviderKeyConfig).source
+          );
           const next = (config?.interactionsApiKeys ?? []).filter((_, i) => i !== sel.index);
           updateConfigValue('interactions-api-key', next);
         } else if (sel.brand === 'codex') {
-          await providersApi.deleteCodexConfigAtIndex(sel.index);
+          await providersApi.deleteCodexConfig(
+            sel.apiKey,
+            sel.baseUrl,
+            (resource.raw as ProviderKeyConfig).source
+          );
           const next = (config?.codexApiKeys ?? []).filter((_, i) => i !== sel.index);
           updateConfigValue('codex-api-key', next);
+        } else if (sel.brand === 'meta') {
+          await providersApi.deleteMetaConfig(
+            sel.apiKey,
+            sel.baseUrl,
+            (resource.raw as ProviderKeyConfig).source
+          );
+          const next = (config?.metaApiKeys ?? []).filter((_, i) => i !== sel.index);
+          updateConfigValue('meta-api-key', next);
         } else if (sel.brand === 'xai') {
-          await providersApi.deleteXAIConfig(sel.apiKey, sel.baseUrl);
+          await providersApi.deleteXAIConfig(
+            sel.apiKey,
+            sel.baseUrl,
+            (resource.raw as ProviderKeyConfig).source
+          );
           const next = (config?.xaiApiKeys ?? []).filter((_, i) => i !== sel.index);
           updateConfigValue('xai-api-key', next);
         } else if (sel.brand === 'claude') {
-          await providersApi.deleteClaudeConfigAtIndex(sel.index);
-          const next = (config?.claudeApiKeys ?? []).filter((_, i) => i !== sel.index);
-          updateConfigValue('claude-api-key', next);
-        } else if (sel.brand === 'claudeApi') {
-          await providersApi.deleteClaudeConfig(sel.apiKey, sel.baseUrl);
+          await providersApi.deleteClaudeConfig(
+            sel.apiKey,
+            sel.baseUrl,
+            (resource.raw as ProviderKeyConfig).source
+          );
           const next = (config?.claudeApiKeys ?? []).filter((_, i) => i !== sel.index);
           updateConfigValue('claude-api-key', next);
         } else if (sel.brand === 'vertex') {
-          await providersApi.deleteVertexConfig(sel.apiKey, sel.baseUrl);
+          await providersApi.deleteVertexConfig(
+            sel.apiKey,
+            sel.baseUrl,
+            (resource.raw as ProviderKeyConfig).source
+          );
           const next = (config?.vertexApiKeys ?? []).filter((_, i) => i !== sel.index);
           updateConfigValue('vertex-api-key', next);
+        } else if (sel.brand === 'image' || sel.brand === 'video' || sel.brand === 'audio') {
+          await providersApi.deleteMediaProvider(sel.index);
+          const next = (config?.mediaProviders ?? []).filter(
+            (item, index) => (item.sourceIndex ?? index) !== sel.index
+          );
+          updateConfigValue('media-providers', next);
         } else if (sel.brand === 'openaiCompatibility') {
-          await providersApi.deleteOpenAIProvider(sel.index);
+          await providersApi.deleteOpenAIProvider(
+            sel.index,
+            (resource.raw as OpenAIProviderConfig).source
+          );
           const next = (config?.openaiCompatibility ?? []).filter(
             (item, index) => (item.sourceIndex ?? index) !== sel.index
           );
           updateConfigValue('openai-compatibility', next);
-        } else if (sel.brand === 'image' || sel.brand === 'video' || sel.brand === 'audio') {
-          await providersApi.deleteMediaProvider(sel.index);
-          const next = (config?.mediaProviders ?? []).filter((_item, index) => index !== sel.index);
-          updateConfigValue('media-providers', next);
         } else if (
           sel.brand === 'apikeyFun' ||
-          sel.brand === 'code0' ||
           sel.brand === 'fennoAI' ||
           sel.brand === 'qiniuCloud' ||
-          sel.brand === 'lmuAI' ||
-          sel.brand === 'infistar' ||
           sel.brand === 'kimi'
         ) {
           await runSponsorMutationWithRecovery(async () => {
             const raw = resource.raw as SponsorProviderRaw;
             for (const item of raw.gemini) {
-              await providersApi.deleteGeminiKey(item.config.apiKey, item.config.baseUrl);
+              await providersApi.deleteGeminiKey(
+                item.config.apiKey,
+                item.config.baseUrl,
+                item.config.source
+              );
             }
             for (const item of raw.codex) {
-              await providersApi.deleteCodexConfig(item.config.apiKey, item.config.baseUrl);
+              await providersApi.deleteCodexConfig(
+                item.config.apiKey,
+                item.config.baseUrl,
+                item.config.source
+              );
             }
             for (const item of raw.claude) {
-              await providersApi.deleteClaudeConfig(item.config.apiKey, item.config.baseUrl);
+              await providersApi.deleteClaudeConfig(
+                item.config.apiKey,
+                item.config.baseUrl,
+                item.config.source
+              );
             }
             const openAIIndices = raw.openai
               .map((item) => item.index)
               .sort((left, right) => right - left);
             for (const index of openAIIndices) {
-              await providersApi.deleteOpenAIProvider(index);
+              await providersApi.deleteOpenAIProvider(
+                index,
+                raw.openai.find((item) => item.index === index)?.config.source
+              );
             }
           }, refetch);
         }
@@ -1096,7 +925,7 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
           const excluded = disabled
             ? withDisableAllModelsRule(current.excludedModels)
             : withoutDisableAllModelsRule(current.excludedModels);
-          await providersApi.updateGeminiKeyAtIndex(selector.index, {
+          await providersApi.updateGeminiKey(selector.apiKey, selector.baseUrl, {
             ...current,
             excludedModels: excluded,
           });
@@ -1111,9 +940,9 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
           });
         } else if (
           (brand === 'codex' && selector.brand === 'codex') ||
+          (brand === 'meta' && selector.brand === 'meta') ||
           (brand === 'xai' && selector.brand === 'xai') ||
           (brand === 'claude' && selector.brand === 'claude') ||
-          (brand === 'claudeApi' && selector.brand === 'claudeApi') ||
           (brand === 'vertex' && selector.brand === 'vertex')
         ) {
           const current = resource.raw as ProviderKeyConfig;
@@ -1122,36 +951,35 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
             : withoutDisableAllModelsRule(current.excludedModels);
           const next = { ...current, excludedModels: excluded };
           if (selector.brand === 'codex') {
-            await providersApi.updateCodexConfigAtIndex(selector.index, next);
+            await providersApi.updateCodexConfig(selector.apiKey, selector.baseUrl, next);
+          } else if (selector.brand === 'meta') {
+            await providersApi.updateMetaConfig(selector.apiKey, selector.baseUrl, next);
           } else if (selector.brand === 'xai') {
             await providersApi.updateXAIConfig(selector.apiKey, selector.baseUrl, next);
-          } else if (selector.brand === 'claude' || selector.brand === 'claudeApi') {
-            await providersApi.updateClaudeConfigAtIndex(selector.index, next);
+          } else if (selector.brand === 'claude') {
+            await providersApi.updateClaudeConfig(selector.apiKey, selector.baseUrl, next);
           } else if (selector.brand === 'vertex') {
             await providersApi.updateVertexConfig(selector.apiKey, selector.baseUrl, next);
           }
-        } else if (brand === 'openaiCompatibility' && selector.brand === 'openaiCompatibility') {
-          await providersApi.updateOpenAIProviderDisabled(selector.index, disabled);
         } else if (brand === 'image' || brand === 'video' || brand === 'audio') {
           if (selector.brand !== brand) throw new Error('Media provider selector mismatch');
+          const current = resource.raw as MediaProviderConfig;
           await providersApi.updateMediaProvider(
             selector.index,
-            buildMediaProviderConfig(
-              brand,
-              {
-                ...buildMediaProviderFormInput(brand, resource.raw as MediaProviderConfig),
-                disabled,
-              },
-              resource.raw as MediaProviderConfig
-            )
+            buildMediaProviderConfig(brand, {
+              ...buildMediaProviderFormInput(brand, current), disabled,
+            }, current)
+          );
+        } else if (brand === 'openaiCompatibility' && selector.brand === 'openaiCompatibility') {
+          await providersApi.updateOpenAIProviderDisabled(
+            selector.index,
+            disabled,
+            (resource.raw as OpenAIProviderConfig).source
           );
         } else if (
           brand === 'apikeyFun' ||
-          brand === 'code0' ||
           brand === 'fennoAI' ||
           brand === 'qiniuCloud' ||
-          brand === 'lmuAI' ||
-          brand === 'infistar' ||
           brand === 'kimi'
         ) {
           await runSponsorMutationWithRecovery(

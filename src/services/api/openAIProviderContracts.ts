@@ -1,3 +1,4 @@
+import { serializeModelOptions } from './providerModels';
 import type { ApiKeyEntry, ModelAlias, OpenAIProviderConfig } from '@/types';
 
 export const OPENAI_PROVIDER_FIELDS = [
@@ -19,6 +20,14 @@ export const OPENAI_MODEL_ALIAS_FIELDS = [
   'image',
   'type',
   'upstream-path',
+  'display-name',
+  'max-context-length',
+  'force-mapping',
+  'is-compat',
+  'support-configuration-update',
+  'input-modalities',
+  'output-modalities',
+  'use-max-completion-tokens',
 ] as const;
 
 const serializeModelAliases = (models?: ModelAlias[]) =>
@@ -26,7 +35,11 @@ const serializeModelAliases = (models?: ModelAlias[]) =>
     ? models
         .map((model) => {
           if (!model?.name) return null;
-          const payload: Record<string, unknown> = { ...model.wireExtras, name: model.name };
+          const payload: Record<string, unknown> = {
+            ...model.wireExtras,
+            ...serializeModelOptions(model, true, false, true),
+            name: model.name,
+          };
           if (model.alias && model.alias !== model.name) {
             payload.alias = model.alias;
           }
@@ -46,6 +59,12 @@ const serializeModelAliases = (models?: ModelAlias[]) =>
           if (model.thinking && !model.type) {
             payload.thinking = model.thinking;
           }
+          if (model.inputModalities !== undefined)
+            payload['input-modalities'] = model.inputModalities;
+          if (model.outputModalities !== undefined)
+            payload['output-modalities'] = model.outputModalities;
+          if (model.useMaxCompletionTokens !== undefined)
+            payload['use-max-completion-tokens'] = model.useMaxCompletionTokens;
           return payload;
         })
         .filter(Boolean)
@@ -58,25 +77,25 @@ const serializeApiKeyEntry = (entry: ApiKeyEntry) => {
   return payload;
 };
 
-export const serializeOpenAIProvider = (provider: OpenAIProviderConfig) => {
+export const serializeOpenAIProvider = (provider?: OpenAIProviderConfig | null) => {
   const payload: Record<string, unknown> = {
-    ...provider.wireExtras,
-    name: provider.name,
-    'base-url': provider.baseUrl,
-    'api-key-entries': Array.isArray(provider.apiKeyEntries)
+    ...(provider?.wireExtras ?? {}),
+    name: provider?.name ?? '',
+    'base-url': provider?.baseUrl ?? '',
+    'api-key-entries': Array.isArray(provider?.apiKeyEntries)
       ? provider.apiKeyEntries.map((entry) => serializeApiKeyEntry(entry))
       : [],
   };
-  if (provider.prefix?.trim()) payload.prefix = provider.prefix.trim();
-  if (provider.disabled !== undefined) payload.disabled = provider.disabled;
+  if (provider?.prefix?.trim()) payload.prefix = provider.prefix.trim();
+  if (provider?.disabled !== undefined) payload.disabled = provider.disabled;
   const headers =
-    provider.headers && Object.keys(provider.headers).length ? provider.headers : undefined;
+    provider?.headers && Object.keys(provider.headers).length ? provider.headers : undefined;
   if (headers) payload.headers = headers;
-  const models = serializeModelAliases(provider.models);
+  const models = serializeModelAliases(provider?.models);
   if (models && models.length) payload.models = models;
-  if (provider.priority !== undefined) payload.priority = provider.priority;
-  if (provider.testModel) payload['test-model'] = provider.testModel;
-  if (provider.disableCooling) payload['disable-cooling'] = true;
+  if (provider?.priority !== undefined) payload.priority = provider.priority;
+  if (provider?.testModel) payload['test-model'] = provider.testModel;
+  if (provider?.disableCooling) payload['disable-cooling'] = true;
   return payload;
 };
 

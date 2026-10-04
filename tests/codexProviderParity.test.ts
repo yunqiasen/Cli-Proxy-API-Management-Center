@@ -188,6 +188,7 @@ test('a probe clears the same removed fields as a provider save', async () => {
   form.proxyUrl = '';
   form.prefix = '';
   form.disableCooling = false;
+  form.runtimePolicy!.cooling = 'inherit';
   form.models = [];
   const payload = serializeCodexProviderDraft(buildNativeProviderDraft('codex', form, saved));
   expect(payload['proxy-url']).toBeNull();

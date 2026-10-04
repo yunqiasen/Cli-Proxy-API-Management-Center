@@ -5,11 +5,11 @@ import { readFile } from 'node:fs/promises';
 const nativeContracts = await import('../src/services/api/nativeProviderContracts.ts');
 
 const endpointCases = [
-  ['getGeminiKeys', '/gemini-api-key', 'gemini-api-key'],
-  ['getInteractionsKeys', '/interactions-api-key', 'interactions-api-key'],
-  ['getCodexConfigs', '/codex-api-key', 'codex-api-key'],
-  ['getXAIConfigs', '/xai-api-key', 'xai-api-key'],
-  ['getClaudeConfigs', '/claude-api-key', 'claude-api-key'],
+  ['getGeminiKeys', 'gemini'],
+  ['getInteractionsKeys', 'interactions'],
+  ['getCodexConfigs', 'codex'],
+  ['getXAIConfigs', 'xai'],
+  ['getClaudeConfigs', 'claude'],
 ];
 
 test('normalizes management-projected native provider auth indexes', () => {
@@ -36,20 +36,16 @@ test('normalizes management-projected native provider auth indexes', () => {
   assert.equal(configs[0].authIndex, '72fbe49d20267e16');
 });
 
-test('native provider API readers use dedicated management endpoints', async () => {
+test('native provider API readers use V8 grouped configuration endpoints', async () => {
   const source = await readFile(
     new URL('../src/services/api/providers.ts', import.meta.url),
     'utf8'
   );
-
-  for (const [method, path, section] of endpointCases) {
-    assert.match(source, new RegExp(`async ${method}\\(\\)`));
-    assert.match(source, new RegExp(`apiClient\\.get\\('${path}'\\)`));
-    assert.match(
-      source,
-      new RegExp(`normalizeNativeProviderSectionPayload\\([^)]*, '${section}'\\)`)
-    );
+  for (const [method, family] of endpointCases) {
+    assert.ok(source.includes(`async ${method}()`));
+    assert.ok(source.includes(`normalizeProviderGroups(await getGroups('${family}'))`));
   }
+  assert.ok(source.includes('`/config/api-keys/${family}`'));
 });
 
 test('provider workbench refresh overlays every native provider section from dedicated endpoints', async () => {

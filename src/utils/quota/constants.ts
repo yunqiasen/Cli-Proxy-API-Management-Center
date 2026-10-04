@@ -26,6 +26,14 @@ export const TYPE_COLORS: Record<string, TypeColorSet> = {
     light: { bg: '#eae7ff', text: '#3538d4' },
     dark: { bg: '#262395', text: '#b5b0ff' },
   },
+  devin: {
+    light: { bg: '#e8f4ff', text: '#155e9b' },
+    dark: { bg: '#123b5d', text: '#8dc9f5' },
+  },
+  meta: {
+    light: { bg: '#e3f2fd', text: '#1565c0' },
+    dark: { bg: '#0d47a1', text: '#64b5f6' },
+  },
   kimi: {
     light: { bg: '#dce8ff', text: '#0560cf' },
     dark: { bg: '#003880', text: '#70b5ff' },
@@ -102,6 +110,7 @@ export const CLAUDE_PROFILE_URL = 'https://api.anthropic.com/api/oauth/profile';
 export const CLAUDE_USAGE_URL = 'https://api.anthropic.com/api/oauth/usage';
 
 export const CLAUDE_REQUEST_HEADERS = {
+  'User-Agent': 'claude-cli/2.1.280 (external, cli)',
   Authorization: 'Bearer $TOKEN$',
   'Content-Type': 'application/json',
   'anthropic-beta': 'oauth-2025-04-20',
@@ -123,6 +132,7 @@ export const CLAUDE_USAGE_WINDOW_KEYS = [
 
 // Codex API configuration
 export const CODEX_USAGE_URL = 'https://chatgpt.com/backend-api/wham/usage';
+export const CODEX_SUBSCRIPTION_URL = 'https://chatgpt.com/backend-api/subscriptions';
 export const CODEX_RATE_LIMIT_RESET_CREDITS_URL =
   'https://chatgpt.com/backend-api/wham/rate-limit-reset-credits';
 export const CODEX_RATE_LIMIT_RESET_CREDITS_CONSUME_URL =
@@ -131,11 +141,12 @@ export const CODEX_RATE_LIMIT_RESET_CREDITS_CONSUME_URL =
 export const CODEX_REQUEST_HEADERS = {
   Authorization: 'Bearer $TOKEN$',
   'Content-Type': 'application/json',
-  'User-Agent': 'codex_cli_rs/0.76.0 (Debian 13.0.0; x86_64) WindowsTerminal',
+  'User-Agent': 'codex-tui/0.149.1 (Mac OS 26.5.2; arm64) iTerm.app/3.6.11 (codex-tui; 0.149.1)',
 };
 
 // Kimi API configuration
 export const KIMI_USAGE_URL = 'https://api.kimi.com/coding/v1/usages';
+export const KIMI_AI_USAGE_URL = 'https://api.kimi.ai/coding/v1/usages';
 
 export const KIMI_REQUEST_HEADERS = {
   Authorization: 'Bearer $TOKEN$',
@@ -144,6 +155,8 @@ export const KIMI_REQUEST_HEADERS = {
 // xAI/Grok API configuration
 export const XAI_BILLING_WEEKLY_URL = 'https://cli-chat-proxy.grok.com/v1/billing?format=credits';
 export const XAI_BILLING_MONTHLY_URL = 'https://cli-chat-proxy.grok.com/v1/billing';
+export const XAI_USER_URL = 'https://cli-chat-proxy.grok.com/v1/user?include=subscription';
+export const XAI_SETTINGS_URL = 'https://cli-chat-proxy.grok.com/v1/settings';
 export const XAI_API_ME_URL = 'https://api.x.ai/v1/me';
 export const XAI_API_CHAT_URL = 'https://api.x.ai/v1/chat/completions';
 export const XAI_PAID_HEALTH_MODEL = 'grok-4.5';

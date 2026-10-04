@@ -48,7 +48,7 @@ export const useModelsStore = create<ModelsState>((set, get) => ({
 
     try {
       const list = await modelsApi.fetchModels(apiBase, apiKeyScope || undefined);
-      // After invalidation or a newer load, return stale results only to the caller, not the store.
+// After invalidation or a newer load, return stale results only to the caller, not the store.
       if (requestId !== modelsRequestToken) return list;
       const now = Date.now();
 

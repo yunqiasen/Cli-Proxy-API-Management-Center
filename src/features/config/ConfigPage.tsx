@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { usePageTransitionLayer } from '@/components/common/PageTransitionLayer';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { useRevealGroup } from '@/hooks/motion';
@@ -25,6 +26,7 @@ import {
   resolveDirtyTabs,
   resolveStatus,
 } from './uiState';
+import { findConfigFieldById } from './searchIndex';
 import { shouldReloadVisualDraft, useConfigDocument } from './hooks/useConfigDocument';
 import { useFieldJump } from './hooks/useFieldJump';
 import { useSourceSearch } from './hooks/useSourceSearch';
@@ -50,6 +52,12 @@ const ENTRANCE_BUDGET_MS = 800;
 
 export function ConfigPage() {
   const { t } = useTranslation();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const requestedFieldEntry = useMemo(() => {
+    const fieldId = new URLSearchParams(location.search).get('field');
+    return findConfigFieldById(fieldId);
+  }, [location.search]);
   const pageTransitionLayer = usePageTransitionLayer();
   const isCurrentLayer = pageTransitionLayer ? pageTransitionLayer.isCurrentLayer : true;
   const showNotification = useNotificationStore((state) => state.showNotification);
@@ -66,17 +74,22 @@ export function ConfigPage() {
     visualValidationErrors,
     visualHasPayloadValidationErrors,
     loadVisualValuesFromYaml,
+    rebaseVisualValuesFromYaml,
     applyVisualChangesToYaml,
     setVisualValues,
   } = useVisualConfig();
 
   const [mode, setMode] = useState<ConfigEditorMode>(() =>
-    readSavedMode(localStorage.getItem(CONFIG_MODE_STORAGE_KEY))
+    requestedFieldEntry ? 'visual' : readSavedMode(localStorage.getItem(CONFIG_MODE_STORAGE_KEY))
   );
-  const [activeSection, setActiveSection] = useState<ConfigTabId>(() =>
-    readSavedSection(localStorage.getItem(CONFIG_SECTION_STORAGE_KEY))
+  const [activeSection, setActiveSection] = useState<ConfigTabId>(
+    () =>
+      requestedFieldEntry?.sectionId ??
+      readSavedSection(localStorage.getItem(CONFIG_SECTION_STORAGE_KEY))
   );
+  const handledRequestedFieldRef = useRef<string | null>(null);
   // Enable entrance animation only during the first mounting budget.
+  // 首载入场：挂载后一个预算周期内为 true；此后切 tab 新挂载的卡片不再播入场。
   const [animateCards, setAnimateCards] = useState(true);
   useEffect(() => {
     const timer = window.setTimeout(() => setAnimateCards(false), ENTRANCE_BUDGET_MS);
@@ -93,6 +106,7 @@ export function ConfigPage() {
     visualDirty,
     visualParseError,
     loadVisualValuesFromYaml,
+    rebaseVisualValuesFromYaml,
     applyVisualChangesToYaml,
   });
   const sourceSearch = useSourceSearch();
@@ -131,16 +145,22 @@ export function ConfigPage() {
     );
   }, [mode, showNotification, t, visualParseError]);
 
-  // Preserve edit ownership when switching between visual and source modes:
-  // Source: materialize visual dirty fields without recording a user source edit.
-  // Visual: parse actual source edits, otherwise preserve field-level dirty state and merge policy.
+  // 可视化 ↔ 源码切换的 dirty 交接：
+  // → 源码：物化可视化脏字段供查看，但不把同步动作记作用户源码编辑；
+  // → 可视化：源码草稿必须先保存或放弃；纯查看源码往返保留字段级 dirty。
+
   const handleModeChange = useCallback(
     (nextMode: ConfigEditorMode) => {
       if (nextMode === mode) return;
+      if (nextMode === 'visual' && doc.sourceDirty) {
+        showNotification(t('config_management.source_changes_before_visual'), 'warning');
+        return;
+      }
 
       if (nextMode === 'source') {
         if (visualDirty) {
-          const nextContent = applyVisualChangesToYaml(doc.content);
+          // content may be an earlier local source preview, not a server readback.
+          const nextContent = applyVisualChangesToYaml(doc.content, 'draft');
           if (nextContent !== doc.content) {
             doc.syncContentFromVisual(nextContent);
           }
@@ -181,6 +201,35 @@ export function ConfigPage() {
     setActiveSection: handleSectionChange,
   });
 
+  useEffect(() => {
+    if (!requestedFieldEntry || handledRequestedFieldRef.current === requestedFieldEntry.fieldId) {
+      return;
+    }
+
+    handledRequestedFieldRef.current = requestedFieldEntry.fieldId;
+    localStorage.setItem(CONFIG_MODE_STORAGE_KEY, 'visual');
+    jumpToField(requestedFieldEntry);
+
+    const nextSearchParams = new URLSearchParams(location.search);
+    nextSearchParams.delete('field');
+    const nextSearch = nextSearchParams.toString();
+    void navigate(
+      {
+        pathname: location.pathname,
+        search: nextSearch ? `?${nextSearch}` : '',
+        hash: location.hash,
+      },
+      { replace: true }
+    );
+  }, [
+    jumpToField,
+    location.hash,
+    location.pathname,
+    location.search,
+    navigate,
+    requestedFieldEntry,
+  ]);
+
   const errorCounts = useMemo(
     () => countSectionErrors(visualValidationErrors, visualHasPayloadValidationErrors),
     [visualHasPayloadValidationErrors, visualValidationErrors]
@@ -220,7 +269,8 @@ export function ConfigPage() {
   const sectionProps = {
     values: visualValues,
     validationErrors: visualValidationErrors,
-    disabled: disableControls || doc.loading,
+    disabled:
+      disableControls || doc.loading || doc.saving || doc.diffModalOpen || doc.recoveryRequired,
     animateIn: animateCards,
     onChange: setVisualValues,
   };
@@ -277,7 +327,11 @@ export function ConfigPage() {
         ) : (
           <SourceSearchBar search={sourceSearch} disabled={disableControls || doc.loading} />
         )}
-        <ModeSwitch mode={mode} disabled={doc.saving || doc.loading} onChange={handleModeChange} />
+        <ModeSwitch
+          mode={mode}
+          disabled={doc.saving || doc.loading || doc.diffModalOpen || doc.recoveryRequired}
+          onChange={handleModeChange}
+        />
       </div>
 
       {mode === 'visual' ? (
@@ -306,13 +360,19 @@ export function ConfigPage() {
           value={doc.content}
           onChange={doc.handleChange}
           theme={resolvedTheme}
-          editable={!disableControls && !doc.loading}
+          editable={!disableControls && !doc.loading && !doc.saving && !doc.diffModalOpen}
         />
       )}
 
       <FloatingSaveBar
         visible={isCurrentLayer && doc.isDirty}
-        statusText={t(isMobile ? status.shortLabelKey : status.labelKey)}
+        statusText={t(
+          doc.recoveryRequired
+            ? 'config_management.precise_save_recovery_required'
+            : isMobile
+              ? status.shortLabelKey
+              : status.labelKey
+        )}
         statusTone={status.tone}
         saving={doc.saving}
         saveDisabled={saveDisabled}

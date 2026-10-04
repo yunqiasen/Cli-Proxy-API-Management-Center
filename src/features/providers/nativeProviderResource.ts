@@ -20,16 +20,21 @@ export function buildNativeProviderResourceData(
     .filter(Boolean);
   const apiKeys = groupedKeys.length ? groupedKeys : [config.apiKey.trim()].filter(Boolean);
   const keyPreviews = apiKeys.map(maskApiKey).filter(Boolean);
-  const name = config.name?.trim() || '';
-  const identifier = name || keyPreviews[0] || `#${index + 1}`;
-  const searchTerms = Array.from(new Set([name, ...apiKeys, ...keyPreviews].filter(Boolean)));
+  // A name inherited from the V8 group for display is not a per-key selector
+  // name. The backend matches updates/deletes by API key, not by display name.
+  const keyOwnName = config.source?.group && typeof config.source.group.name === 'string'
+    ? ''  // group fallback: don't treat as selector name
+    : config.name?.trim() || '';
+  const displayName = config.name?.trim() || '';
+  const identifier = displayName || keyPreviews[0] || `#${index + 1}`;
+  const searchTerms = Array.from(new Set([displayName, ...apiKeys, ...keyPreviews].filter(Boolean)));
   return {
     identifier,
-    name: name || null,
+    name: displayName || null,
     apiKeys,
     keyPreviews,
     keyCount: apiKeys.length,
     searchTerms,
-    selector: { index, ...(name ? { name } : {}) },
+    selector: { index, ...(keyOwnName ? { name: keyOwnName } : {}) },
   };
 }

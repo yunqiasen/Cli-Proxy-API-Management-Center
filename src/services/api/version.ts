@@ -7,7 +7,7 @@ import type { ServerRuntimeKind } from '@/types';
 import { isRecord } from '@/utils/helpers';
 
 export const versionApi = {
-  checkLatest: () => apiClient.get<Record<string, unknown>>('/latest-version'),
+  checkLatest: () => apiClient.get<Record<string, unknown>>('/server/latest-version'),
   updateManagementPanel: () =>
     apiClient.post<Record<string, unknown>>('/management-panel/update', {}),
 

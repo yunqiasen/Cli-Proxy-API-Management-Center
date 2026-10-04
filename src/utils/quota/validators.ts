@@ -8,6 +8,8 @@ export function resolveAuthProvider(file: AuthFileItem): string {
   const raw = file.provider ?? file.type ?? '';
   const key = String(raw).trim().toLowerCase().replace(/_/g, '-');
   if (key === 'x-ai' || key === 'grok') return 'xai';
+  // Kimi International (kimi.ai) accounts share Kimi's quota API on another host.
+  if (key === 'kimi-ai') return 'kimi';
   return key;
 }
 
@@ -21,6 +23,10 @@ export function isClaudeFile(file: AuthFileItem): boolean {
 
 export function isCodexFile(file: AuthFileItem): boolean {
   return resolveAuthProvider(file) === 'codex';
+}
+
+export function isDevinFile(file: AuthFileItem): boolean {
+  return resolveAuthProvider(file) === 'devin';
 }
 
 export function isKimiFile(file: AuthFileItem): boolean {

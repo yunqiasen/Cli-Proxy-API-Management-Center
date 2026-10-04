@@ -1,12 +1,12 @@
 import { expect, test } from 'bun:test';
-import { normalizeOpenAIProvider } from '@/services/api/transformers';
+import { normalizeOpenAIProvider, normalizeProviderGroups } from '@/services/api/transformers';
 import { providersApi } from '@/services/api/providers';
 import { apiClient } from '@/services/api/client';
 
 const raw = {
   name: 'retrieval',
   'base-url': 'https://example.test/v1',
-  'api-key-entries': [{ 'api-key': 'selected' }],
+  keys: [{ 'api-key': 'selected' }],
   models: [{ name: 'vector-v1', alias: 'vector', type: 'embeddings', 'upstream-path': '/custom' }],
 };
 
@@ -168,7 +168,9 @@ test('OpenAI saves keep the latest hidden options instead of replaying stale for
     'support-prompt-cache-key': true,
     models: [{ ...raw.models[0], 'force-mapping': true }],
   };
-  const provider = normalizeOpenAIProvider(loaded)!;
+  const provider = normalizeProviderGroups([loaded], true)[0] as ReturnType<
+    typeof normalizeOpenAIProvider
+  > & {};
   provider.models![0].alias = 'edited-vector';
   const get = apiClient.get;
   const put = apiClient.put;

@@ -4,7 +4,13 @@ import type {
   ModelAlias,
   NativeApiKeyEntry,
   ProviderKeyConfig,
+  ProviderPolicyField,
+  ProviderRuntimePolicy,
+  ProviderBehaviorOptions,
+  RequestScopedErrorRule,
 } from '../../types/provider.ts';
+import { readCredentialWeight } from '../../utils/credentialWeight';
+import { normalizeModelOptions, normalizeModelThinking, serializeModelOptions } from './providerModels';
 
 export const PROVIDER_COMMON_KEY_FIELDS = [
   'name',
@@ -26,6 +32,14 @@ export const CODEX_KEY_FIELDS = [
   'websockets',
   'disable-image-generation',
   'responses-first-output-timeout-seconds',
+  'request-retry',
+  'request-scoped-errors',
+  'inherit-fields',
+  'alpha-search',
+  'disable-codex-cloaking',
+  'support-prompt-cache-key',
+  'fingerprint-profile',
+  'source',
 ] as const;
 
 type NativeProviderConfig = GeminiKeyConfig & ProviderKeyConfig;
@@ -88,24 +102,29 @@ const extraFields = (
 const normalizeModels = (value: unknown): ModelAlias[] | undefined => {
   if (!Array.isArray(value)) return undefined;
   const models = value
-    .map((item): ModelAlias | null => {
+    .map((item, sourceIndex): ModelAlias | null => {
       if (typeof item === 'string') {
         const name = item.trim();
-        return name ? { name } : null;
+        return name ? { name, sourceIndex } : null;
       }
       if (!isRecord(item)) return null;
       const name = normalizeString(item.name);
       if (!name) return null;
-      const model: ModelAlias = { name };
-      const extras = extraFields(item, ['name', 'alias', 'priority', 'test-model', 'thinking']);
+      const model: ModelAlias = { name, sourceIndex, ...normalizeModelOptions(item) };
+      const extras = extraFields(item, [
+        'name', 'alias', 'priority', 'test-model', 'thinking',
+        'display-name', 'max-context-length', 'force-mapping', 'is-compat',
+        'support-configuration-update', 'use-max-completion-tokens',
+        'input-modalities', 'output-modalities',
+      ]);
       if (extras) model.wireExtras = extras;
       const alias = normalizeString(item.alias);
-      if (alias && alias !== name) model.alias = alias;
+      if (alias) model.alias = alias;
       const priority = normalizeNumber(item.priority);
       if (priority !== undefined) model.priority = priority;
       const testModel = normalizeString(item['test-model']);
       if (testModel) model.testModel = testModel;
-      if (isRecord(item.thinking)) model.thinking = item.thinking;
+      if (isRecord(item.thinking)) model.thinking = normalizeModelThinking(item.thinking);
       return model;
     })
     .filter((item): item is ModelAlias => item !== null);
@@ -149,6 +168,26 @@ export const normalizeNativeApiKeyEntries = (value: unknown): NativeApiKeyEntry[
   return entries.length ? entries : undefined;
 };
 
+const normalizeRequestScopedErrors = (value: unknown): RequestScopedErrorRule[] | undefined => {
+  if (!Array.isArray(value)) return undefined;
+  const rules = value
+    .filter(isRecord)
+    .map((rule): RequestScopedErrorRule => {
+      const result: RequestScopedErrorRule = {};
+      if (typeof rule.status === 'number') result.status = rule.status;
+      if (Array.isArray(rule.match))
+        result.match = rule.match.filter((v): v is string => typeof v === 'string');
+      if (Array.isArray(rule['match-regexr']))
+        result.matchRegex = rule['match-regexr'].filter(
+          (v): v is string => typeof v === 'string',
+        );
+      if (typeof rule.action === 'string')
+        result.action = rule.action as RequestScopedErrorRule['action'];
+      return result;
+    });
+  return rules.length ? rules : undefined;
+};
+
 export function normalizeNativeProviderPayload(item: unknown): NativeProviderConfig | null {
   if (item === undefined || item === null) return null;
   const record = isRecord(item) ? item : {};
@@ -163,6 +202,7 @@ export function normalizeNativeProviderPayload(item: unknown): NativeProviderCon
     'cloak',
     'experimental-cch-signing',
     'rebuild-mid-system-message',
+    'weight',
   ]);
   if (extras) config.wireExtras = extras;
   const name = normalizeString(record.name);
@@ -203,6 +243,29 @@ export function normalizeNativeProviderPayload(item: unknown): NativeProviderCon
   if (rebuildMidSystemMessage !== undefined) {
     config.rebuildMidSystemMessage = rebuildMidSystemMessage;
   }
+  // Runtime policy fields (upstream v1.25.2)
+  const requestRetry = normalizeNumber(record['request-retry']);
+  if (requestRetry !== undefined) config.requestRetry = requestRetry;
+  const inheritFields = Array.isArray(record['inherit-fields'])
+    ? record['inherit-fields'].filter(
+        (v): v is string => typeof v === 'string' && v.trim() !== '',
+      )
+    : undefined;
+  if (inheritFields?.length) config.inheritFields = inheritFields as ProviderPolicyField[];
+  const requestScopedErrors = normalizeRequestScopedErrors(record['request-scoped-errors']);
+  if (requestScopedErrors?.length) config.requestScopedErrors = requestScopedErrors;
+  // Behavior option fields
+  const alphaSearch = normalizeBoolean(record['alpha-search']);
+  if (alphaSearch !== undefined) config.alphaSearch = alphaSearch;
+  const disableCodexCloaking = normalizeBoolean(record['disable-codex-cloaking']);
+  if (disableCodexCloaking !== undefined) config.disableCodexCloaking = disableCodexCloaking;
+  const supportPromptCacheKey = normalizeBoolean(record['support-prompt-cache-key']);
+  if (supportPromptCacheKey !== undefined) config.supportPromptCacheKey = supportPromptCacheKey;
+  const fingerprintProfile = normalizeString(record['fingerprint-profile']);
+  if (fingerprintProfile) config.fingerprintProfile = fingerprintProfile;
+  // Weight (consolidated from applyNativeProviderWeight)
+  const weight = readCredentialWeight(record.weight);
+  if (weight !== undefined) config.weight = weight;
   return config;
 }
 
@@ -232,7 +295,13 @@ const serializeModels = (models?: ModelAlias[]) => {
       const name = model.name.trim();
       if (!name) return null;
       const entry: Record<string, unknown> = { ...model.wireExtras, name };
-      if (model.alias?.trim() && model.alias.trim() !== name) entry.alias = model.alias.trim();
+      const options = serializeModelOptions(model);
+      for (const [key, value] of Object.entries(options)) {
+        if (value === undefined) continue;
+        if (key === 'thinking' && model.thinking === undefined) continue;
+        entry[key] = value;
+      }
+      if (model.alias?.trim()) entry.alias = model.alias.trim();
       if (model.priority !== undefined) entry.priority = model.priority;
       if (model.testModel?.trim()) entry['test-model'] = model.testModel.trim();
       if (model.thinking) entry.thinking = model.thinking;
@@ -291,6 +360,24 @@ export function serializeNativeProviderPayload(
   if (cloak) payload.cloak = cloak;
   if (providerConfig.experimentalCchSigning) payload['experimental-cch-signing'] = true;
   if (providerConfig.rebuildMidSystemMessage) payload['rebuild-mid-system-message'] = true;
+  // Runtime policy serialization (upstream v1.25.2)
+  const policyConfig = config as ProviderRuntimePolicy;
+  if (policyConfig.requestRetry !== undefined) payload['request-retry'] = policyConfig.requestRetry;
+  if (policyConfig.requestScopedErrors?.length) {
+    payload['request-scoped-errors'] = policyConfig.requestScopedErrors.map((rule) => ({
+      ...(rule.status !== undefined ? { status: rule.status } : {}),
+      ...(rule.match ? { match: rule.match } : {}),
+      ...(rule.matchRegex ? { 'match-regexr': rule.matchRegex } : {}),
+      ...(rule.action ? { action: rule.action } : {}),
+    }));
+  }
+  if (policyConfig.inheritFields?.length) payload['inherit-fields'] = policyConfig.inheritFields;
+  // Behavior options
+  const behaviorConfig = config as ProviderBehaviorOptions;
+  if (behaviorConfig.alphaSearch !== undefined) payload['alpha-search'] = behaviorConfig.alphaSearch;
+  if (behaviorConfig.disableCodexCloaking !== undefined) payload['disable-codex-cloaking'] = behaviorConfig.disableCodexCloaking;
+  if (behaviorConfig.supportPromptCacheKey !== undefined) payload['support-prompt-cache-key'] = behaviorConfig.supportPromptCacheKey;
+  if (providerConfig.fingerprintProfile?.trim()) payload['fingerprint-profile'] = providerConfig.fingerprintProfile.trim();
   return payload;
 }
 

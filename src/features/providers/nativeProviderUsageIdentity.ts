@@ -15,5 +15,5 @@ export function getNativeProviderUsageIdentity(
       brand === 'audio')
   )
     return name;
-  return brand === 'claudeApi' ? 'claude' : brand;
+  return brand;
 }

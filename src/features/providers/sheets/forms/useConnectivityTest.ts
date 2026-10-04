@@ -388,7 +388,7 @@ export function useConnectivityTest(
 
   const runCodex = useCallback(
     async (entryIndex?: number, testAll = false): Promise<void> => {
-      if (brand !== 'codex' && brand !== 'xai') return;
+      if (brand !== 'codex' && brand !== 'meta' && brand !== 'xai') return;
 
       codexAbortRef.current?.abort();
       const controller = new AbortController();
@@ -606,7 +606,7 @@ export function useConnectivityTest(
 
   const runClaude = useCallback(
     async (entryIndex?: number, updateGlobal = true): Promise<ConnectivityStatus> => {
-      if (brand !== 'claude' && brand !== 'claudeApi') return IDLE;
+      if (brand !== 'claude') return IDLE;
 
       const generation = requestGenerationRef.current.begin();
       const failValidation = (message: string): ConnectivityStatus => {
@@ -701,7 +701,7 @@ export function useConnectivityTest(
   const runNativeKey = useCallback(
     async (idx: number): Promise<void> => {
       updateOpenaiStatus(idx, { state: 'loading', message: '' });
-      if (brand === 'codex' || brand === 'xai') await runCodex(idx);
+      if (brand === 'codex' || brand === 'meta' || brand === 'xai') await runCodex(idx);
       else if (brand === 'gemini') await runGemini(idx);
       else if (brand === 'claude') await runClaude(idx, true);
     },
@@ -709,7 +709,7 @@ export function useConnectivityTest(
   );
 
   const runNativeAllKeys = useCallback(async (): Promise<void> => {
-    if (brand === 'codex' || brand === 'xai') {
+    if (brand === 'codex' || brand === 'meta' || brand === 'xai') {
       await runCodex(undefined, true);
       return;
     }

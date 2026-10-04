@@ -9,9 +9,9 @@ export const MODEL_DISCOVERY_BRANDS: ReadonlyArray<ProviderBrand> = [
   'gemini',
   'interactions',
   'codex',
+  'meta',
   'xai',
   'claude',
-  'claudeApi',
   'openaiCompatibility',
   'image',
   'video',
@@ -24,6 +24,7 @@ export const isModelDiscoveryBrand = (brand: ProviderBrand): boolean =>
 export interface UseModelDiscoveryArgs {
   brand: ProviderBrand;
   baseUrl: string;
+  proxyUrl?: string;
   formHeaders: Array<{ key: string; value: string }>;
   apiKeyEntries?: ApiKeyEntryInput[];
   apiKey?: string;
@@ -38,6 +39,7 @@ export const createModelDiscoveryInputSignature = (
     UseModelDiscoveryArgs,
     | 'brand'
     | 'baseUrl'
+    | 'proxyUrl'
     | 'formHeaders'
     | 'apiKeyEntries'
     | 'apiKey'
@@ -50,6 +52,7 @@ export const createModelDiscoveryInputSignature = (
   JSON.stringify({
     brand: input.brand,
     baseUrl: input.baseUrl,
+    proxyUrl: input.proxyUrl ?? '',
     formHeaders: input.formHeaders.map(({ key, value }) => ({ key, value })),
     apiKeyEntries: (input.apiKeyEntries ?? []).map((entry) => ({
       apiKey: entry.apiKey ?? '',
@@ -111,6 +114,7 @@ export function useModelDiscovery(args: UseModelDiscoveryArgs): UseModelDiscover
   const {
     brand,
     baseUrl,
+    proxyUrl,
     formHeaders,
     apiKeyEntries,
     apiKey,
@@ -132,6 +136,7 @@ export function useModelDiscovery(args: UseModelDiscoveryArgs): UseModelDiscover
       createModelDiscoveryInputSignature({
         brand,
         baseUrl,
+        proxyUrl,
         formHeaders,
         apiKeyEntries,
         apiKey,
@@ -147,6 +152,7 @@ export function useModelDiscovery(args: UseModelDiscoveryArgs): UseModelDiscover
       apiKeyPrefix,
       authIndex,
       baseUrl,
+      proxyUrl,
       brand,
       fallbackApiKey,
       formHeaders,
@@ -170,23 +176,26 @@ export function useModelDiscovery(args: UseModelDiscoveryArgs): UseModelDiscover
           baseUrl,
           key,
           baseHeaders,
-          resolvedAuthIndex
+          resolvedAuthIndex,
+          proxyUrl
         );
-      } else if (brand === 'codex' || brand === 'xai') {
+      } else if (brand === 'codex' || brand === 'meta' || brand === 'xai') {
         const key = (apiKey ?? '').trim() || (fallbackApiKey ?? '').trim();
         next = await modelsApi.fetchV1ModelsViaApiCall(
           baseUrl,
           key,
           baseHeaders,
-          resolvedAuthIndex
+          resolvedAuthIndex,
+          proxyUrl
         );
-      } else if (brand === 'claude' || brand === 'claudeApi') {
+      } else if (brand === 'claude') {
         const key = (apiKey ?? '').trim() || (fallbackApiKey ?? '').trim();
         next = await modelsApi.fetchClaudeModelsViaApiCall(
           baseUrl,
           key,
           baseHeaders,
-          resolvedAuthIndex
+          resolvedAuthIndex,
+          proxyUrl
         );
       } else if (
         brand === 'openaiCompatibility' ||
@@ -203,7 +212,13 @@ export function useModelDiscovery(args: UseModelDiscoveryArgs): UseModelDiscover
         const entryAuthIndex = (firstEntry?.authIndex ?? '').trim() || resolvedAuthIndex;
         const fetchModels = () =>
           brand === 'openaiCompatibility'
-            ? modelsApi.fetchModelsViaApiCall(baseUrl, entryKey, baseHeaders, entryAuthIndex)
+            ? modelsApi.fetchModelsViaApiCall(
+                baseUrl,
+                entryKey,
+                baseHeaders,
+                entryAuthIndex,
+                firstEntry?.proxyUrl || proxyUrl
+              )
             : modelsApi.fetchMediaModelsViaApiCall(
                 baseUrl,
                 entryKey,
@@ -218,7 +233,13 @@ export function useModelDiscovery(args: UseModelDiscoveryArgs): UseModelDiscover
           // Some compatible endpoints expose /models without auth. Retry once
           // without provider credentials before surfacing the original error.
           try {
-            next = await modelsApi.fetchModelsViaApiCall(baseUrl);
+            next = await modelsApi.fetchModelsViaApiCall(
+              baseUrl,
+              undefined,
+              undefined,
+              undefined,
+              firstEntry?.proxyUrl || proxyUrl
+            );
           } catch {
             throw firstErr;
           }
@@ -243,6 +264,7 @@ export function useModelDiscovery(args: UseModelDiscoveryArgs): UseModelDiscover
     apiKeyPrefix,
     authIndex,
     baseUrl,
+    proxyUrl,
     brand,
     fallbackApiKey,
     formHeaders,

@@ -10,6 +10,7 @@ import { STORAGE_KEY_AUTH } from '@/utils/constants';
 import { obfuscatedStorage } from '@/services/storage/secureStorage';
 import { apiClient } from '@/services/api/client';
 import { versionApi } from '@/services/api/version';
+import { LegacyBackendError, probeLegacyBackend } from '@/services/api/legacyBackendProbe';
 import { useConfigStore } from './useConfigStore';
 import { useModelsStore } from './useModelsStore';
 import { useQuotaStore } from './useQuotaStore';
@@ -119,6 +120,7 @@ export const useAuthStore = create<AuthStoreState>()(
             serverRuntimeKind: 'unknown',
             supportsPlugin: true,
           });
+          useConfigStore.getState().clearCache();
           useModelsStore.getState().clearCache();
           useQuotaStore.getState().clearQuotaCache();
 
@@ -128,8 +130,21 @@ export const useAuthStore = create<AuthStoreState>()(
             managementKey,
           });
 
-          // 测试连接 - 获取配置
-          await useConfigStore.getState().fetchConfig(true);
+          // 测试连接 - 获取配置。只在 v8 路由不存在时诊断旧版后端。
+          const revision = apiClient.getConnectionRevision();
+          try {
+            await useConfigStore.getState().fetchConfig(true);
+          } catch (error) {
+            if (
+              (error as { status?: number })?.status === 404 &&
+              revision === apiClient.getConnectionRevision() &&
+              (await probeLegacyBackend(apiBase, managementKey)) &&
+              revision === apiClient.getConnectionRevision()
+            ) {
+              throw new LegacyBackendError();
+            }
+            throw error;
+          }
           const runtimeKind = await detectRuntimeKind();
 
           // 登录成功
@@ -155,6 +170,7 @@ export const useAuthStore = create<AuthStoreState>()(
       // 登出
       logout: () => {
         restoreSessionPromise = null;
+        apiClient.setConfig({ apiBase: '', managementKey: '' });
         useConfigStore.getState().clearCache();
         useModelsStore.getState().clearCache();
         useQuotaStore.getState().clearQuotaCache();

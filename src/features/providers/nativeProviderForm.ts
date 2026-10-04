@@ -3,9 +3,12 @@ import type {
   ModelAlias,
   NativeApiKeyEntry,
   ProviderKeyConfig,
-} from '../../types/provider.ts';
-import type { ApiKeyEntryInput, ModelEntryInput, ProviderEntryFormInput } from './types.ts';
-import { buildThinkingFromLevels, readThinkingLevels } from './thinkingLevels.ts';
+} from '../../types/provider';
+import type { ApiKeyEntryInput, ModelEntryInput, ProviderEntryFormInput } from './types';
+import { buildModelOptions, readModelOptions } from './modelOptions';
+import { readThinkingLevels } from './thinkingLevels';
+import { readRuntimePolicy, buildRuntimePolicy } from './runtimePolicy';
+import { pickProviderBehavior } from './providerBehavior';
 
 export type NativeProviderBrand = 'gemini' | 'codex' | 'claude';
 export type NativeProviderKeyValidationError = 'api-key-required' | 'duplicate-api-key' | null;
@@ -20,36 +23,25 @@ const parseTextList = (text: string): string[] =>
     .filter(Boolean);
 
 const headersFromEntries = (
-  entries: Array<{ key: string; value: string }>
+  entries: Array<{ key: string; value: string }> | undefined
 ): Record<string, string> => {
   const headers: Record<string, string> = {};
-  entries.forEach((entry) => {
+  (entries ?? []).forEach((entry) => {
     const key = entry.key.trim();
     if (key) headers[key] = entry.value;
   });
   return headers;
 };
 
-const parseThinkingJson = (value: string | undefined): Record<string, unknown> | undefined => {
-  const trimmed = (value ?? '').trim();
-  if (!trimmed) return undefined;
-  const parsed = JSON.parse(trimmed) as unknown;
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new Error('Thinking config must be a JSON object');
-  }
-  return parsed as Record<string, unknown>;
-};
-
 const buildModels = (models: ModelEntryInput[]): ModelAlias[] =>
   models
     .map((model) => ({
+      sourceIndex: model.sourceIndex,
       name: model.name.trim(),
       alias: model.alias?.trim() || undefined,
       priority: model.priority,
       testModel: model.testModel,
-      thinking: model.thinkingLevelsTouched
-        ? buildThinkingFromLevels(model.thinkingLevels)
-        : parseThinkingJson(model.thinkingJson),
+      ...buildModelOptions(model),
     }))
     .filter((model) => model.name);
 
@@ -105,15 +97,19 @@ export function buildNativeProviderFormInput(
     prefix: config?.prefix ?? '',
     disabled: config?.excludedModels?.some((model) => model.trim() === '*') ?? false,
     disableCooling: config?.disableCooling === true,
+    runtimePolicy: readRuntimePolicy(config ?? undefined),
     priority: config?.priority,
     weight: config?.weight,
     models: config?.models?.length
       ? config.models.map((model) => ({
+          sourceIndex: model.sourceIndex,
           name: model.name,
           alias: model.alias ?? '',
           priority: model.priority,
           testModel: model.testModel,
-          thinkingJson: model.thinking ? JSON.stringify(model.thinking, null, 2) : '',
+          ...readModelOptions(model),
+          thinkingJson:
+            model.thinking === undefined ? undefined : JSON.stringify(model.thinking, null, 2),
           thinkingLevels: readThinkingLevels(model.thinking),
         }))
       : [emptyModel()],
@@ -137,8 +133,10 @@ export function buildNativeProviderFormInput(
       brand === 'claude' ? providerConfig?.experimentalCchSigning === true : undefined,
     rebuildMidSystemMessage:
       brand === 'claude' ? providerConfig?.rebuildMidSystemMessage === true : undefined,
+    fingerprintProfile: brand === 'claude' ? (providerConfig?.fingerprintProfile ?? '') : undefined,
     testModel: '',
     apiKeyEntries: groupedEntries,
+    ...pickProviderBehavior(config ?? {}, brand),
   };
 }
 
@@ -163,8 +161,15 @@ export function buildNativeProviderDraft(
   const entries = normalizedEntries(input.apiKeyEntries);
   const headers = headersFromEntries(input.headers);
   const models = buildModels(input.models).map((model) => {
-    const extras = existing?.models?.find((saved) => saved.name.trim() === model.name)?.wireExtras;
-    return extras ? { ...model, wireExtras: extras } : model;
+    const saved =
+      model.sourceIndex !== undefined && model.sourceIndex !== null
+        ? existing?.models?.find((candidate) => candidate.sourceIndex === model.sourceIndex)
+        : existing?.models?.find((candidate) => candidate.name.trim() === model.name.trim());
+    if (!saved) return model;
+    return {
+      ...model,
+      ...(saved.wireExtras ? { wireExtras: saved.wireExtras } : {}),
+    };
   });
   const excludedModels = parseTextList(input.excludedModelsText).filter((model) => model !== '*');
   if (input.disabled) excludedModels.unshift('*');
@@ -173,9 +178,20 @@ export function buildNativeProviderDraft(
   const hasEntryOverrides = entries.some(
     (entry) => entry.priority !== undefined || entry.weight !== undefined || Boolean(entry.proxyUrl)
   );
+  // Only switch to grouped mode when the key already has its own entries, the
+  // user explicitly entered a name, or there are multiple keys / per-key
+  // overrides. A name that was inherited from the group for display must not
+  // silently upgrade a single key into a named group.
+  const userNamed = input.name.trim() && input.name !== existing?.name;
   const useGrouped =
-    existingGrouped || Boolean(input.name.trim()) || entries.length > 1 || hasEntryOverrides;
+    existingGrouped || Boolean(userNamed) || entries.length > 1 || hasEntryOverrides;
   const legacyKey = existing?.apiKey?.trim() || input.apiKey.trim();
+  const policyFields = input.runtimePolicy
+    ? buildRuntimePolicy(
+        input.runtimePolicy,
+        brand === 'gemini' || brand === 'codex' || brand === 'claude'
+      )
+    : {};
   const next: ProviderKeyConfig = {
     ...(existing ?? {}),
     name: input.name.trim() || undefined,
@@ -189,7 +205,10 @@ export function buildNativeProviderDraft(
     models: models.length ? models : undefined,
     headers: Object.keys(headers).length ? headers : undefined,
     excludedModels: excludedModels.length ? excludedModels : undefined,
-    disableCooling: input.disableCooling === true,
+    disableCooling: input.disableCooling,
+    ...policyFields,
+    authIndex: existing?.authIndex,
+    ...pickProviderBehavior(input, brand),
   };
 
   if (brand === 'codex') {
@@ -216,6 +235,7 @@ export function buildNativeProviderDraft(
     }
     next.experimentalCchSigning = input.experimentalCchSigning === true;
     next.rebuildMidSystemMessage = input.rebuildMidSystemMessage === true;
+    next.fingerprintProfile = input.fingerprintProfile?.trim() || undefined;
   }
   return next;
 }

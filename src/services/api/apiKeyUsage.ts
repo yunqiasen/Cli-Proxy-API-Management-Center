@@ -11,7 +11,7 @@ export interface ApiKeyUsageSnapshot {
 
 export const apiKeyUsageApi = {
   async getUsageSnapshot(): Promise<ApiKeyUsageSnapshot> {
-    const response = await apiClient.getRaw('/api-key-usage', {
+    const response = await apiClient.getRaw('/observability/usage/api-keys', {
       timeout: API_KEY_USAGE_TIMEOUT_MS,
     });
     return {

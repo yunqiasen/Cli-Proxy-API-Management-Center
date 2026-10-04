@@ -44,7 +44,7 @@ jobs:
       - name: Generate release metadata
         run: |
           short_sha="$(git rev-parse --short HEAD)"
-          echo "CPA_UI_RELEASE_TAG=cpa-ui-${GITHUB_RUN_NUMBER}-${short_sha}" >> "$GITHUB_ENV"
+          echo "CPA_UI_RELEASE_TAG=cpa-ui-v8-${GITHUB_RUN_NUMBER}-${short_sha}" >> "$GITHUB_ENV"
           {
             echo "CPA UI fork build"
             echo
@@ -52,7 +52,7 @@ jobs:
             echo "- Commit: ${GITHUB_SHA}"
           } > release-notes.md
 
-      - name: Create latest management HTML release
+      - name: Create V8 management HTML prerelease
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.CPA_UI_RELEASE_TAG }}
@@ -61,7 +61,7 @@ jobs:
           files: dist/management.html
           body_path: release-notes.md
           draft: false
-          prerelease: false
-          make_latest: true
+          prerelease: true
+          make_latest: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

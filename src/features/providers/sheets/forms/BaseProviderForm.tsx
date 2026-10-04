@@ -21,8 +21,7 @@ import { hasDisableAllModelsRule } from '@/components/providers/utils';
 import type { GeminiKeyConfig, OpenAIProviderConfig, ProviderKeyConfig } from '@/types';
 import type { ModelInfo } from '@/utils/models';
 import { PROVIDER_DESCRIPTORS } from '../../descriptors';
-import { readThinkingLevels } from '../../thinkingLevels';
-import { buildOpenAIConfig } from '../../providerFormSerialization';
+import { mergeDiscoveredModels } from '../../modelEntries';
 import type {
   ApiKeyEntryInput,
   ModelEntryInput,
@@ -37,15 +36,16 @@ import { ConnectivityStatusIcon } from './ConnectivityStatusIcon';
 import { ApiKeyEntriesEditor } from './ApiKeyEntriesEditor';
 import { ModelEntriesEditor } from './ModelEntriesEditor';
 import styles from './sharedForm.module.scss';
-import { CLAUDE_API_BASE_URL } from '../../claudeApi';
-import {
-  buildNativeProviderFormInput,
-  buildNativeProviderDraft,
-  validateNativeProviderKeyEntries,
-  type NativeProviderBrand,
-} from '../../nativeProviderForm';
+import { MAX_CREDENTIAL_WEIGHT } from '@/utils/credentialWeight';
+import { readRuntimePolicy, validateRuntimePolicy } from '../../runtimePolicy';
+import { readModelOptions, validateModelOptions } from '../../modelOptions';
+import { RuntimePolicyEditor } from './RuntimePolicyEditor';
+import { ProviderBehaviorEditor } from './ProviderBehaviorEditor';
+import { pickProviderBehavior } from '../../providerBehavior';
+import { buildNativeProviderFormInput, buildNativeProviderDraft } from '../../nativeProviderForm';
+import { buildOpenAIConfig } from '../../providerFormSerialization';
 
-/** Keep a stable array reference for the picker. */
+/** 模块级常量，免得每次渲染都给 picker 一个新数组引用。 */
 const DISABLE_ALL_RULES = [DISABLE_ALL_RULE];
 
 interface BaseProviderFormProps {
@@ -63,7 +63,9 @@ const emptyModel = (): ModelEntryInput => ({ name: '', alias: '' });
 const emptyApiKeyEntry = (): ApiKeyEntryInput => ({
   apiKey: '',
   proxyUrl: '',
+  weight: undefined,
 });
+const META_API_BASE_URL = 'https://api.meta.ai/v1';
 const XAI_API_BASE_URL = 'https://api.x.ai/v1';
 
 const stripDisableAllRule = (list?: string[]): string[] =>
@@ -74,45 +76,50 @@ const formatJsonObject = (value?: Record<string, unknown>): string => {
   return JSON.stringify(value, null, 2);
 };
 
-const isClaudeLikeBrand = (brand: ProviderBrand): boolean =>
-  brand === 'claude' || brand === 'claudeApi';
+const isClaudeLikeBrand = (brand: ProviderBrand): boolean => brand === 'claude';
 
-const isNativeProviderBrand = (brand: ProviderBrand): brand is NativeProviderBrand =>
+const isNativeProviderBrand = (brand: ProviderBrand): boolean =>
   brand === 'gemini' || brand === 'codex' || brand === 'claude';
 
-function buildInitialForm(
+export function buildInitialForm(
   brand: ProviderBrand,
   resource: ProviderResource | null,
   mode: 'create' | 'edit'
 ): ProviderEntryFormInput {
   if (isNativeProviderBrand(brand)) {
     const config =
-      mode === 'edit' && resource ? (resource.raw as GeminiKeyConfig | ProviderKeyConfig) : null;
-    return buildNativeProviderFormInput(brand, config);
+      mode === 'edit' && resource
+        ? (resource.raw as GeminiKeyConfig | ProviderKeyConfig)
+        : null;
+    return buildNativeProviderFormInput(brand as 'gemini' | 'codex' | 'claude', config);
   }
   if (mode === 'create' || !resource) {
     return {
       apiKey: '',
       name: '',
-      baseUrl:
-        brand === 'claudeApi' ? CLAUDE_API_BASE_URL : brand === 'xai' ? XAI_API_BASE_URL : '',
+      baseUrl: brand === 'meta' ? META_API_BASE_URL : brand === 'xai' ? XAI_API_BASE_URL : '',
       proxyUrl: '',
       prefix: '',
       disabled: false,
-      disableCooling: false,
+      disableCooling: undefined,
+      runtimePolicy: readRuntimePolicy(),
       priority: undefined,
+      weight: undefined,
       models: [emptyModel()],
       headers: [emptyHeader()],
       excludedModelsText: '',
-      websockets: brand === 'xai' ? false : undefined,
+      websockets: brand === 'codex' || brand === 'xai' ? false : undefined,
       cloak: isClaudeLikeBrand(brand)
         ? { mode: '', strictMode: false, sensitiveWordsText: '', cacheUserId: false }
         : undefined,
-      experimentalCchSigning: isClaudeLikeBrand(brand) ? false : undefined,
+      fingerprintProfile: isClaudeLikeBrand(brand) ? '' : undefined,
       testModel:
         brand === 'openaiCompatibility' ||
+        brand === 'codex' ||
+        brand === 'meta' ||
         brand === 'xai' ||
         isClaudeLikeBrand(brand) ||
+        brand === 'gemini' ||
         brand === 'interactions'
           ? ''
           : undefined,
@@ -130,20 +137,23 @@ function buildInitialForm(
       proxyUrl: '',
       prefix: cfg.prefix ?? '',
       disabled: cfg.disabled === true,
-      disableCooling: cfg.disableCooling === true,
+      disableCooling: cfg.disableCooling,
+      runtimePolicy: readRuntimePolicy(cfg),
+      ...pickProviderBehavior(cfg, brand),
       priority: cfg.priority,
       models: cfg.models?.length
         ? cfg.models.map((m) => ({
+            sourceIndex: m.sourceIndex,
             name: m.name,
             alias: m.alias ?? '',
             priority: m.priority,
             testModel: m.testModel,
             image: m.image === true,
-            wireExtras: m.wireExtras,
             type: m.type,
             upstreamPath: m.upstreamPath,
+            wireExtras: m.wireExtras,
             thinkingJson: formatJsonObject(m.thinking),
-            thinkingLevels: readThinkingLevels(m.thinking),
+            ...readModelOptions(m),
           }))
         : [emptyModel()],
       headers: cfg.headers
@@ -155,7 +165,9 @@ function buildInitialForm(
         ? cfg.apiKeyEntries.map((entry) => ({
             apiKey: '',
             existingApiKey: entry.apiKey,
+            sourceIndex: entry.sourceIndex,
             proxyUrl: entry.proxyUrl ?? '',
+            weight: entry.weight,
             authIndex: entry.authIndex,
           }))
         : [emptyApiKeyEntry()],
@@ -176,23 +188,30 @@ function buildInitialForm(
     proxyUrl: cfg.proxyUrl ?? '',
     prefix: cfg.prefix ?? '',
     disabled,
-    disableCooling: cfg.disableCooling === true,
+    disableCooling: cfg.disableCooling,
+    runtimePolicy: readRuntimePolicy(cfg),
+    ...pickProviderBehavior(cfg, brand),
     priority: cfg.priority,
+    weight: cfg.weight,
     models: cfg.models?.length
       ? cfg.models.map((m) => ({
+          sourceIndex: m.sourceIndex,
           name: m.name,
           alias: m.alias ?? '',
           priority: m.priority,
           testModel: m.testModel,
           thinkingJson: formatJsonObject(m.thinking),
-          thinkingLevels: readThinkingLevels(m.thinking),
+          ...readModelOptions(m),
         }))
       : [emptyModel()],
     headers: cfg.headers
       ? Object.entries(cfg.headers).map(([k, v]) => ({ key: k, value: String(v) }))
       : [emptyHeader()],
     excludedModelsText: excludedList.join('\n'),
-    websockets: brand === 'xai' ? (cfg as ProviderKeyConfig).websockets === true : undefined,
+    websockets:
+      brand === 'codex' || brand === 'xai'
+        ? (cfg as ProviderKeyConfig).websockets === true
+        : undefined,
     cloak: isClaudeLikeBrand(brand)
       ? {
           mode: (cfg as ProviderKeyConfig).cloak?.mode ?? '',
@@ -201,11 +220,18 @@ function buildInitialForm(
           cacheUserId: (cfg as ProviderKeyConfig).cloak?.cacheUserId === true,
         }
       : undefined,
-    experimentalCchSigning: isClaudeLikeBrand(brand)
-      ? (cfg as ProviderKeyConfig).experimentalCchSigning === true
+    fingerprintProfile: isClaudeLikeBrand(brand)
+      ? ((cfg as ProviderKeyConfig).fingerprintProfile ?? '')
       : undefined,
     testModel:
-      brand === 'xai' || isClaudeLikeBrand(brand) || brand === 'interactions' ? '' : undefined,
+      brand === 'codex' ||
+      brand === 'meta' ||
+      brand === 'xai' ||
+      isClaudeLikeBrand(brand) ||
+      brand === 'gemini' ||
+      brand === 'interactions'
+        ? ''
+        : undefined,
   };
 }
 
@@ -239,20 +265,33 @@ export function BaseProviderForm({
     onDirtyChange?.(isDirty);
   }, [isDirty, onDirtyChange]);
 
-  const firstNativeKeyEntry = isNativeProviderBrand(brand) ? form.apiKeyEntries?.[0] : undefined;
-  const connectivityApiKey = firstNativeKeyEntry?.apiKey ?? form.apiKey;
-
   const fallbackApiKey = useMemo(() => {
-    if (firstNativeKeyEntry) return firstNativeKeyEntry.existingApiKey ?? '';
-    if (mode !== 'edit' || !resource || brand === 'openaiCompatibility') return '';
+    if (mode !== 'edit' || !resource) return '';
+    if (brand === 'openaiCompatibility') return '';
     return (resource.raw as { apiKey?: string } | undefined)?.apiKey ?? '';
-  }, [brand, firstNativeKeyEntry, mode, resource]);
+  }, [brand, mode, resource]);
 
   const fallbackAuthIndex = useMemo(() => {
-    if (firstNativeKeyEntry?.authIndex) return firstNativeKeyEntry.authIndex;
     if (mode !== 'edit' || !resource) return '';
     return (resource.raw as { authIndex?: string } | undefined)?.authIndex ?? '';
-  }, [firstNativeKeyEntry, mode, resource]);
+  }, [mode, resource]);
+
+  const isNativeBrand = brand === 'gemini' || brand === 'codex' || brand === 'claude';
+  const firstNativeKeyEntry = isNativeBrand ? form.apiKeyEntries?.[0] : undefined;
+  const connectivityApiKey = firstNativeKeyEntry?.apiKey ?? form.apiKey;
+  const nativeFallbackApiKey = firstNativeKeyEntry?.existingApiKey ?? fallbackApiKey;
+  const nativeFallbackAuthIndex = firstNativeKeyEntry?.authIndex ?? fallbackAuthIndex;
+
+  const buildCodexDraft = useCallback(
+    () =>
+      buildNativeProviderDraft('codex', form, resource?.raw as ProviderKeyConfig | undefined),
+    [form, resource]
+  );
+
+  const buildOpenAIDraft = useCallback(
+    () => buildOpenAIConfig(form, resource?.raw as OpenAIProviderConfig | undefined),
+    [form, resource]
+  );
 
   const connectivityMessages = useMemo<ConnectivityErrorMessages>(
     () => ({
@@ -266,16 +305,6 @@ export function BaseProviderForm({
     [t]
   );
 
-  const buildCodexDraft = useCallback(
-    () => buildNativeProviderDraft('codex', form, resource?.raw as ProviderKeyConfig | undefined),
-    [form, resource]
-  );
-
-  const buildOpenAIDraft = useCallback(
-    () => buildOpenAIConfig(form, resource?.raw as OpenAIProviderConfig | undefined),
-    [form, resource]
-  );
-
   const connectivity = useConnectivityTest(
     {
       brand,
@@ -285,21 +314,28 @@ export function BaseProviderForm({
       models: form.models,
       formHeaders: form.headers,
       apiKeyEntries: form.apiKeyEntries,
-      apiKey: connectivityApiKey,
-      fallbackApiKey,
-      authIndex: fallbackAuthIndex,
+      apiKey: isNativeBrand ? connectivityApiKey : form.apiKey,
+      fallbackApiKey: isNativeBrand ? nativeFallbackApiKey : fallbackApiKey,
+      authIndex: isNativeBrand ? nativeFallbackAuthIndex : fallbackAuthIndex,
       cloak: form.cloak,
       rebuildMidSystemMessage: form.rebuildMidSystemMessage,
       disableImageGeneration: form.disableImageGeneration,
       buildCodexDraft: brand === 'codex' ? buildCodexDraft : undefined,
       buildOpenAIDraft: brand === 'openaiCompatibility' ? buildOpenAIDraft : undefined,
-      openAISettingsSignature: JSON.stringify([
-        form.name,
-        form.prefix,
-        form.disabled,
-        form.disableCooling,
-        (resource?.raw as OpenAIProviderConfig | undefined)?.wireExtras,
-      ]),
+      openAISettingsSignature:
+        brand === 'openaiCompatibility'
+          ? JSON.stringify([
+              form.name,
+              form.prefix,
+              form.disabled,
+              form.disableCooling,
+              form.runtimePolicy,
+              form.alphaSearch,
+              form.disableCodexCloaking,
+              form.supportPromptCacheKey,
+              (resource?.raw as OpenAIProviderConfig | undefined)?.wireExtras,
+            ])
+          : undefined,
     },
     connectivityMessages
   );
@@ -307,9 +343,10 @@ export function BaseProviderForm({
   const discovery = useModelDiscovery({
     brand,
     baseUrl: form.baseUrl,
+    proxyUrl: form.proxyUrl,
     formHeaders: form.headers,
     apiKeyEntries: form.apiKeyEntries,
-    apiKey: connectivityApiKey,
+    apiKey: form.apiKey,
     fallbackApiKey,
     authIndex: fallbackAuthIndex,
   });
@@ -362,35 +399,7 @@ export function BaseProviderForm({
 
   const applyDiscoveredModels = (incoming: ModelInfo[]) => {
     if (!incoming.length) return;
-    setForm((prev) => {
-      const seen = new Set<string>();
-      const next: ModelEntryInput[] = [];
-      prev.models.forEach((entry) => {
-        const trimmed = (entry.name ?? '').trim();
-        if (trimmed) {
-          if (seen.has(trimmed)) return;
-          seen.add(trimmed);
-        }
-        next.push(entry);
-      });
-      // If the existing list is just an empty placeholder row, drop it.
-      const placeholderIdx = next.findIndex(
-        (it) => !(it.name ?? '').trim() && !(it.alias ?? '').trim()
-      );
-      if (placeholderIdx !== -1) {
-        next.splice(placeholderIdx, 1);
-      }
-      incoming.forEach((info) => {
-        const trimmed = info.name.trim();
-        if (!trimmed || seen.has(trimmed)) return;
-        seen.add(trimmed);
-        next.push({
-          name: trimmed,
-          alias: (info.alias ?? '').trim(),
-        });
-      });
-      return { ...prev, models: next };
-    });
+    setForm((prev) => ({ ...prev, models: mergeDiscoveredModels(prev.models, incoming) }));
   };
 
   const updateField = <K extends keyof ProviderEntryFormInput>(
@@ -419,22 +428,35 @@ export function BaseProviderForm({
   };
 
   const validate = (): string | null => {
-    if (brand === 'openaiCompatibility' && !form.name.trim()) {
+    const modelError = validateModelOptions(form.models);
+    if (modelError) return t(modelError);
+    if (form.runtimePolicy) {
+      const policyError = validateRuntimePolicy(
+        form.runtimePolicy,
+        descriptor.supportsRequestScopedErrors
+      );
+      if (policyError) return t(policyError);
+    }
+    if (descriptor.supportsName && !form.name.trim()) {
       return t('providersPage.form.validation.nameRequired');
     }
-    if (isNativeProviderBrand(brand)) {
-      const keyError = validateNativeProviderKeyEntries(form.apiKeyEntries);
-      if (keyError === 'api-key-required') {
-        return t('providersPage.form.validation.apiKeyRequired');
-      }
-      if (keyError === 'duplicate-api-key') {
-        return t('providersPage.form.validation.duplicateApiKey');
-      }
-    } else if (descriptor.supportsApiKey && mode === 'create' && !form.apiKey.trim()) {
+    if (descriptor.supportsApiKey && mode === 'create' && !form.apiKey.trim()) {
       return t('providersPage.form.validation.apiKeyRequired');
     }
     if (descriptor.baseUrlRequired && !form.baseUrl.trim()) {
       return t('providersPage.form.validation.baseUrlRequired');
+    }
+    const weights = [
+      ...(brand === 'openaiCompatibility'
+        ? (form.apiKeyEntries ?? []).map((entry) => entry.weight)
+        : []),
+      ...(brand !== 'openaiCompatibility' ? [form.weight] : []),
+    ];
+    if (weights.some((weight) => weight !== undefined && !Number.isSafeInteger(weight))) {
+      return t('providersPage.form.validation.weightInteger');
+    }
+    if (weights.some((weight) => weight !== undefined && weight > MAX_CREDENTIAL_WEIGHT)) {
+      return t('providersPage.form.validation.weightMax', { max: MAX_CREDENTIAL_WEIGHT });
     }
     return null;
   };
@@ -475,8 +497,11 @@ export function BaseProviderForm({
     [form.excludedModelsText]
   );
   /**
-   * Combine discovered and configured model names. An empty catalog is normal,
-   * so the picker must continue to support direct rule editing.
+   * 候选目录 = discovery 发现的模型 ∪ 表单里已配置的模型名。
+   *
+   * 两者都可能为空——`vertex` 支持排除模型却不在 MODEL_DISCOVERY_BRANDS 里，永远没有
+   * discovery；其余 brand 在用户手动跑一次发现之前也没有。因此**无目录是常态**，
+   * picker 必须能在没有目录时退化成纯规则编辑器。
    */
   const excludedCandidates = useMemo(() => {
     const byKey = new Map<string, { id: string; displayName?: string }>();
@@ -500,17 +525,11 @@ export function BaseProviderForm({
         ? 'unavailable'
         : 'ready';
   const actualApiKeyEntries = form.apiKeyEntries ?? [];
-  const supportsDisableCooling =
-    brand === 'gemini' ||
-    brand === 'codex' ||
-    brand === 'xai' ||
-    isClaudeLikeBrand(brand) ||
-    brand === 'openaiCompatibility';
   const supportsModelImage = brand === 'openaiCompatibility';
   const singleConnectivity =
-    brand === 'codex' || brand === 'xai'
+    brand === 'codex' || brand === 'meta' || brand === 'xai'
       ? { status: connectivity.codexStatus, run: connectivity.runCodex }
-      : brand === 'gemini'
+      : brand === 'gemini' || brand === 'interactions'
         ? { status: connectivity.geminiStatus, run: connectivity.runGemini }
         : isClaudeLikeBrand(brand)
           ? { status: connectivity.claudeStatus, run: connectivity.runClaude }
@@ -532,20 +551,12 @@ export function BaseProviderForm({
 
   return (
     <form id={formId} className={styles.form} onSubmit={handleSubmit} noValidate>
-      {/* Basic fields */}
+      {/* 基础字段 */}
       <div className={styles.section}>
         {descriptor.supportsName ? (
           <div className={styles.field}>
             <label className={styles.label} htmlFor={`${fid}-name`}>
-              {isNativeProviderBrand(brand)
-                ? t('providersPage.form.providerName')
-                : t('providersPage.form.name')}
-              {isNativeProviderBrand(brand) ? (
-                <span className={styles.labelHint}>
-                  {' '}
-                  · {t('providersPage.form.providerNameHint')}
-                </span>
-              ) : null}
+              {t('providersPage.form.name')}
             </label>
             <input
               id={`${fid}-name`}
@@ -567,7 +578,7 @@ export function BaseProviderForm({
                 id={`${fid}-apiKey`}
                 className={styles.passwordInput}
                 type={showSingleApiKey ? 'text' : 'password'}
-                value={showSingleApiKey && !form.apiKey ? fallbackApiKey : form.apiKey}
+                value={form.apiKey}
                 onChange={(e) => updateField('apiKey', e.target.value)}
                 autoComplete="new-password"
                 data-1p-ignore="true"
@@ -677,14 +688,38 @@ export function BaseProviderForm({
           </div>
         ) : null}
 
+        {brand !== 'openaiCompatibility' ? (
+          <div className={styles.field}>
+            <label className={styles.label} htmlFor={`${fid}-weight`}>
+              {t('providersPage.form.weight')}
+            </label>
+            <input
+              id={`${fid}-weight`}
+              type="number"
+              step="1"
+              max={MAX_CREDENTIAL_WEIGHT}
+              className={styles.input}
+              value={form.weight ?? ''}
+              placeholder="1"
+              onChange={(e) =>
+                updateField('weight', e.target.value === '' ? undefined : Number(e.target.value))
+              }
+              disabled={mutating}
+            />
+            <span className={styles.labelHint}>{t('providersPage.form.weightHint')}</span>
+          </div>
+        ) : null}
+
         {descriptor.supportsTestModel ? (
           <div className={styles.field}>
             <label className={styles.label} htmlFor={`${fid}-testModel`}>
               {t('providersPage.form.testModel')}
               {brand === 'codex' ||
+              brand === 'meta' ||
               brand === 'xai' ||
               isClaudeLikeBrand(brand) ||
-              brand === 'gemini' ? (
+              brand === 'gemini' ||
+              brand === 'interactions' ? (
                 <span className={styles.labelHint}>
                   {' '}
                   · {t('providersPage.form.testModelClaudeHint')}
@@ -743,22 +778,6 @@ export function BaseProviderForm({
           </label>
         ) : null}
 
-        {brand === 'codex' ? (
-          <label className={styles.checkboxRow}>
-            <input
-              type="checkbox"
-              className={styles.checkboxBox}
-              checked={form.disableImageGeneration ?? false}
-              disabled={mutating}
-              onChange={(e) => updateField('disableImageGeneration', e.target.checked)}
-            />
-            <span className={styles.checkboxText}>
-              <span>{t('providersPage.form.disableImageGeneration')}</span>
-              <small>{t('providersPage.form.disableImageGenerationHint')}</small>
-            </span>
-          </label>
-        ) : null}
-
         {descriptor.supportsDisabled ? (
           <label className={styles.checkboxRow}>
             <input
@@ -774,25 +793,22 @@ export function BaseProviderForm({
             </span>
           </label>
         ) : null}
-
-        {supportsDisableCooling ? (
-          <label className={styles.checkboxRow}>
-            <input
-              type="checkbox"
-              className={styles.checkboxBox}
-              checked={form.disableCooling ?? false}
-              disabled={mutating}
-              onChange={(e) => updateField('disableCooling', e.target.checked)}
-            />
-            <span className={styles.checkboxText}>
-              <span>{t('providersPage.form.disableCooling')}</span>
-              <small>{t('providersPage.form.disableCoolingHint')}</small>
-            </span>
-          </label>
-        ) : null}
       </div>
 
-      {/* Advanced settings */}
+      <ProviderBehaviorEditor
+        brand={brand}
+        value={form}
+        onChange={(patch) => setForm((current) => ({ ...current, ...patch }))}
+        disabled={mutating}
+      />
+      <RuntimePolicyEditor
+        value={form.runtimePolicy ?? readRuntimePolicy()}
+        onChange={(value) => updateField('runtimePolicy', value)}
+        disabled={mutating}
+        supportsErrors={descriptor.supportsRequestScopedErrors}
+      />
+
+      {/* 高级折叠区 */}
       {descriptor.supportsApiKeyEntries && form.apiKeyEntries ? (
         <Collapsible
           label={t('providersPage.form.apiKeyEntriesSection')}
@@ -807,8 +823,6 @@ export function BaseProviderForm({
             mutating={mutating}
             statuses={connectivity.openaiStatuses}
             isTestingAny={connectivity.isTestingAny}
-            showConnectivity={brand === 'openaiCompatibility' || isNativeProviderBrand(brand)}
-            showPriority={isNativeProviderBrand(brand)}
             onUpdate={(idx, patch) =>
               updateField(
                 'apiKeyEntries',
@@ -826,16 +840,8 @@ export function BaseProviderForm({
                 actualApiKeyEntries.filter((_, i) => i !== idx)
               )
             }
-            onTest={(idx) =>
-              void (brand === 'openaiCompatibility'
-                ? connectivity.runOpenAIKey(idx)
-                : connectivity.runNativeKey(idx))
-            }
-            onTestAll={() =>
-              void (brand === 'openaiCompatibility'
-                ? connectivity.runOpenAIAllKeys()
-                : connectivity.runNativeAllKeys())
-            }
+            onTest={isNativeBrand ? (idx) => void connectivity.runNativeKey(idx) : (idx) => void connectivity.runOpenAIKey(idx)}
+            onTestAll={isNativeBrand ? () => void connectivity.runNativeAllKeys() : () => void connectivity.runOpenAIAllKeys()}
           />
         </Collapsible>
       ) : null}
@@ -937,6 +943,7 @@ export function BaseProviderForm({
               />
             ) : null}
             <ModelEntriesEditor
+              providerBrand={brand}
               models={modelsList}
               supportsImage={supportsModelImage}
               supportsThinking
@@ -960,12 +967,41 @@ export function BaseProviderForm({
               catalogState={excludedCatalogState}
               onRetryCatalog={discovery.available ? () => void discovery.fetch() : undefined}
               disabled={mutating}
-              // The Disabled switch owns '*'; the picker filters it in both directions.
+              // `'*'` = 该 provider 已停用，唯一所有者是下面的 Disabled 开关。
+              // 传进来后 picker 双向过滤它，用户手打 `*` 也会被拦下并解释原因。
               reservedRules={DISABLE_ALL_RULES}
               reservedRuleMessage={t('providersPage.form.excludedDisabledNote')}
             />
           </div>
         </Collapsible>
+      ) : null}
+
+      {isClaudeLikeBrand(brand) ? (
+        <div className={styles.field}>
+          <label id={`${fid}-fingerprint-profile-label`} className={styles.label}>
+            {t('providersPage.form.fingerprintProfile')}
+          </label>
+          <Select
+            id={`${fid}-fingerprint-profile`}
+            value={form.fingerprintProfile ?? ''}
+            options={[
+              {
+                value: '',
+                label: t('providersPage.form.fingerprintProfileDefault'),
+              },
+              {
+                value: 'claude-code-cli',
+                label: t('providersPage.form.fingerprintProfileClaudeCodeCli'),
+              },
+            ]}
+            onChange={(value) => updateField('fingerprintProfile', value)}
+            disabled={mutating}
+            ariaLabelledBy={`${fid}-fingerprint-profile-label`}
+          />
+          <small className={styles.labelHint}>
+            {t('providersPage.form.fingerprintProfileHint')}
+          </small>
+        </div>
       ) : null}
 
       {descriptor.supportsCloak && form.cloak ? (
@@ -1004,34 +1040,6 @@ export function BaseProviderForm({
               <span className={styles.checkboxText}>
                 <span>{t('providersPage.form.cloakCacheUserId')}</span>
                 <small>{t('providersPage.form.cloakCacheUserIdHint')}</small>
-              </span>
-            </label>
-            {brand === 'claude' ? (
-              <label className={styles.checkboxRow}>
-                <input
-                  type="checkbox"
-                  className={styles.checkboxBox}
-                  checked={form.rebuildMidSystemMessage ?? false}
-                  disabled={mutating}
-                  onChange={(e) => updateField('rebuildMidSystemMessage', e.target.checked)}
-                />
-                <span className={styles.checkboxText}>
-                  <span>{t('providersPage.form.rebuildMidSystemMessage')}</span>
-                  <small>{t('providersPage.form.rebuildMidSystemMessageHint')}</small>
-                </span>
-              </label>
-            ) : null}
-            <label className={styles.checkboxRow}>
-              <input
-                type="checkbox"
-                className={styles.checkboxBox}
-                checked={form.experimentalCchSigning ?? false}
-                disabled={mutating}
-                onChange={(e) => updateField('experimentalCchSigning', e.target.checked)}
-              />
-              <span className={styles.checkboxText}>
-                <span>{t('providersPage.form.experimentalCchSigning')}</span>
-                <small>{t('providersPage.form.experimentalCchSigningHint')}</small>
               </span>
             </label>
             <div className={styles.field}>

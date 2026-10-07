@@ -1,6 +1,6 @@
 /**
- * 认证状态管理
- * 从原项目 src/modules/login.js 和 src/core/connection.js 迁移
+ * Authentication state management
+ * Migrated from the original login and connection modules
  */
 
 import { create } from 'zustand';
@@ -14,12 +14,13 @@ import { LegacyBackendError, probeLegacyBackend } from '@/services/api/legacyBac
 import { useConfigStore } from './useConfigStore';
 import { useModelsStore } from './useModelsStore';
 import { useQuotaStore } from './useQuotaStore';
+import { useModelCatalogEditor } from '@/features/modelCatalog/hooks/useModelCatalogEditor';
 import { detectApiBaseFromLocation, normalizeApiBase } from '@/utils/connection';
 
 interface AuthStoreState extends AuthState {
   connectionStatus: ConnectionStatus;
 
-  // 操作
+  // Actions
   login: (credentials: LoginCredentials) => Promise<void>;
   logout: () => void;
   checkAuth: () => Promise<boolean>;
@@ -47,7 +48,7 @@ const detectRuntimeKind = async (): Promise<ServerRuntimeKind> => {
 export const useAuthStore = create<AuthStoreState>()(
   persist(
     (set, get) => ({
-      // 初始状态
+      // Initial state
       isAuthenticated: false,
       apiBase: '',
       managementKey: '',
@@ -58,7 +59,7 @@ export const useAuthStore = create<AuthStoreState>()(
       supportsPlugin: true,
       connectionStatus: 'disconnected',
 
-      // 恢复会话并自动登录
+      // Restore the session and reconnect automatically
       restoreSession: () => {
         if (restoreSessionPromise) return restoreSessionPromise;
 
@@ -106,7 +107,7 @@ export const useAuthStore = create<AuthStoreState>()(
         return restoreSessionPromise;
       },
 
-      // 登录
+      // Login
       login: async (credentials) => {
         const apiBase = normalizeApiBase(credentials.apiBase);
         const managementKey = credentials.managementKey.trim();
@@ -123,14 +124,15 @@ export const useAuthStore = create<AuthStoreState>()(
           useConfigStore.getState().clearCache();
           useModelsStore.getState().clearCache();
           useQuotaStore.getState().clearQuotaCache();
+          useModelCatalogEditor.getState().reset();
 
-          // 配置 API 客户端
+          // Configure the API client
           apiClient.setConfig({
             apiBase,
             managementKey,
           });
 
-          // 测试连接 - 获取配置。只在 v8 路由不存在时诊断旧版后端。
+          // Test connectivity by fetching config; diagnose legacy servers only when V8 routes are absent.
           const revision = apiClient.getConnectionRevision();
           try {
             await useConfigStore.getState().fetchConfig(true);
@@ -147,7 +149,7 @@ export const useAuthStore = create<AuthStoreState>()(
           }
           const runtimeKind = await detectRuntimeKind();
 
-          // 登录成功
+          // Login succeeded
           set({
             isAuthenticated: true,
             apiBase,
@@ -167,13 +169,14 @@ export const useAuthStore = create<AuthStoreState>()(
         }
       },
 
-      // 登出
+      // Logout
       logout: () => {
         restoreSessionPromise = null;
         apiClient.setConfig({ apiBase: '', managementKey: '' });
         useConfigStore.getState().clearCache();
         useModelsStore.getState().clearCache();
         useQuotaStore.getState().clearQuotaCache();
+        useModelCatalogEditor.getState().reset();
         set({
           isAuthenticated: false,
           apiBase: '',
@@ -187,7 +190,7 @@ export const useAuthStore = create<AuthStoreState>()(
         localStorage.removeItem('isLoggedIn');
       },
 
-      // 检查认证状态
+      // Check authentication state
       checkAuth: async () => {
         const { managementKey, apiBase } = get();
 
@@ -196,11 +199,11 @@ export const useAuthStore = create<AuthStoreState>()(
         }
 
         try {
-          // 重新配置客户端
+          // Reconfigure the client
           apiClient.setConfig({ apiBase, managementKey });
           set({ supportsPlugin: true });
 
-          // 验证连接
+          // Verify the connection
           await useConfigStore.getState().fetchConfig();
           const runtimeKind = await detectRuntimeKind();
 
@@ -221,7 +224,7 @@ export const useAuthStore = create<AuthStoreState>()(
         }
       },
 
-      // 更新服务器版本
+      // Update server version
       updateServerVersion: (version, buildDate, runtimeKind) => {
         set((state) => ({
           serverVersion: version || null,
@@ -264,7 +267,7 @@ export const useAuthStore = create<AuthStoreState>()(
   )
 );
 
-// 监听全局未授权事件
+// Listen for global authentication failures
 if (typeof window !== 'undefined') {
   window.addEventListener('unauthorized', () => {
     useAuthStore.getState().logout();

@@ -77,7 +77,7 @@ Upgrade the backend first and back up `config.yaml`. The backend returns the v8 
 | **Quotas** | Inspect quota and usage information for supported providers, including Claude, Antigravity, Codex, Kimi, and xAI/Grok. |
 | **Logs** | Follow logs with auto-refresh, search, hide management traffic, and download request error logs. |
 | **Plugins** | Access plugin management when the connected backend advertises support. |
-| **System** | Check for updates, inspect available models, and clear local login data. |
+| **System** | Check for updates, inspect models, manage global model visibility/pinning/order with a backend preview, and clear local login data. |
 
 Supports **English, 简体中文, 繁體中文, and Русский**, with browser-language detection and a manual language switch. Responsive layouts support desktop, tablet, and mobile use in modern Chrome, Firefox, Safari, and Edge.
 
@@ -156,6 +156,7 @@ Use a trusted device or dedicated browser profile. Enable remote management only
 
 - **Logs page missing:** enable “Logging to file” in Basic Settings.
 - **Feature unsupported:** check the backend version and whether the relevant endpoint is enabled. Some capabilities depend on backend support.
+- **Model display management:** Center Info → Model List → Manage Display edits the CPA fork's native global policy. Hiding affects discovery only; known model IDs retain direct-call eligibility. Exact and `*` rules, ordered pins and preserve/ascending/descending sorting are supported. The private inventory retains hidden entries; previewing a draft makes no saved changes. This feature requires the fork's V8 catalog management endpoints.
 - **Model list unavailable:** querying `/v1/models` requires at least one proxy API key.
 - **OpenAI provider test fails:** this test runs in the browser and depends on the provider's network reachability and CORS policy. Failure does not necessarily mean the backend cannot reach it.
 

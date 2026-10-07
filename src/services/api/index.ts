@@ -18,3 +18,4 @@ export * from './metaQuota';
 export * from './plugins';
 export * from './transformers';
 export * from './vertex';
+export * from './modelCatalog';

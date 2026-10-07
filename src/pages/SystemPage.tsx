@@ -19,6 +19,11 @@ import { formatDateTimeValue } from '@/utils/format';
 import { classifyModels } from '@/utils/models';
 import { STORAGE_KEY_AUTH } from '@/utils/constants';
 import { INLINE_LOGO_JPEG } from '@/assets/logoInline';
+import {
+  ManageDisplayButton,
+  ModelCatalogEditor,
+} from '@/features/modelCatalog/components/ModelCatalogEditor';
+import { useModelCatalogEditor } from '@/features/modelCatalog/hooks/useModelCatalogEditor';
 import iconGemini from '@/assets/icons/gemini.svg';
 import iconClaude from '@/assets/icons/claude.svg';
 import iconMeta from '@/assets/icons/meta.svg';
@@ -89,6 +94,7 @@ export function SystemPage() {
   const modelsLoading = useModelsStore((state) => state.loading);
   const modelsError = useModelsStore((state) => state.error);
   const fetchModelsFromStore = useModelsStore((state) => state.fetchModels);
+  const saveGeneration = useModelCatalogEditor((s) => s.saveGeneration);
 
   const [modelStatus, setModelStatus] = useState<{
     type: 'success' | 'warning' | 'error' | 'muted';
@@ -350,6 +356,14 @@ export function SystemPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [auth.connectionStatus, auth.apiBase]);
 
+  // Refetch public models after a catalog policy save clears the cache.
+  useEffect(() => {
+    if (saveGeneration > 0) {
+      fetchModels({ forceRefresh: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [saveGeneration]);
+
   return (
     <div className={styles.container}>
       <h1 className={styles.pageTitle}>{t('system_info.title')}</h1>
@@ -488,14 +502,17 @@ export function SystemPage() {
         <Card
           title={t('system_info.models_title')}
           extra={
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => fetchModels({ forceRefresh: true })}
-              loading={modelsLoading}
-            >
-              {t('common.refresh')}
-            </Button>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => fetchModels({ forceRefresh: true })}
+                loading={modelsLoading}
+              >
+                {t('common.refresh')}
+              </Button>
+              <ManageDisplayButton disabled={auth.connectionStatus !== 'connected'} />
+            </div>
           }
         >
           <p className={styles.sectionDescription}>{t('system_info.models_desc')}</p>
@@ -605,6 +622,7 @@ export function SystemPage() {
           </label>
         </div>
       </Modal>
+      <ModelCatalogEditor />
     </div>
   );
 }

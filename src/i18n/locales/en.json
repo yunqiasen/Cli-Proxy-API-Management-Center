@@ -2293,6 +2293,9 @@
         "operationCapabilityInvalid": "Operation {{index}} uses a capability that is not valid for this provider category.",
         "operationModelRequired": "Operation {{index}} needs a fixed model or at least one compatible configured model.",
         "operationResultPathRequired": "Operation {{index}} needs a result JSON path.",
+        "operationTestFormatInvalid": "Operation {{index}}: the test template must match the request format.",
+        "operationTestJSONInvalid": "Operation {{index}}: the test JSON is invalid.",
+        "operationTestFieldsInvalid": "Operation {{index}}: use one key=value field per line.",
         "operationAsyncIncomplete": "Operation {{index}} needs task ID path, poll path, status path, and at least one success value."
       },
       "capabilityNames": {
@@ -2317,6 +2320,11 @@
       "gatewaySaveFirst": "Save this provider before testing the CPA public API.",
       "gatewayApiKeyRequired": "CPA has no client API key configured.",
       "gatewayOperationRequired": "Configure an operation first.",
+      "resultUnverified": "The response has no verified completed result.",
+      "adapter": "Upstream protocol",
+      "adapterAuto": "Auto (known official hosts)",
+      "adapterPassthrough": "Generic passthrough",
+      "adapterHint": "Auto recognizes the official Cloudflare and MiMo hosts. Select a protocol explicitly for a custom domain.",
       "gatewaySuccess": "HTTP {{status}} · {{route}} · {{model}}",
       "directKeyTestHint": "Per-key tests below check the upstream directly. This button uses the CPA public API and writes a request log."
     }

@@ -61,6 +61,9 @@ export const createMediaConnectivityResultGuardMap = (): MediaConnectivityResult
 
 export interface MediaConnectivityTestSignatureInput {
   baseUrl: string;
+  prefix?: string;
+  adapter?: string;
+  models?: ModelEntryInput[];
   apiKeyHeader?: string;
   apiKeyPrefix?: string;
   headers: Array<{ key: string; value: string }>;
@@ -74,6 +77,9 @@ export const mediaConnectivityTestSignature = (
 ): string =>
   JSON.stringify({
     baseUrl: input.baseUrl.trim(),
+    prefix: input.prefix?.trim() ?? '',
+    adapter: input.adapter ?? '',
+    models: input.models,
     apiKeyHeader: input.apiKeyHeader?.trim() ?? '',
     apiKeyPrefix: input.apiKeyPrefix?.trim() ?? '',
     headers: input.headers.map((header) => ({ key: header.key.trim(), value: header.value })),
@@ -83,19 +89,7 @@ export const mediaConnectivityTestSignature = (
       proxyUrl: entry.proxyUrl?.trim() ?? '',
       authIndex: entry.authIndex?.trim() ?? '',
     })),
-    operation: input.operation
-      ? {
-          name: input.operation.name,
-          capability: input.operation.capability,
-          method: input.operation.method,
-          path: input.operation.path,
-          requestFormat: input.operation.requestFormat,
-          modelMode: input.operation.modelMode,
-          model: input.operation.model,
-          testRequestJson: input.operation.testRequestJson,
-          testRequestMultipartFieldsText: input.operation.testRequestMultipartFieldsText,
-        }
-      : null,
+    operation: input.operation ?? null,
     model: input.model.trim(),
   });
 
@@ -133,9 +127,12 @@ export const getMediaTestModelOptions = (
 export const resolveMediaTestModels = (
   operation: MediaOperationInput | undefined,
   models: ModelEntryInput[],
-  selectedModel: string
+  selectedModel: string,
+  prefix = ''
 ): { upstreamModel: string; gatewayModel: string } => {
   if (operation?.modelMode === 'none') return { upstreamModel: '', gatewayModel: '' };
+  const publicModel = (model: string) =>
+    prefix.trim() && model ? `${prefix.trim().replace(/\/+$/, '')}/${model}` : model;
   const candidates = getMediaTestModelOptions(operation, models);
   const requested = operation?.model.trim() || selectedModel.trim() || '';
   const selected =
@@ -146,10 +143,10 @@ export const resolveMediaTestModels = (
     const upstreamModel = selected.name.trim();
     return {
       upstreamModel,
-      gatewayModel: (selected.alias ?? '').trim() || upstreamModel,
+      gatewayModel: publicModel((selected.alias ?? '').trim() || upstreamModel),
     };
   }
-  return { upstreamModel: requested, gatewayModel: requested };
+  return { upstreamModel: requested, gatewayModel: publicModel(requested) };
 };
 
 export const describeMediaTestModel = (model: ModelEntryInput): string => {

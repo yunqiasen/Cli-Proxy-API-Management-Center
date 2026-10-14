@@ -1,4 +1,6 @@
-import type { OpenAIProviderConfig } from '@/types';
+import { serializeMediaProviderPayload } from './mediaProviderContracts';
+import { buildMediaConnectivityRequest } from './mediaProviderConnectivity';
+import type { OpenAIProviderConfig, MediaProviderConfig } from '@/types';
 import { resolveOpenAIProbeModel, serializeOpenAIProviderDraft } from './openAIProviderContracts';
 import type { ApiCallResult } from './apiCall.ts';
 
@@ -208,5 +210,46 @@ export const buildOpenAIProviderConnectivityPayload = (input: OpenAIProviderConn
     ...(input.authIndex?.trim() ? { auth_index: input.authIndex.trim() } : {}),
     ...(input.proxyUrl !== undefined ? { proxy_url: input.proxyUrl.trim() } : {}),
     openai_config: draft,
+  };
+};
+
+export interface MediaProviderConnectivityInput {
+  providerConfig: MediaProviderConfig;
+  operation: string;
+  model: string;
+  apiKey: string;
+  authIndex?: string;
+  proxyUrl: string;
+}
+
+export const buildMediaProviderConnectivityPayload = (input: MediaProviderConnectivityInput) => {
+  const draft = serializeMediaProviderPayload(input.providerConfig);
+  delete draft['api-key-entries'];
+  delete draft['auth-index'];
+  const operations = input.providerConfig.operations ?? [];
+  const operation =
+    operations.find((op) => op.name === input.operation) ??
+    operations.find((op) => op.capability === input.operation);
+  // The browser owns only the synthetic client input. Upstream URLs, credentials,
+  // model resolution, adapters and polling belong to the production executor.
+  const request = buildMediaConnectivityRequest({
+    kind: input.providerConfig.kind,
+    baseUrl: 'http://media-probe.invalid',
+    model: input.model,
+    operation,
+  });
+  return {
+    provider: 'media',
+    media_config: draft,
+    media_operation: input.operation || 'generate',
+    model: input.model.trim(),
+    api_key: input.apiKey.trim(),
+    ...(input.authIndex?.trim() ? { auth_index: input.authIndex.trim() } : {}),
+    proxy_url: input.proxyUrl.trim(),
+    media_request: {
+      ...(request.data !== undefined ? { data: request.data } : {}),
+      ...(request.dataBase64 !== undefined ? { data_base64: request.dataBase64 } : {}),
+      content_type: request.header['Content-Type'] ?? '',
+    },
   };
 };

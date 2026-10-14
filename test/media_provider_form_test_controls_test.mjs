@@ -20,7 +20,8 @@ test('media provider form runs a saved provider through the CPA public gateway',
   assert.match(source, /runGatewayTest/);
   assert.match(source, /gatewayApiKey/);
   assert.match(source, /providersPage\.media\.testGateway/);
-  assert.match(source, /getMediaConnectivityApplicationError/);
+  assert.match(source, /providerConnectivityApi\.requestMedia/);
+  assert.doesNotMatch(source, /apiCallApi\.request/);
 });
 
 test('media provider form copies the standard provider model discovery flow', () => {

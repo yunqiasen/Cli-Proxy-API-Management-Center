@@ -1,12 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { apiCallApi, getApiCallErrorMessage } from '@/services/api';
+import { providerConnectivityApi, getApiCallErrorMessage } from '@/services/api';
 import { useAuthStore, useConfigStore } from '@/stores';
 import {
-  MEDIA_CONNECTIVITY_TIMEOUT_MS,
-  buildMediaConnectivityRequest,
   buildMediaGatewayConnectivityRequest,
-  getMediaConnectivityApplicationError,
   getMediaGatewayPath,
   requestMediaGatewayConnectivity,
 } from '@/services/api/mediaProviderConnectivity';
@@ -20,6 +17,7 @@ import type {
   ProviderEntryFormInput,
   ProviderResource,
 } from '../../types';
+import { buildMediaProviderFormInput, buildMediaProviderConfig } from '../../mediaProviderForm';
 import { MediaOperationsEditor } from './MediaOperationsEditor';
 import {
   clampMediaTestOperationIndex,
@@ -85,72 +83,11 @@ const inputFromConfig = (
   brand: 'image' | 'video' | 'audio',
   resource: ProviderResource | null,
   mode: 'create' | 'edit'
-): ProviderEntryFormInput => {
-  const config = mode === 'edit' && resource ? (resource.raw as MediaProviderConfig) : null;
-  return {
-    apiKey: '',
-    name: config?.name ?? '',
-    baseUrl: config?.baseUrl ?? '',
-    proxyUrl: config?.apiKeyEntries?.[0]?.proxyUrl ?? '',
-    prefix: config?.prefix ?? '',
-    apiKeyHeader: config?.apiKeyHeader ?? '',
-    apiKeyPrefix: config?.apiKeyPrefix ?? '',
-    disabled: config?.disabled === true,
-    disableCooling: config?.disableCooling === true,
-    priority: config?.priority,
-    models: config?.models?.length
-      ? config.models.map((model) => ({
-          name: model.name,
-          alias: model.alias ?? '',
-          displayName: model.displayName ?? '',
-          forceMapping: model.forceMapping === true,
-          capabilities: [...(model.capabilities ?? [])],
-        }))
-      : [emptyModel()],
-    headers: config?.headers
-      ? Object.entries(config.headers).map(([key, value]) => ({ key, value: String(value) }))
-      : [emptyHeader()],
-    excludedModelsText: '',
-    apiKeyEntries: config?.apiKeyEntries?.length
-      ? config.apiKeyEntries.map((entry) => ({
-          apiKey: '',
-          existingApiKey: entry.apiKey,
-          priority: entry.priority,
-          proxyUrl: entry.proxyUrl ?? '',
-          authIndex: entry.authIndex,
-        }))
-      : [{ ...emptyKey(), authIndex: config?.authIndex }],
-    operations: config?.operations?.length
-      ? config.operations.map((operation) => ({
-          name: operation.name,
-          capability: operation.capability ?? '',
-          method: operation.method,
-          path: operation.path,
-          requestFormat: operation.requestFormat,
-          modelMode: operation.modelMode,
-          model: operation.model ?? '',
-          responseFormat: operation.responseFormat,
-          resultPath: operation.resultPath ?? '',
-          testRequestJson: operation.testRequest?.json ?? '',
-          testRequestMultipartFieldsText: Object.entries(
-            operation.testRequest?.multipartFields ?? {}
-          )
-            .map(([key, value]) => `${key}=${value}`)
-            .join('\n'),
-          asyncEnabled: Boolean(operation.async),
-          taskIdPath: operation.async?.taskIdPath ?? '',
-          pollMethod: operation.async?.pollMethod ?? 'GET',
-          pollPath: operation.async?.pollPath ?? '',
-          statusPath: operation.async?.statusPath ?? '',
-          successValuesText: operation.async?.successValues?.join('\n') ?? 'completed',
-          failureValuesText: operation.async?.failureValues?.join('\n') ?? 'failed',
-          asyncResultPath: operation.async?.resultPath ?? '',
-          pollInterval: operation.async?.pollInterval ?? '3s',
-        }))
-      : [emptyOperation()],
-    mediaKind: brand,
-  };
-};
+): ProviderEntryFormInput =>
+  buildMediaProviderFormInput(
+    brand,
+    mode === 'edit' && resource ? (resource.raw as MediaProviderConfig) : null
+  );
 
 const connectivityOperation = (operation: MediaOperationInput) => ({
   name: operation.name,
@@ -224,7 +161,8 @@ export function MediaProviderForm({
   const resolvedTestModels = resolveMediaTestModels(
     selectedTestOperation,
     models,
-    selectedTestModel
+    selectedTestModel,
+    form.prefix
   );
   const gatewayPath = getMediaGatewayPath(brand, connectivityOperation(selectedTestOperation));
   const mediaCapabilities = MEDIA_CAPABILITIES_BY_KIND[brand];
@@ -244,6 +182,9 @@ export function MediaProviderForm({
   const connectivityStatusSignature = useMemo(
     () =>
       mediaConnectivityTestSignature({
+        adapter: form.mediaAdapter,
+        prefix: form.prefix,
+        models: form.models,
         baseUrl: form.baseUrl,
         apiKeyHeader: form.apiKeyHeader,
         apiKeyPrefix: form.apiKeyPrefix,
@@ -257,6 +198,9 @@ export function MediaProviderForm({
       form.apiKeyHeader,
       form.apiKeyPrefix,
       form.baseUrl,
+      form.prefix,
+      form.mediaAdapter,
+      form.models,
       form.headers,
       resolvedTestModels.upstreamModel,
       selectedTestOperation,
@@ -265,6 +209,18 @@ export function MediaProviderForm({
   const previousConnectivityStatusSignatureRef = useRef(connectivityStatusSignature);
   const directConnectivityGuardsRef = useRef(createMediaConnectivityResultGuardMap());
   const gatewayConnectivityGuardRef = useRef(createMediaConnectivityResultGuard());
+  const directControllersRef = useRef(new Map<number, AbortController>());
+  const gatewayControllerRef = useRef<AbortController | null>(null);
+  useEffect(
+    () => () => {
+      directControllersRef.current.forEach((controller) => controller.abort());
+      directControllersRef.current.clear();
+      gatewayControllerRef.current?.abort();
+      directConnectivityGuardsRef.current.invalidateAll();
+      gatewayConnectivityGuardRef.current.invalidate();
+    },
+    [connectivityStatusSignature]
+  );
 
   useEffect(() => onDirtyChange?.(isDirty), [isDirty, onDirtyChange]);
   useEffect(() => {
@@ -355,43 +311,44 @@ export function MediaProviderForm({
       return false;
     }
 
-    const headers = Object.fromEntries(
-      form.headers.filter((item) => item.key.trim()).map((item) => [item.key.trim(), item.value])
-    );
     const entryGuard = directConnectivityGuardsRef.current.guardFor(
       entry.authIndex?.trim() || `row:${index}`
     );
     const requestID = entryGuard.begin(connectivityStatusSignature);
-    const request = buildMediaConnectivityRequest({
-      kind: brand,
-      baseUrl: form.baseUrl,
-      model,
-      operation: operation ? connectivityOperation(operation) : undefined,
-      headers,
-      apiKey: resolveEntryKey(index),
-      apiKeyHeader: form.apiKeyHeader,
-      apiKeyPrefix: form.apiKeyPrefix,
-      authIndex: entry.authIndex,
-    });
+    directControllersRef.current.get(index)?.abort();
+    const controller = new AbortController();
+    directControllersRef.current.set(index, controller);
     setStatuses((previous) =>
       previous.map((item, idx) => (idx === index ? { state: 'loading', message: '' } : item))
     );
     try {
-      const result = await apiCallApi.request(
+      const issue = validateMediaProviderFormInput(form, brand);
+      if (issue) throw new Error(validate() ?? issue.code);
+      const providerConfig = buildMediaProviderConfig(
+        brand,
+        form,
+        mode === 'edit' ? (resource?.raw as MediaProviderConfig) : null
+      );
+      const result = await providerConnectivityApi.requestMedia(
         {
+          providerConfig,
+          operation: operation?.name ?? 'generate',
+          model: resolvedTestModels.gatewayModel,
+          apiKey: resolveEntryKey(index),
           authIndex: entry.authIndex,
-          method: request.method,
-          url: request.url,
-          header: request.header,
-          data: request.data,
-          dataBase64: request.dataBase64,
+          proxyUrl: entry.proxyUrl,
         },
-        { timeout: MEDIA_CONNECTIVITY_TIMEOUT_MS }
+        { signal: controller.signal, timeout: 0 }
       );
       if (result.statusCode < 200 || result.statusCode >= 300)
         throw new Error(getApiCallErrorMessage(result));
-      const applicationError = getMediaConnectivityApplicationError(result.body, result.bodyText);
-      if (applicationError) throw new Error(applicationError);
+      if (
+        !result.body ||
+        typeof result.body !== 'object' ||
+        !('status' in result.body) ||
+        result.body.status !== 'completed'
+      )
+        throw new Error(t('providersPage.media.resultUnverified'));
       if (!entryGuard.isCurrent(requestID, connectivityStatusSignature)) {
         return false;
       }
@@ -462,10 +419,13 @@ export function MediaProviderForm({
       model: resolvedTestModels.gatewayModel,
       operation: connectivityOperation(selectedTestOperation),
     });
+    gatewayControllerRef.current?.abort();
+    const controller = new AbortController();
+    gatewayControllerRef.current = controller;
     setGatewayStatus({ state: 'loading', message: '' });
     try {
       const result = await requestMediaGatewayConnectivity(request, {
-        timeoutMs: MEDIA_CONNECTIVITY_TIMEOUT_MS,
+        signal: controller.signal,
       });
       if (!gatewayConnectivityGuardRef.current.isCurrent(requestID, requestSignature)) {
         return false;
@@ -551,6 +511,29 @@ export function MediaProviderForm({
             disabled={mutating}
             placeholder="https://api.example.com/v1"
           />
+        </div>
+        <div className={styles.field}>
+          <label className={styles.label} htmlFor={`${formId}-media-adapter`}>
+            {t('providersPage.media.adapter')}
+          </label>
+          <select
+            id={`${formId}-media-adapter`}
+            className={styles.select}
+            value={form.mediaAdapter ?? ''}
+            disabled={mutating}
+            onChange={(event) =>
+              updateField(
+                'mediaAdapter',
+                event.target.value as ProviderEntryFormInput['mediaAdapter']
+              )
+            }
+          >
+            <option value="">{t('providersPage.media.adapterAuto')}</option>
+            <option value="passthrough">{t('providersPage.media.adapterPassthrough')}</option>
+            <option value="cloudflare-workers-ai">Cloudflare Workers AI</option>
+            <option value="mimo-audio">MiMo Audio</option>
+          </select>
+          <span className={styles.hint}>{t('providersPage.media.adapterHint')}</span>
         </div>
         <div className={styles.fieldRow}>
           <div className={styles.field}>

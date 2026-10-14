@@ -1,4 +1,5 @@
 import type {
+  MediaAdapter,
   MediaApiKeyEntry,
   MediaAsyncOperationConfig,
   MediaKind,
@@ -6,6 +7,17 @@ import type {
   MediaOperationConfig,
   MediaProviderConfig,
 } from '../../types/provider.ts';
+
+// Form values are line-delimited; punctuation and whitespace belong to the value.
+export const parseMediaMultipartFieldsText = (value: string): Record<string, string> =>
+  Object.fromEntries(
+    value.split(/\r?\n/).flatMap((line) => {
+      const separator = line.indexOf('=');
+      if (separator <= 0) return [];
+      const name = line.slice(0, separator).trim();
+      return name ? [[name, line.slice(separator + 1)]] : [];
+    })
+  );
 
 const MEDIA_KINDS = new Set<MediaKind>(['image', 'video', 'audio']);
 const MEDIA_CAPABILITIES = new Set([
@@ -29,6 +41,7 @@ const MEDIA_MODEL_MODES = new Set(['required', 'optional', 'none']);
 const MEDIA_RESPONSE_FORMATS = new Set(['passthrough', 'json-url', 'json-base64', 'binary']);
 
 const PROVIDER_FIELDS = [
+  'adapter',
   'name',
   'kind',
   'base-url',
@@ -52,6 +65,7 @@ const PROVIDER_FIELDS = [
   'sourceIndex',
 ] as const;
 const KEY_FIELDS = [
+  'weight',
   'api-key',
   'apiKey',
   'priority',
@@ -177,6 +191,8 @@ const normalizeMediaKey = (value: unknown): MediaApiKeyEntry | null => {
   const entry: MediaApiKeyEntry = { ...copyUnknownFields(value, KEY_FIELDS), apiKey };
   const priority = normalizeNumber(value.priority);
   if (priority !== undefined) entry.priority = priority;
+  const weight = normalizeNumber(value.weight);
+  if (weight !== undefined) entry.weight = weight;
   const proxyUrl = normalizeString(value['proxy-url'] ?? value.proxyUrl);
   if (proxyUrl) entry.proxyUrl = proxyUrl;
   const authIndex = normalizeString(value['auth-index'] ?? value.authIndex);
@@ -354,6 +370,7 @@ export function normalizeMediaProviderPayload(
     baseUrl,
     apiKeyEntries,
   };
+  if (typeof value.adapter === 'string') provider.adapter = value.adapter as MediaAdapter;
   if (sourceIndex !== undefined) provider.sourceIndex = sourceIndex;
   const priority = normalizeNumber(value.priority);
   if (priority !== undefined) provider.priority = priority;
@@ -480,6 +497,7 @@ const serializeMediaKey = (
   const payload = copyUnknownFields(entry, KEY_FIELDS);
   payload['api-key'] = entry.apiKey.trim();
   if (entry.priority !== undefined) payload.priority = entry.priority;
+  if (entry.weight !== undefined) payload.weight = entry.weight;
   if (entry.proxyUrl?.trim()) payload['proxy-url'] = entry.proxyUrl.trim();
   if (options.includeAuthIndexes && entry.authIndex?.trim()) {
     payload['auth-index'] = entry.authIndex.trim();
@@ -555,6 +573,7 @@ export function serializeMediaProviderPayload(
   const payload = copyUnknownFields(provider, PROVIDER_FIELDS);
   payload.name = provider.name.trim();
   payload.kind = provider.kind;
+  if (provider.adapter) payload.adapter = provider.adapter;
   payload['base-url'] = provider.baseUrl.trim();
   const seenApiKeys = new Set<string>();
   payload['api-key-entries'] = (provider.apiKeyEntries ?? [])

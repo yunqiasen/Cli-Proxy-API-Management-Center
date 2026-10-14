@@ -2291,6 +2291,9 @@
         "operationCapabilityInvalid": "第 {{index}} 个功能的能力类型与当前供应商分类不匹配。",
         "operationModelRequired": "第 {{index}} 个功能需要固定模型或至少配置一个可用模型。",
         "operationResultPathRequired": "第 {{index}} 个功能需要填写结果 JSON 路径。",
+        "operationTestFormatInvalid": "操作 {{index}}：测试模板需要匹配请求格式。",
+        "operationTestJSONInvalid": "操作 {{index}}：测试 JSON 格式错误。",
+        "operationTestFieldsInvalid": "操作 {{index}}：表单字段每行填写 key=value。",
         "operationAsyncIncomplete": "第 {{index}} 个功能的异步任务 ID、轮询路径、状态路径和成功状态值都必须填写。"
       },
       "capabilityNames": {
@@ -2315,6 +2318,11 @@
       "gatewaySaveFirst": "请先保存当前供应商，再测试 CPA 对外 API。",
       "gatewayApiKeyRequired": "CPA 尚未配置客户端 API Key。",
       "gatewayOperationRequired": "请先配置一个功能接口。",
+      "resultUnverified": "响应尚未确认完成或缺少有效结果。",
+      "adapter": "上游协议",
+      "adapterAuto": "自动识别官方地址",
+      "adapterPassthrough": "通用转发",
+      "adapterHint": "自动识别 Cloudflare、MiMo 官方地址；使用自定义域名时手动选择协议。",
       "gatewaySuccess": "HTTP {{status}} · {{route}} · {{model}}",
       "directKeyTestHint": "下面每个 Key 的“测试”只检查上游；这里的按钮会走 CPA 对外 API，并写入请求日志。"
     }

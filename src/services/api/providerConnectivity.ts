@@ -1,6 +1,8 @@
 import type { AxiosRequestConfig } from 'axios';
 import { apiClient } from './client';
 import {
+  buildMediaProviderConnectivityPayload,
+  type MediaProviderConnectivityInput,
   buildOpenAIProviderConnectivityPayload,
   type OpenAIProviderConnectivityInput,
   buildClaudeProviderConnectivityPayload,
@@ -13,6 +15,14 @@ import {
 export * from './providerConnectivityRequest';
 
 export const providerConnectivityApi = {
+  requestMedia: async (input: MediaProviderConnectivityInput, config?: AxiosRequestConfig) => {
+    const response = await apiClient.post<Record<string, unknown>>(
+      '/provider-connectivity-test',
+      buildMediaProviderConnectivityPayload(input),
+      { timeout: 0, ...config }
+    );
+    return normalizeProviderConnectivityResult(response);
+  },
   requestOpenAI: async (input: OpenAIProviderConnectivityInput, config?: AxiosRequestConfig) => {
     const response = await apiClient.post<Record<string, unknown>>(
       '/provider-connectivity-test',

@@ -1,3 +1,4 @@
+import { parseMediaMultipartFieldsText } from './mediaProviderContracts.ts';
 import type {
   MediaKind,
   MediaModelMode,
@@ -41,8 +42,6 @@ export interface MediaConnectivityRequest {
   dataBase64?: string;
 }
 
-export const MEDIA_CONNECTIVITY_TIMEOUT_MS = 65_000;
-
 const CONNECTIVITY_BOUNDARY = '----CPA-Media-Connectivity-Test-7f3a';
 const CONNECTIVITY_PNG_BASE64 =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
@@ -68,12 +67,28 @@ const expandModelPath = (path: string, model: string): string => {
 };
 
 const joinPath = (baseUrl: string, path: string): string => {
-  const base = normalizeBaseUrl(baseUrl);
-  const normalizedPath = path.trim().startsWith('/') ? path.trim() : `/${path.trim()}`;
-  if (/\/v1$/i.test(base) && /^\/v1\//i.test(normalizedPath)) {
-    return `${base}${normalizedPath.slice(3)}`;
+  const base = new URL(normalizeBaseUrl(baseUrl));
+  const operation = new URL(
+    path.trim().startsWith('/') ? path.trim() : `/${path.trim()}`,
+    base.origin
+  );
+  const baseParts = base.pathname.split('/').filter(Boolean);
+  const operationParts = operation.pathname.split('/').filter(Boolean);
+  let overlap = Math.min(baseParts.length, operationParts.length);
+  while (
+    overlap > 0 &&
+    !operationParts
+      .slice(0, overlap)
+      .every((part, i) => part === baseParts[baseParts.length - overlap + i])
+  )
+    overlap -= 1;
+  base.pathname = `/${[...baseParts, ...operationParts.slice(overlap)].join('/')}`;
+  for (const key of new Set(operation.searchParams.keys())) {
+    base.searchParams.delete(key);
+    for (const value of operation.searchParams.getAll(key)) base.searchParams.append(key, value);
   }
-  return `${base}${normalizedPath}`;
+  base.hash = '';
+  return base.toString();
 };
 
 const hasHeader = (headers: Record<string, string>, name: string): boolean =>
@@ -808,21 +823,6 @@ const appendMultipartField = (name: string, value: string): Uint8Array =>
     textBytes(`${value}\r\n`)
   );
 
-const parseMultipartFieldsText = (value: string): Record<string, string> =>
-  Object.fromEntries(
-    value
-      .split(/[\n,]+/)
-      .map((line) => line.trim())
-      .filter(Boolean)
-      .flatMap((line) => {
-        const separator = line.indexOf('=');
-        if (separator <= 0) return [];
-        const name = line.slice(0, separator).trim();
-        if (!name) return [];
-        return [[name, line.slice(separator + 1)]];
-      })
-  );
-
 const appendMultipartFile = (
   name: string,
   filename: string,
@@ -974,7 +974,7 @@ export function buildMediaConnectivityRequest(
   if (canHaveBody) {
     const configuredMultipartFields = operation?.testRequest?.multipartFields ?? {};
     const formMultipartFields = operation?.testRequestMultipartFieldsText
-      ? parseMultipartFieldsText(operation.testRequestMultipartFieldsText)
+      ? parseMediaMultipartFieldsText(operation.testRequestMultipartFieldsText)
       : {};
     const customMultipartFields = Object.entries(
       Object.keys(configuredMultipartFields).length
@@ -1181,53 +1181,9 @@ export const getMediaConnectivityApplicationError = (
   return null;
 };
 
-const MEDIA_ERROR_PROBE_LIMIT_BYTES = 64 * 1024;
-
-const readPossibleJSONResponse = async (
-  response: Response
-): Promise<{ body: unknown; text: string } | null> => {
-  const contentType = response.headers.get('Content-Type')?.toLowerCase() ?? '';
-  if (contentType.includes('json') || contentType.startsWith('text/')) {
-    const text = (await response.text()).trim();
-    if (!text) return null;
-    try {
-      return { body: JSON.parse(text), text };
-    } catch {
-      return { body: text, text };
-    }
-  }
-
-  const reader = response.clone().body?.getReader();
-  if (!reader) return null;
-  const decoder = new TextDecoder();
-  let text = '';
-  let total = 0;
-  try {
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      if (!value?.length) continue;
-      total += value.length;
-      if (total > MEDIA_ERROR_PROBE_LIMIT_BYTES) return null;
-      text += decoder.decode(value, { stream: true });
-      const first = text.trimStart()[0];
-      if (first && first !== '{' && first !== '[') return null;
-    }
-    text = (text + decoder.decode()).trim();
-    if (!text) return null;
-    try {
-      return { body: JSON.parse(text), text };
-    } catch {
-      return null;
-    }
-  } finally {
-    void reader.cancel().catch(() => {});
-  }
-};
-
 export interface MediaGatewayConnectivityFetchOptions {
   fetchImpl?: typeof fetch;
-  timeoutMs?: number;
+  signal?: AbortSignal;
 }
 
 export interface MediaGatewayConnectivityResult {
@@ -1239,11 +1195,6 @@ export const requestMediaGatewayConnectivity = async (
   options: MediaGatewayConnectivityFetchOptions = {}
 ): Promise<MediaGatewayConnectivityResult> => {
   const fetchImpl = options.fetchImpl ?? fetch;
-  const timeoutMs = options.timeoutMs ?? MEDIA_CONNECTIVITY_TIMEOUT_MS;
-  const controller = timeoutMs > 0 ? new AbortController() : null;
-  const timeout = controller
-    ? globalThis.setTimeout(() => controller.abort(), timeoutMs)
-    : undefined;
   const method = request.method.toUpperCase();
   const body =
     method === 'GET' || method === 'HEAD'
@@ -1252,29 +1203,29 @@ export const requestMediaGatewayConnectivity = async (
         ? (decodeBase64(request.dataBase64).buffer as ArrayBuffer)
         : request.data;
 
-  try {
-    const response = await fetchImpl(request.url, {
-      method,
-      headers: request.header,
-      body,
-      signal: controller?.signal,
-    });
-    if (!response.ok) {
-      const message = (await response.text()).trim().replace(/\s+/g, ' ').slice(0, 800);
-      throw new Error(`HTTP ${response.status}${message ? `: ${message}` : ''}`);
-    }
-    const parsed = await readPossibleJSONResponse(response);
-    if (parsed) {
-      const applicationError = getMediaConnectivityApplicationError(parsed.body, parsed.text);
-      if (applicationError) throw new Error(`HTTP ${response.status}: ${applicationError}`);
-    }
-    return { statusCode: response.status };
-  } catch (error) {
-    if (controller?.signal.aborted) {
-      throw Object.assign(new Error(`Request timed out after ${timeoutMs}ms`), { cause: error });
-    }
-    throw error;
-  } finally {
-    if (timeout !== undefined) globalThis.clearTimeout(timeout);
+  const response = await fetchImpl(request.url, {
+    method,
+    headers: request.header,
+    body,
+    signal: options.signal,
+  });
+  if (!response.ok) {
+    const message = (await response.text()).trim().replace(/\s+/g, ' ').slice(0, 800);
+    throw new Error(`HTTP ${response.status}${message ? `: ${message}` : ''}`);
   }
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  const state = response.headers.get('X-CPA-Media-Result');
+  if (state !== 'completed' || bytes.length === 0) {
+    const text = new TextDecoder().decode(bytes).trim();
+    let message = '';
+    try {
+      message = getMediaConnectivityApplicationError(JSON.parse(text), text) ?? '';
+    } catch {
+      /* Binary results have no JSON error details. */
+    }
+    throw new Error(
+      message || `Media result is ${state || 'unverified'}; no verified completed result`
+    );
+  }
+  return { statusCode: response.status };
 };

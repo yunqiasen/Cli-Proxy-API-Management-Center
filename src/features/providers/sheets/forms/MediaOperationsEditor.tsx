@@ -164,6 +164,12 @@ export function MediaOperationsEditor({
                       onChange={(event) =>
                         onUpdate(index, {
                           requestFormat: event.target.value as MediaOperationInput['requestFormat'],
+                          testRequestJson:
+                            event.target.value === 'json' ? operation.testRequestJson : '',
+                          testRequestMultipartFieldsText:
+                            event.target.value === 'multipart'
+                              ? operation.testRequestMultipartFieldsText
+                              : '',
                         })
                       }
                       disabled={mutating}

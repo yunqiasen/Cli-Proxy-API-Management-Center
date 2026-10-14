@@ -15,7 +15,10 @@ export type MediaProviderFormValidationCode =
   | 'operationCapabilityInvalid'
   | 'operationModelRequired'
   | 'operationResultPathRequired'
-  | 'operationAsyncIncomplete';
+  | 'operationAsyncIncomplete'
+  | 'operationTestFormatInvalid'
+  | 'operationTestJSONInvalid'
+  | 'operationTestFieldsInvalid';
 
 export interface MediaProviderFormValidationIssue {
   code: MediaProviderFormValidationCode;
@@ -75,6 +78,28 @@ export function validateMediaProviderFormInput(
     if (operationIsBlank(operation)) continue;
     if (!text(operation.name)) return { code: 'operationNameRequired', operationIndex };
     if (!text(operation.path)) return { code: 'operationPathRequired', operationIndex };
+
+    const testJSON = text(operation.testRequestJson);
+    const testFields = text(operation.testRequestMultipartFieldsText);
+    if (
+      (testJSON && operation.requestFormat !== 'json') ||
+      (testFields && operation.requestFormat !== 'multipart')
+    ) {
+      return { code: 'operationTestFormatInvalid', operationIndex };
+    }
+    if (testJSON) {
+      try {
+        JSON.parse(testJSON);
+      } catch {
+        return { code: 'operationTestJSONInvalid', operationIndex };
+      }
+    }
+    if (
+      testFields &&
+      testFields.split(/\r?\n/).some((line) => line.trim() && line.indexOf('=') <= 0)
+    ) {
+      return { code: 'operationTestFieldsInvalid', operationIndex };
+    }
 
     const explicitCapability = text(operation.capability).toLowerCase().replace(/_/g, '-');
     if (explicitCapability && !allowedCapabilities.includes(explicitCapability)) {

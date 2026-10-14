@@ -138,6 +138,8 @@ export interface OpenAIProviderConfig extends ProviderRuntimePolicy, ProviderBeh
   [key: string]: unknown;
 }
 
+export type MediaAdapter = '' | 'auto' | 'passthrough' | 'cloudflare-workers-ai' | 'mimo-audio';
+
 export type MediaKind = 'image' | 'video' | 'audio';
 export type MediaRequestFormat = 'json' | 'multipart' | 'binary';
 export type MediaModelMode = 'required' | 'optional' | 'none';
@@ -145,6 +147,7 @@ export type MediaResponseFormat = 'passthrough' | 'json-url' | 'json-base64' | '
 
 export interface MediaApiKeyEntry {
   apiKey: string;
+  weight?: number;
   priority?: number;
   proxyUrl?: string;
   authIndex?: string;
@@ -190,6 +193,7 @@ export interface MediaOperationConfig {
 }
 
 export interface MediaProviderConfig {
+  adapter?: MediaAdapter;
   name: string;
   kind: MediaKind;
   baseUrl: string;

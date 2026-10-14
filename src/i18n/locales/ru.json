@@ -2287,6 +2287,9 @@
         "operationCapabilityInvalid": "Возможность операции {{index}} недоступна для этой категории провайдера.",
         "operationModelRequired": "Для операции {{index}} укажите фиксированную модель или совместимую модель в списке.",
         "operationResultPathRequired": "Для операции {{index}} укажите JSON-путь результата.",
+        "operationTestFormatInvalid": "Операция {{index}}: шаблон теста должен соответствовать формату запроса.",
+        "operationTestJSONInvalid": "Операция {{index}}: некорректный JSON теста.",
+        "operationTestFieldsInvalid": "Операция {{index}}: укажите по одному полю key=value в строке.",
         "operationAsyncIncomplete": "Для операции {{index}} укажите путь ID задачи, путь опроса, путь статуса и успешное значение."
       },
       "capabilityNames": {
@@ -2311,6 +2314,11 @@
       "gatewaySaveFirst": "Сначала сохраните провайдера, затем проверьте публичный API CPA.",
       "gatewayApiKeyRequired": "В CPA не настроен клиентский API-ключ.",
       "gatewayOperationRequired": "Сначала настройте операцию.",
+      "resultUnverified": "В ответе нет подтверждённого завершённого результата.",
+      "adapter": "Протокол провайдера",
+      "adapterAuto": "Авто (официальные адреса)",
+      "adapterPassthrough": "Без преобразования",
+      "adapterHint": "Автоматически распознаёт официальные адреса Cloudflare и MiMo. Для своего домена выберите протокол вручную.",
       "gatewaySuccess": "HTTP {{status}} · {{route}} · {{model}}",
       "directKeyTestHint": "Тесты ключей ниже проверяют upstream напрямую. Эта кнопка вызывает публичный API CPA и записывает журнал запроса."
     }

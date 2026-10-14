@@ -1,6 +1,9 @@
 import type { MediaProviderConfig, MediaOperationConfig } from '@/types';
 import type { MediaOperationInput, ProviderEntryFormInput } from './types';
-import { mergeEditedMediaProviderConfig } from '@/services/api/mediaProviderContracts';
+import {
+  mergeEditedMediaProviderConfig,
+  parseMediaMultipartFieldsText,
+} from '@/services/api/mediaProviderContracts';
 import { headersFromEntries } from './providerFormSerialization';
 
 const splitMediaText = (value: string): string[] =>
@@ -47,6 +50,7 @@ export const buildMediaProviderFormInput = (
   disableCooling: config?.disableCooling === true,
   priority: config?.priority,
   mediaKind: brand,
+  mediaAdapter: config?.adapter ?? '',
   headers: config?.headers
     ? Object.entries(config.headers).map(([key, value]) => ({ key, value: String(value) }))
     : [{ key: '', value: '' }],
@@ -91,6 +95,7 @@ export const buildMediaProviderFormInput = (
         apiKey: '',
         existingApiKey: entry.apiKey,
         priority: entry.priority,
+        weight: entry.weight,
         proxyUrl: entry.proxyUrl ?? '',
         authIndex: entry.authIndex,
       }))
@@ -112,6 +117,7 @@ export const buildMediaProviderConfig = (
         existing?.apiKeyEntries?.[index]?.apiKey?.trim() ||
         '',
       priority: entry.priority,
+      weight: entry.weight,
       proxyUrl: entry.proxyUrl.trim() || undefined,
       authIndex: entry.authIndex,
     }))
@@ -140,12 +146,8 @@ export const buildMediaProviderConfig = (
         resultPath: operation.resultPath.trim() || undefined,
       };
       const testRequestJson = operation.testRequestJson.trim();
-      const multipartFields = Object.fromEntries(
-        splitMediaText(operation.testRequestMultipartFieldsText).flatMap((line) => {
-          const separator = line.indexOf('=');
-          if (separator <= 0) return [];
-          return [[line.slice(0, separator).trim(), line.slice(separator + 1)]];
-        })
+      const multipartFields = parseMediaMultipartFieldsText(
+        operation.testRequestMultipartFieldsText
       );
       if (testRequestJson || Object.keys(multipartFields).length) {
         result.testRequest = {
@@ -177,6 +179,7 @@ export const buildMediaProviderConfig = (
     ...(existing ?? {}),
     name: input.name.trim(),
     kind: brand,
+    adapter: input.mediaAdapter || undefined,
     baseUrl: input.baseUrl.trim(),
     priority: input.priority,
     disabled: input.disabled,

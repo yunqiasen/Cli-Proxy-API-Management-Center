@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  MEDIA_CONNECTIVITY_TIMEOUT_MS,
   buildMediaConnectivityRequest,
   buildMediaGatewayConnectivityRequest,
   getMediaConnectivityApplicationError,
@@ -349,8 +348,21 @@ test('accepts form-level custom multipart fields for connectivity tests', () => 
   assert.doesNotMatch(body, /name="input"/);
 });
 
-test('allows slow media providers to finish connectivity tests', () => {
-  assert.equal(MEDIA_CONNECTIVITY_TIMEOUT_MS, 65_000);
+test('uses the caller signal for media connectivity requests', async () => {
+  const controller = new AbortController();
+  const result = await requestMediaGatewayConnectivity(
+    { method: 'POST', url: 'https://cpa.test/v1/audio/speech', header: {}, data: '{}' },
+    {
+      signal: controller.signal,
+      fetchImpl: async (_url, options) => {
+        assert.equal(options.signal, controller.signal);
+        return new Response('audio', {
+          headers: { 'X-CPA-Media-Result': 'completed' },
+        });
+      },
+    }
+  );
+  assert.equal(result.statusCode, 200);
 });
 
 test('explicitly selected test model overrides operation and custom JSON model values', () => {
@@ -408,9 +420,11 @@ test('executes the CPA gateway request directly from the UI instead of proxying 
     {
       fetchImpl: async (url, init) => {
         calls.push({ url, init });
-        return new Response('', { status: 201, headers: { 'X-CPA-Trace-ID': 'trace-1' } });
+        return new Response('{"data":[{"url":"https://example.test/result.png"}]}', {
+          status: 201,
+          headers: { 'X-CPA-Trace-ID': 'trace-1', 'X-CPA-Media-Result': 'completed' },
+        });
       },
-      timeoutMs: 0,
     }
   );
 
@@ -438,7 +452,6 @@ test('surfaces the CPA gateway response body when the public route fails', async
               status: 502,
               headers: { 'Content-Type': 'application/json' },
             }),
-          timeoutMs: 0,
         }
       ),
     /HTTP 502.*route failed/
@@ -474,9 +487,8 @@ test('accepts a vendor success code outside the HTTP status range', async () => 
       fetchImpl: async () =>
         new Response('{"code":10000,"data":{"voice_id":"voice-1"}}', {
           status: 200,
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'X-CPA-Media-Result': 'completed' },
         }),
-      timeoutMs: 0,
     }
   );
 
@@ -499,7 +511,6 @@ test('rejects a successful HTTP response that contains an application-level medi
               status: 200,
               headers: { 'Content-Type': 'application/json' },
             }),
-          timeoutMs: 0,
         }
       ),
     /credit limit exceeded/
@@ -522,7 +533,6 @@ test('rejects a mislabeled binary HTTP 200 response that contains a JSON media e
               status: 200,
               headers: { 'Content-Type': 'application/octet-stream' },
             }),
-          timeoutMs: 0,
         }
       ),
     /invalid key/

@@ -1,11 +1,31 @@
 @use '../../styles/variables' as *;
 
 .card {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
   min-height: 0;
+  overflow: hidden;
+
+  > :global(.card-header) {
+    flex: none;
+    align-items: flex-start;
+    gap: $spacing-md;
+    flex-wrap: wrap;
+  }
+
+  > :global(.error-box) {
+    flex: none;
+    max-height: 15vh;
+    overflow: auto;
+  }
 }
 
 .actions {
   display: flex;
+  flex: 1 1 520px;
+  min-width: 0;
   align-items: center;
   justify-content: flex-end;
   gap: $spacing-sm;
@@ -21,8 +41,13 @@
 }
 
 .tableWrap {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
   width: 100%;
   overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
   border: 1px solid var(--border-color);
   border-radius: $radius-lg;
 }
@@ -58,6 +83,25 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+}
+
+.table .actionCell {
+  position: sticky;
+  right: 0;
+  z-index: 2;
+  width: 92px;
+  background: var(--bg-primary);
+  box-shadow: -1px 0 var(--border-color);
+}
+
+.table th.actionCell {
+  z-index: 3;
+  background: var(--bg-secondary);
+}
+
+.tableWrap:focus-visible {
+  outline: 2px solid var(--primary-color);
+  outline-offset: -2px;
 }
 
 .requestPathCell {
@@ -122,6 +166,8 @@
 
 .pagination {
   display: flex;
+  flex: none;
+  flex-wrap: wrap;
   justify-content: flex-end;
   align-items: center;
   gap: $spacing-sm;
@@ -129,6 +175,10 @@
   color: var(--muted-foreground);
   font-size: 13px;
   white-space: nowrap;
+}
+
+.pagination :global(.form-group) {
+  margin: 0;
 }
 
 .paginationCompact {
@@ -278,6 +328,7 @@
 
 .syncStatus {
   display: flex;
+  flex: none;
   align-items: center;
   gap: $spacing-sm;
   flex-wrap: wrap;
@@ -295,5 +346,37 @@
   .syncError {
     color: var(--failure-badge-text);
     background: var(--failure-badge-bg);
+  }
+}
+
+@media (max-width: 600px) {
+  .card {
+    padding: 12px;
+  }
+
+  .actions {
+    justify-content: flex-start;
+    gap: 6px;
+  }
+
+  .paginationCompact {
+    display: none;
+  }
+
+  .pagination {
+    justify-content: center;
+    gap: 6px;
+    font-size: 12px;
+  }
+
+  .syncStatus {
+    gap: 6px;
+    margin-bottom: 8px;
+  }
+}
+
+@media (max-height: 700px) {
+  .paginationCompact {
+    display: none;
   }
 }

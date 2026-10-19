@@ -968,6 +968,7 @@
     "no_requests": "無請求"
   },
   "logs": {
+    "request_table_label": "請求日誌表格",
     "preview_too_large": "封包超過 2 MiB 預覽限制，請下載查看",
     "read_status_live": "持續讀取",
     "read_status_paused": "讀取已暫停",

@@ -942,6 +942,7 @@
     "no_requests": "无请求"
   },
   "logs": {
+    "request_table_label": "请求日志表格",
     "preview_too_large": "报文超过 2 MiB 预览限制，请下载查看",
     "read_status_live": "持续读取",
     "read_status_paused": "读取已暂停",

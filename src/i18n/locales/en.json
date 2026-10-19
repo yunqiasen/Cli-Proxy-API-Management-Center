@@ -944,6 +944,7 @@
     "no_requests": "No requests"
   },
   "logs": {
+    "request_table_label": "Request log table",
     "preview_too_large": "This request log exceeds the 2 MiB preview limit. Download it to view.",
     "read_status_live": "Reading continuously",
     "read_status_paused": "Reading paused",

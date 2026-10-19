@@ -80,9 +80,10 @@ export const requestLogsApi = {
       signal: options.signal,
     }),
 
-  detail: (id: string) =>
+  detail: (id: string, options: { signal?: AbortSignal } = {}) =>
     apiClient.get<RequestLogDetail>(`/request-logs/${encodeURIComponent(id)}`, {
       timeout: LOGS_TIMEOUT_MS,
+      signal: options.signal,
     }),
 
   export: (params: {

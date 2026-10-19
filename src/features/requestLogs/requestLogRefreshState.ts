@@ -96,7 +96,9 @@ interface RequestLogRefreshScheduler {
 }
 
 export interface RequestLogRefreshCoordinator {
-  tryStart: () => number | null;
+  tryStart: (replaceActive?: boolean) => number | null;
+  isCurrent: (requestId: number) => boolean;
+  invalidate: () => void;
   finish: (requestId: number | null) => void;
   scheduleSearch: (value: string, emit: (value: string) => void) => void;
   cancelSearch: () => void;
@@ -116,11 +118,20 @@ export function createRequestLogRefreshCoordinator(options?: {
   let searchTimer: TimerHandle | null = null;
 
   return {
-    tryStart() {
-      if (activeRequestId !== null) return null;
+    tryStart(replaceActive = false) {
+      if (activeRequestId !== null && !replaceActive) return null;
       generation += 1;
       activeRequestId = generation;
       return activeRequestId;
+    },
+    isCurrent(requestId) {
+      return requestId === generation;
+    },
+    invalidate() {
+      generation += 1;
+      activeRequestId = null;
+      if (searchTimer !== null) scheduler.clearTimeout(searchTimer);
+      searchTimer = null;
     },
     finish(requestId) {
       if (requestId === activeRequestId) activeRequestId = null;

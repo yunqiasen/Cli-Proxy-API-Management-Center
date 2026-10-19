@@ -133,7 +133,7 @@ export function LogsPage() {
     try {
       const res = await logsApi.fetchErrorLogs();
       if (!requests.errors.isCurrent(request)) return;
-      // API 返回 { files: [...] }
+      // The API returns { files: [...] }.
       setErrorLogs(Array.isArray(res.files) ? res.files : []);
     } catch (err: unknown) {
       if (!requests.errors.isCurrent(request)) return;
@@ -434,6 +434,7 @@ export function LogsPage() {
       </header>
 
       <div className={styles.content}>
+        {activeTab === 'requests' && <RequestLogsPanel />}
         {activeTab === 'logs' && (
           <Card
             className={[styles.logCard, fullscreenLogs ? styles.logCardFullscreen : '']
@@ -1089,7 +1090,6 @@ export function LogsPage() {
             ))}
         </div>
       </Modal>
-      {activeTab === 'requests' && <RequestLogsPanel />}
     </div>
   );
 }

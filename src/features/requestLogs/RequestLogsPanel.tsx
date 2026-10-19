@@ -183,6 +183,8 @@ export function RequestLogsPanel() {
   const { t } = useTranslation();
   const { showNotification } = useNotificationStore();
   const connectionStatus = useAuthStore((state) => state.connectionStatus);
+  const apiBase = useAuthStore((state) => state.apiBase);
+  const managementKey = useAuthStore((state) => state.managementKey);
   const [refreshState, setRefreshState] = useState(() =>
     createRequestLogRefreshState<RequestLogItem>()
   );
@@ -192,6 +194,9 @@ export function RequestLogsPanel() {
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const refreshCoordinatorRef = useRef(createRequestLogRefreshCoordinator());
   const activeRequestRef = useRef<{ id: number; controller: AbortController } | null>(null);
+  const tableRef = useRef<HTMLDivElement>(null);
+  const detailRequestRef = useRef<{ id: number; controller: AbortController } | null>(null);
+  const detailGenerationRef = useRef(0);
   const [detail, setDetail] = useState<RequestLogDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [exportPages, setExportPages] = useState(1);
@@ -205,12 +210,8 @@ export function RequestLogsPanel() {
     async (silent = false, replaceActive = false) => {
       if (connectionStatus !== 'connected') return;
       const coordinator = refreshCoordinatorRef.current;
-      if (replaceActive && activeRequestRef.current) {
-        activeRequestRef.current.controller.abort();
-        coordinator.finish(activeRequestRef.current.id);
-        activeRequestRef.current = null;
-      }
-      const requestId = coordinator.tryStart();
+      if (replaceActive) activeRequestRef.current?.controller.abort();
+      const requestId = coordinator.tryStart(replaceActive);
       if (requestId === null) return;
 
       const controller = new AbortController();
@@ -225,6 +226,7 @@ export function RequestLogsPanel() {
           },
           { signal: controller.signal }
         );
+        if (controller.signal.aborted || !coordinator.isCurrent(requestId)) return;
         setRefreshState((state) => applyRequestLogRefreshSuccess(state, data));
       } catch (err: unknown) {
         const canceled =
@@ -233,7 +235,7 @@ export function RequestLogsPanel() {
             err !== null &&
             'code' in err &&
             String((err as { code?: string }).code) === 'ERR_CANCELED');
-        if (!canceled) {
+        if (!canceled && coordinator.isCurrent(requestId)) {
           const message = getErrorMessage(err) || '加载请求日志失败';
           setRefreshState((state) => applyRequestLogRefreshError(state, message));
         }
@@ -247,33 +249,88 @@ export function RequestLogsPanel() {
 
   useEffect(() => {
     void load(false, true);
-  }, [load]);
+  }, [load, apiBase, managementKey]);
 
   useEffect(() => {
     if (!autoRefresh || connectionStatus !== 'connected') return undefined;
     const timer = window.setInterval(() => {
+      if (
+        document.visibilityState === 'hidden' ||
+        query !== debouncedQuery ||
+        page !== 1 ||
+        detail ||
+        (tableRef.current?.scrollTop ?? 0) > 0
+      )
+        return;
       void load(true, false);
     }, AUTO_REFRESH_MS);
     return () => window.clearInterval(timer);
-  }, [autoRefresh, connectionStatus, load]);
+  }, [autoRefresh, connectionStatus, debouncedQuery, detail, load, page, query]);
 
-  useEffect(
-    () => () => {
-      refreshCoordinatorRef.current.cancelSearch();
+  useEffect(() => {
+    const invalidate = () => {
+      refreshCoordinatorRef.current.invalidate();
       activeRequestRef.current?.controller.abort();
-    },
-    []
-  );
+      activeRequestRef.current = null;
+      detailGenerationRef.current += 1;
+      detailRequestRef.current?.controller.abort();
+      detailRequestRef.current = null;
+    };
+    const unsubscribe = useAuthStore.subscribe((next, previous) => {
+      if (
+        next.apiBase === previous.apiBase &&
+        next.managementKey === previous.managementKey &&
+        next.connectionStatus === previous.connectionStatus &&
+        next.isAuthenticated === previous.isAuthenticated
+      )
+        return;
+      invalidate();
+      setRefreshState(createRequestLogRefreshState<RequestLogItem>());
+      setPage(1);
+      setQuery('');
+      setDebouncedQuery('');
+      setHoverTooltip(null);
+      setDetail(null);
+      setDetailLoading(false);
+    });
+    return () => {
+      unsubscribe();
+      invalidate();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (tableRef.current) tableRef.current.scrollTop = 0;
+    setHoverTooltip(null);
+  }, [page, debouncedQuery]);
+
+  const closeDetail = () => {
+    detailGenerationRef.current += 1;
+    detailRequestRef.current?.controller.abort();
+    detailRequestRef.current = null;
+    setDetail(null);
+    setDetailLoading(false);
+  };
 
   const openDetail = async (item: RequestLogItem) => {
+    detailRequestRef.current?.controller.abort();
+    const id = ++detailGenerationRef.current;
+    const controller = new AbortController();
+    detailRequestRef.current = { id, controller };
     setDetail(item as RequestLogDetail);
     setDetailLoading(true);
     try {
-      setDetail(await requestLogsApi.detail(item.id));
+      const result = await requestLogsApi.detail(item.id, { signal: controller.signal });
+      if (!controller.signal.aborted && id === detailGenerationRef.current) setDetail(result);
     } catch (err: unknown) {
-      showNotification(getErrorMessage(err) || '加载请求详情失败', 'error');
+      if (!controller.signal.aborted && id === detailGenerationRef.current) {
+        showNotification(getErrorMessage(err) || '加载请求详情失败', 'error');
+      }
     } finally {
-      setDetailLoading(false);
+      if (id === detailGenerationRef.current) {
+        detailRequestRef.current = null;
+        setDetailLoading(false);
+      }
     }
   };
 
@@ -437,7 +494,15 @@ export function RequestLogsPanel() {
           description="开启请求日志后，新请求会按时间顺序出现在这里。"
         />
       ) : (
-        <div className={styles.tableWrap}>
+        <div
+          className={styles.tableWrap}
+          ref={tableRef}
+          tabIndex={0}
+          role="region"
+          aria-label={t('logs.request_table_label')}
+          aria-busy={loading}
+          onScroll={hideHoverTooltip}
+        >
           <table className={styles.table}>
             <thead>
               <tr>
@@ -452,7 +517,7 @@ export function RequestLogsPanel() {
                 <th>输出摘要</th>
                 <th>状态</th>
                 <th>错误</th>
-                <th>操作</th>
+                <th className={styles.actionCell}>操作</th>
               </tr>
             </thead>
             <tbody>
@@ -492,7 +557,7 @@ export function RequestLogsPanel() {
                     </span>
                   </td>
                   <td>{preview(item.error_preview, 48)}</td>
-                  <td>
+                  <td className={styles.actionCell}>
                     <Button variant="ghost" size="sm" onClick={() => void openDetail(item)}>
                       <IconEye size={15} /> 预览
                     </Button>
@@ -509,7 +574,7 @@ export function RequestLogsPanel() {
 
       <Modal
         open={Boolean(detail)}
-        onClose={() => setDetail(null)}
+        onClose={closeDetail}
         title="请求预览"
         width="min(1180px, 92vw)"
         className={styles.detailModal}

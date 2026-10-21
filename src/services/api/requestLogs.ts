@@ -1,6 +1,17 @@
 import { apiClient } from './client';
 import { LOGS_TIMEOUT_MS } from '@/utils/constants';
 
+export interface RequestLogAttempt {
+  index: number;
+  provider?: string;
+  auth_id?: string;
+  model?: string;
+  url?: string;
+  state: string;
+  status?: number;
+  error_kind?: string;
+}
+
 export interface RequestLogItem {
   id: string;
   timestamp?: string;
@@ -21,6 +32,22 @@ export interface RequestLogItem {
   called_tools_preview?: string;
   system_prompt_preview?: string;
   has_error?: boolean;
+  // Observation fields (may be absent on legacy rows)
+  state?: string;
+  phase?: string;
+  error_kind?: string;
+  recovered?: boolean;
+  trace_id?: string;
+  raw_log_id?: string;
+  raw_log_pending?: boolean;
+  auth_id?: string;
+  attempt_count?: number;
+  attempts_truncated?: boolean;
+}
+
+/** Metadata-only detail shape from `GET /request-logs/:id?view=routes&metadata_only=true`. */
+export interface RequestLogMetadataDetail extends RequestLogItem {
+  attempts?: RequestLogAttempt[];
 }
 
 export interface RequestLogDetail extends RequestLogItem {
@@ -54,6 +81,7 @@ export interface RequestLogDetail extends RequestLogItem {
     description?: string;
     summary?: string;
   }>;
+  attempts?: RequestLogAttempt[];
 }
 
 export interface RequestLogsResponse {
@@ -67,34 +95,51 @@ export interface RequestLogsResponse {
   syncing?: boolean;
   last_synced_at?: string;
   last_sync_error?: string;
+  observation_warning?: string;
+}
+
+export interface RequestLogListParams {
+  q?: string;
+  state?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface RequestLogExportParams {
+  q?: string;
+  state?: string;
+  limit?: number;
+  offset?: number;
+  pages?: number;
+  format?: string;
 }
 
 export const requestLogsApi = {
-  list: (
-    params: { q?: string; limit?: number; offset?: number },
-    options: { signal?: AbortSignal } = {}
-  ) =>
+  list: (params: RequestLogListParams, options: { signal?: AbortSignal } = {}) =>
     apiClient.get<RequestLogsResponse>('/request-logs', {
-      params,
+      params: { view: 'routes', ...params },
       timeout: LOGS_TIMEOUT_MS,
       signal: options.signal,
     }),
 
   detail: (id: string, options: { signal?: AbortSignal } = {}) =>
     apiClient.get<RequestLogDetail>(`/request-logs/${encodeURIComponent(id)}`, {
+      params: { view: 'routes' },
       timeout: LOGS_TIMEOUT_MS,
       signal: options.signal,
     }),
 
-  export: (params: {
-    q?: string;
-    limit?: number;
-    offset?: number;
-    pages?: number;
-    format?: string;
-  }) =>
+  /** Lightweight metadata+attempts poll; no prompt/output/tool full fields. */
+  detailMetadata: (id: string, options: { signal?: AbortSignal } = {}) =>
+    apiClient.get<RequestLogMetadataDetail>(`/request-logs/${encodeURIComponent(id)}`, {
+      params: { view: 'routes', metadata_only: 'true' },
+      timeout: LOGS_TIMEOUT_MS,
+      signal: options.signal,
+    }),
+
+  export: (params: RequestLogExportParams) =>
     apiClient.getRaw('/request-logs/export', {
-      params,
+      params: { view: 'routes', ...params },
       responseType: 'blob',
       timeout: LOGS_TIMEOUT_MS,
     }),

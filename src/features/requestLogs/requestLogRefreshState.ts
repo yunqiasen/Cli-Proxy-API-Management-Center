@@ -3,6 +3,7 @@ export interface RequestLogSyncMetadata {
   last_synced_at?: string;
   last_sync_error?: string;
   retention_days?: number;
+  observation_warning?: string;
 }
 
 export interface RequestLogRefreshPayload<T> extends RequestLogSyncMetadata {
@@ -19,6 +20,7 @@ export interface RequestLogRefreshState<T> {
   lastSyncedAt: string | null;
   lastSyncError: string;
   retentionDays: number | null;
+  observationWarning: string;
 }
 
 export function createRequestLogRefreshState<T>(
@@ -34,6 +36,7 @@ export function createRequestLogRefreshState<T>(
     lastSyncedAt: null,
     lastSyncError: '',
     retentionDays: null,
+    observationWarning: '',
   };
 }
 
@@ -47,6 +50,7 @@ export function applyRequestLogSyncMetadata<T>(
     lastSyncedAt: metadata.last_synced_at ?? state.lastSyncedAt,
     lastSyncError: metadata.last_sync_error ?? state.lastSyncError,
     retentionDays: metadata.retention_days ?? state.retentionDays,
+    observationWarning: metadata.observation_warning ?? '',
   };
 }
 

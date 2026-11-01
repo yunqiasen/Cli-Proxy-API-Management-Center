@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { authFilesApi } from '@/services/api';
+import type { AuthFileModelProbeResult } from '@/services/api/authFiles';
 import { useNotificationStore } from '@/stores';
 import type { AuthFileItem } from '@/types';
 import type { AuthFileModelItem } from '@/features/authFiles/constants';
@@ -14,6 +15,10 @@ export type UseAuthFilesModelsResult = {
   modelsFileName: string;
   modelsFileType: string;
   modelsError: ModelsError;
+  modelsAuthIndex: string;
+  probeResults: Record<string, AuthFileModelProbeResult>;
+  probeRunning: Record<string, boolean>;
+  probeModel: (modelId: string) => Promise<void>;
   showModels: (item: AuthFileItem) => Promise<void>;
   closeModelsModal: () => void;
   /** 文件集变更后失效缓存；不传 names 则全部清空。 */
@@ -30,10 +35,43 @@ export function useAuthFilesModels(): UseAuthFilesModelsResult {
   const [modelsFileName, setModelsFileName] = useState('');
   const [modelsFileType, setModelsFileType] = useState('');
   const [modelsError, setModelsError] = useState<ModelsError>(null);
+  const [modelsAuthIndex, setModelsAuthIndex] = useState('');
+  const [probeResults, setProbeResults] = useState<Record<string, AuthFileModelProbeResult>>({});
+  const [probeRunning, setProbeRunning] = useState<Record<string, boolean>>({});
   const modelsCacheRef = useRef<Map<string, AuthFileModelItem[]>>(new Map());
   const modelsCacheVersionRef = useRef(0);
   const modelsFileVersionRef = useRef<Map<string, number>>(new Map());
   const activeModelsRequestIdRef = useRef(0);
+
+  const probeModel = useCallback(
+    async (modelId: string) => {
+      const name = modelsFileName.trim();
+      const model = modelId.trim();
+      if (!name || !model) return;
+      setProbeRunning((prev) => ({ ...prev, [model]: true }));
+      try {
+        const result = await authFilesApi.probeAuthFileModel(
+          name,
+          model,
+          modelsAuthIndex || undefined
+        );
+        setProbeResults((prev) => ({ ...prev, [model]: result }));
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        setProbeResults((prev) => ({
+          ...prev,
+          [model]: { ok: false, status: 0, model, error: message },
+        }));
+      } finally {
+        setProbeRunning((prev) => {
+          const next = { ...prev };
+          delete next[model];
+          return next;
+        });
+      }
+    },
+    [modelsAuthIndex, modelsFileName]
+  );
 
   const closeModelsModal = useCallback(() => {
     activeModelsRequestIdRef.current += 1;
@@ -61,6 +99,11 @@ export function useAuthFilesModels(): UseAuthFilesModelsResult {
 
       setModelsFileName(item.name);
       setModelsFileType(item.type || '');
+      setModelsAuthIndex(
+        typeof item.authIndex === 'string' ? item.authIndex : ''
+      );
+      setProbeResults({});
+      setProbeRunning({});
       setModelsList([]);
       setModelsError(null);
       setModelsModalOpen(true);
@@ -112,6 +155,10 @@ export function useAuthFilesModels(): UseAuthFilesModelsResult {
     modelsFileName,
     modelsFileType,
     modelsError,
+    modelsAuthIndex,
+    probeResults,
+    probeRunning,
+    probeModel,
     showModels,
     closeModelsModal,
     invalidateModels,

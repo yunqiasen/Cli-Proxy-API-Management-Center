@@ -107,6 +107,9 @@ export function AuthFilesPage() {
     modelsFileName,
     modelsFileType,
     modelsError,
+    probeResults,
+    probeRunning,
+    probeModel,
     showModels,
     closeModelsModal,
     invalidateModels,
@@ -796,6 +799,9 @@ export function AuthFilesPage() {
         error={modelsError}
         models={modelsList}
         excluded={excluded}
+        probeResults={probeResults}
+        probeRunning={probeRunning}
+        onProbeModel={(modelId) => void probeModel(modelId)}
         onClose={closeModelsModal}
         onCopyText={copyTextWithNotification}
       />

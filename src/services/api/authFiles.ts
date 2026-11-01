@@ -18,6 +18,21 @@ import { parseTimestampMs } from '@/utils/timestamp';
 import { normalizeAuthFileCooldowns, normalizeCooldownTimestamp } from './authFileCooldowns';
 
 type AuthFileStatusResponse = { status: string; disabled: boolean };
+
+/** 单凭证模型探测结果。ok=false 时 status/error 携带上游原因。 */
+export type AuthFileModelProbeResult = {
+  ok: boolean;
+  status: number;
+  model: string;
+  auth_id?: string;
+  auth_index?: string;
+  text?: string;
+  error?: string;
+  body?: string;
+};
+
+/** 探测要等真实上游回复，放宽到 90s。 */
+const AUTH_FILE_MODEL_PROBE_TIMEOUT_MS = 90_000;
 export type AuthFileLookup = { name: string; authIndex?: string };
 type AuthFileEntry = AuthFilesResponse['files'][number];
 export type AuthFileFieldsPatch = {
@@ -694,6 +709,23 @@ export const authFilesApi = {
     return Array.isArray(models)
       ? (models as { id: string; display_name?: string; type?: string; owned_by?: string }[])
       : [];
+  },
+
+  /**
+   * 单凭证模型探测：用被点击的凭证发一次真实请求，确认该模型能否连通。
+   * 后端把 auth_id 钉死在生产执行器上，不会切换到别的凭证。
+   */
+  async probeAuthFileModel(
+    name: string,
+    model: string,
+    authIndex?: string
+  ): Promise<AuthFileModelProbeResult> {
+    const payload = await apiClient.post<AuthFileModelProbeResult>(
+      '/credentials/models/probe',
+      { name, model, ...(authIndex ? { auth_index: authIndex } : {}) },
+      { timeout: AUTH_FILE_MODEL_PROBE_TIMEOUT_MS }
+    );
+    return payload;
   },
 
   // 获取指定 channel 的模型定义

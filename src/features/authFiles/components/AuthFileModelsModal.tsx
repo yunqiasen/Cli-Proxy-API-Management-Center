@@ -3,6 +3,7 @@ import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import type { AuthFileModelItem } from '@/features/authFiles/constants';
+import type { AuthFileModelProbeResult } from '@/services/api/authFiles';
 import { isModelExcluded } from '@/features/authFiles/constants';
 import styles from './AuthFileModelsModal.module.scss';
 
@@ -14,13 +15,29 @@ export type AuthFileModelsModalProps = {
   error: 'unsupported' | null;
   models: AuthFileModelItem[];
   excluded: Record<string, string[]>;
+  probeResults: Record<string, AuthFileModelProbeResult>;
+  probeRunning: Record<string, boolean>;
+  onProbeModel: (modelId: string) => void;
   onClose: () => void;
   onCopyText: (text: string) => void;
 };
 
 export function AuthFileModelsModal(props: AuthFileModelsModalProps) {
   const { t } = useTranslation();
-  const { open, fileName, fileType, loading, error, models, excluded, onClose, onCopyText } = props;
+  const {
+    open,
+    fileName,
+    fileType,
+    loading,
+    error,
+    models,
+    excluded,
+    probeResults,
+    probeRunning,
+    onProbeModel,
+    onClose,
+    onCopyText,
+  } = props;
 
   return (
     <Modal
@@ -80,6 +97,43 @@ export function AuthFileModelsModal(props: AuthFileModelsModalProps) {
                     {t('auth_files.models_excluded_badge', { defaultValue: '已禁用' })}
                   </span>
                 )}
+                <span className={styles.probeSlot}>
+                  {probeResults[model.id] ? (
+                    <span
+                      className={
+                        probeResults[model.id].ok ? styles.probeOk : styles.probeFail
+                      }
+                      title={
+                        probeResults[model.id].ok
+                          ? t('auth_files.models_probe_ok')
+                          : probeResults[model.id].error ||
+                            t('auth_files.models_probe_fail')
+                      }
+                    >
+                      {probeResults[model.id].ok
+                        ? t('auth_files.models_probe_ok')
+                        : t('auth_files.models_probe_fail')}
+                      {!probeResults[model.id].ok && probeResults[model.id].status
+                        ? ` ${probeResults[model.id].status}`
+                        : ''}
+                    </span>
+                  ) : null}
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    loading={probeRunning[model.id] === true}
+                    disabled={probeRunning[model.id] === true}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onProbeModel(model.id);
+                    }}
+                    title={t('auth_files.models_probe_button')}
+                  >
+                    {probeRunning[model.id] === true
+                      ? t('auth_files.models_probe_running')
+                      : t('auth_files.models_probe_button')}
+                  </Button>
+                </span>
               </div>
             );
           })}

@@ -34,6 +34,16 @@ From everyday configuration to troubleshooting, keep the essentials close at han
 > [!IMPORTANT]
 > Requires **CLI Proxy API ≥ 8.0.0**; the latest v8 release is recommended. This repository is the management UI, not the proxy — it does not forward traffic. It uses the **v8 Management API** (`/v8/management`) and v8 configuration layout, with no v0 fallback. Plugin resources and custom extensions retain their backend-declared paths.
 
+## Fork Workspace
+
+- Primary checkout: `/home/div/1_Project_dir/AI/CPA/Cli-Proxy-API-Management-Center`.
+- Daily branch: `CPA-UI-fork`; `main` is the upstream synchronization line.
+- `origin`: `https://github.com/yunqiasen/Cli-Proxy-API-Management-Center.git`.
+- `upstream`: `https://github.com/router-for-me/Cli-Proxy-API-Management-Center.git`.
+- Backend checkout: `/home/div/1_Project_dir/AI/CPA/CLIProxyAPI` (`CPA-fork`).
+- The former checkout remains for history; use the new checkout for development.
+- Migration changes paths only; the deployed `management.html` is preserved.
+
 ## Quick start
 
 The UI is bundled with [CLI Proxy API](https://github.com/router-for-me/CLIProxyAPI). No separate frontend deployment is needed for the standard setup.

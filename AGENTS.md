@@ -1,5 +1,15 @@
 # Repository Guidelines
 
+## Fork Workspace
+
+- Primary checkout: `/home/div/1_Project_dir/AI/CPA/Cli-Proxy-API-Management-Center`.
+- Daily branch: `CPA-UI-fork`; `main` is the upstream synchronization line.
+- `origin`: `https://github.com/yunqiasen/Cli-Proxy-API-Management-Center.git`.
+- `upstream`: `https://github.com/router-for-me/Cli-Proxy-API-Management-Center.git`.
+- Backend checkout: `/home/div/1_Project_dir/AI/CPA/CLIProxyAPI` (`CPA-fork`).
+- The former checkout remains for history; use the new checkout for development.
+- Migration changes paths only; the deployed `management.html` is preserved.
+
 ## Project Scope & Structure
 
 This is a React 19 + TypeScript + Vite management frontend for CLI Proxy API, not the proxy itself. It exclusively uses the backend v8 Management API under `/v8/management` and the v8 configuration layout; do not add v0 fallbacks or legacy config adapters. Plugin resources and custom HTTP extensions are exceptions: preserve their backend-declared paths.

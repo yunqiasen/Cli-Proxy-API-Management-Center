@@ -34,6 +34,14 @@
 > [!IMPORTANT]
 > 需要 **CLI Proxy API ≥ 8.0.0**，推荐使用最新 v8 版本。本仓库仅包含管理界面，**不是代理本体，不参与流量转发**。仅使用 **v8 Management API**（`/v8/management`）与 v8 配置结构，不提供 v0 回退；插件资源与自定义扩展保留后端声明的路径。
 
+## 二开工作区
+
+- 主目录：`/home/div/1_Project_dir/AI/CPA/Cli-Proxy-API-Management-Center`。
+- 日常分支：`CPA-UI-fork`；`main` 保留上游同步线。
+- `origin` 指向 `yunqiasen/Cli-Proxy-API-Management-Center`，`upstream` 指向 `router-for-me/Cli-Proxy-API-Management-Center`。
+- 后端目录：`/home/div/1_Project_dir/AI/CPA/CLIProxyAPI`，分支 `CPA-fork`。
+- 旧目录保留历史记录，新开发使用新目录；本次迁移保留原管理页面构建产物。
+
 ## 快速开始
 
 [CLI Proxy API](https://github.com/router-for-me/CLIProxyAPI) 已内置 Web UI，常规使用无需单独部署前端。

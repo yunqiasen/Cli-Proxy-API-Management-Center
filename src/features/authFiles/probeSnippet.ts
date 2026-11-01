@@ -47,3 +47,22 @@ export function summarizeProbeResult(
   if (!text) return '';
   return text.length > limit ? `${text.slice(0, limit)}…` : text;
 }
+
+/**
+ * Compact one-line meta strip for the probe row: status, latency, finish
+ * reason and token usage. Returns an empty string when nothing is known.
+ */
+export function formatProbeMeta(result: AuthFileModelProbeResult | undefined): string {
+  if (!result) return '';
+  const parts: string[] = [];
+  if (result.status) parts.push(String(result.status));
+  if (typeof result.latency_ms === 'number' && result.latency_ms >= 0) {
+    parts.push(result.latency_ms >= 1000
+      ? `${(result.latency_ms / 1000).toFixed(1)}s`
+      : `${result.latency_ms}ms`);
+  }
+  if (result.finish) parts.push(result.finish);
+  const total = result.usage?.total_tokens;
+  if (typeof total === 'number' && total > 0) parts.push(`${total} tok`);
+  return parts.join(' · ');
+}

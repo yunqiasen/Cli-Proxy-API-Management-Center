@@ -45,3 +45,31 @@ describe('probe result snippet', () => {
     expect(summarizeProbeResult(undefined)).toBe('');
   });
 });
+
+import { formatProbeMeta } from '../src/features/authFiles/probeSnippet';
+
+describe('probe meta strip', () => {
+  test('renders status, latency, finish reason and token usage', () => {
+    expect(
+      formatProbeMeta({
+        ok: true,
+        status: 200,
+        model: 'sn-kimi-k3',
+        latency_ms: 812,
+        finish: 'stop',
+        usage: { prompt_tokens: 11, completion_tokens: 2, total_tokens: 13 },
+      })
+    ).toBe('200 · 812ms · stop · 13 tok');
+  });
+
+  test('renders seconds for slow probes and keeps failures readable', () => {
+    expect(
+      formatProbeMeta({ ok: false, status: 403, model: 'm', latency_ms: 2400 })
+    ).toBe('403 · 2.4s');
+  });
+
+  test('stays empty without any known fields', () => {
+    expect(formatProbeMeta(undefined)).toBe('');
+    expect(formatProbeMeta({ ok: true, status: 0, model: 'm' })).toBe('');
+  });
+});

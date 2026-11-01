@@ -121,6 +121,8 @@
 /* 探测回复摘要：只显示模型实际回复的短片段，不铺完整 JSON */
 .probeSnippetOk,
 .probeSnippetFail {
+  flex: 1;
+  min-width: 0;
   font-family: $font-mono;
   font-size: 11px;
   line-height: 1.45;
@@ -144,4 +146,22 @@
   color: var(--danger-text, #dc2626);
   background: color-mix(in srgb, var(--danger-text, #dc2626) 8%, transparent);
   border-left: 2px solid color-mix(in srgb, var(--danger-text, #dc2626) 55%, transparent);
+}
+
+/* 探测基础响应信息：状态码 / 耗时 / finish_reason / token 用量 */
+.probeDetail {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+}
+
+.probeMeta {
+  flex: none;
+  font-family: $font-mono;
+  font-size: 10.5px;
+  line-height: 1.45;
+  padding: 4px 0;
+  color: var(--text-tertiary);
+  white-space: nowrap;
 }

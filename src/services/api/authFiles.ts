@@ -26,8 +26,16 @@ export type AuthFileModelProbeResult = {
   model: string;
   auth_id?: string;
   auth_index?: string;
+  /** Round-trip time of the pinned probe, in milliseconds. */
+  latency_ms?: number;
   text?: string;
   error?: string;
+  finish?: string;
+  usage?: {
+    prompt_tokens?: number;
+    completion_tokens?: number;
+    total_tokens?: number;
+  } | null;
   body?: string;
 };
 

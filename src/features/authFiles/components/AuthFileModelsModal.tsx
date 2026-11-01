@@ -5,7 +5,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import type { AuthFileModelItem } from '@/features/authFiles/constants';
 import type { AuthFileModelProbeResult } from '@/services/api/authFiles';
 import { isModelExcluded } from '@/features/authFiles/constants';
-import { summarizeProbeResult } from '@/features/authFiles/probeSnippet';
+import { formatProbeMeta, summarizeProbeResult } from '@/features/authFiles/probeSnippet';
 import styles from './AuthFileModelsModal.module.scss';
 
 export type AuthFileModelsModalProps = {
@@ -75,6 +75,7 @@ export function AuthFileModelsModal(props: AuthFileModelsModalProps) {
             const excludedModel = isModelExcluded(model.id, fileType, excluded);
             const probe = probeResults[model.id];
             const snippet = summarizeProbeResult(probe);
+            const meta = formatProbeMeta(probe);
             return (
               <div
                 key={model.id}
@@ -135,11 +136,14 @@ export function AuthFileModelsModal(props: AuthFileModelsModalProps) {
                   </span>
                 </div>
                 {snippet ? (
-                  <div
-                    className={probe?.ok ? styles.probeSnippetOk : styles.probeSnippetFail}
-                    title={snippet}
-                  >
-                    {snippet}
+                  <div className={styles.probeDetail}>
+                    <span className={styles.probeMeta}>{meta}</span>
+                    <span
+                      className={probe?.ok ? styles.probeSnippetOk : styles.probeSnippetFail}
+                      title={snippet}
+                    >
+                      {snippet}
+                    </span>
                   </div>
                 ) : null}
               </div>

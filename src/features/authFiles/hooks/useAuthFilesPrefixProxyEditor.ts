@@ -50,6 +50,7 @@ export type PrefixProxyEditorField =
   | 'disableCooling'
   | 'websockets'
   | 'usingApi'
+  | 'displayName'
   | 'note'
   | 'excludedModelsText'
   | 'headersText';
@@ -79,6 +80,8 @@ export type PrefixProxyEditorState = {
   websocketsTouched: boolean;
   usingApi: boolean;
   usingApiTouched: boolean;
+  displayName: string;
+  displayNameTouched: boolean;
   note: string;
   noteTouched: boolean;
   excludedModelsText: string;
@@ -342,6 +345,14 @@ export const buildAuthFileFieldsPatch = (
     }
   }
 
+  if (editor.displayNameTouched) {
+    const originalDisplayName = normalizeTextField(original.display_name);
+    const nextDisplayName = editor.displayName.trim();
+    if (nextDisplayName !== originalDisplayName) {
+      patch.display_name = nextDisplayName;
+    }
+  }
+
   if (editor.noteTouched) {
     const originalNote = normalizeTextField(original.note);
     const nextNote = editor.note.trim();
@@ -435,6 +446,14 @@ const buildPrefixProxyUpdatedText = (
   }
   if (patch['disable-cooling'] !== undefined) {
     next['disable-cooling'] = patch['disable-cooling'];
+  }
+
+  if (patch.display_name !== undefined) {
+    if (patch.display_name) {
+      next.display_name = patch.display_name;
+    } else if ('display_name' in next) {
+      delete next.display_name;
+    }
   }
 
   if (patch.note !== undefined) {
@@ -537,6 +556,8 @@ export function useAuthFilesPrefixProxyEditor(
       websocketsTouched: false,
       usingApi: false,
       usingApiTouched: false,
+      displayName: '',
+      displayNameTouched: false,
       note: '',
       noteTouched: false,
       excludedModelsText: '',
@@ -590,6 +611,7 @@ export function useAuthFilesPrefixProxyEditor(
         ? readAuthFileWebsockets(json)
         : false;
       const usingApi = supportsAuthFileUsingApi(providerKey) ? readAuthFileUsingApi(json) : false;
+      const displayName = typeof json.display_name === 'string' ? json.display_name : '';
       const note = typeof json.note === 'string' ? json.note : '';
       const excludedModelsText = readExcludedModels(json).join('\n');
       const headers = json.headers;
@@ -623,6 +645,8 @@ export function useAuthFilesPrefixProxyEditor(
           websocketsTouched: false,
           usingApi,
           usingApiTouched: false,
+          displayName,
+          displayNameTouched: false,
           note,
           noteTouched: false,
           excludedModelsText,
@@ -685,6 +709,9 @@ export function useAuthFilesPrefixProxyEditor(
       }
       if (field === 'usingApi') {
         return { ...prev, usingApi: Boolean(value), usingApiTouched: true };
+      }
+      if (field === 'displayName') {
+        return { ...prev, displayName: String(value), displayNameTouched: true };
       }
       if (field === 'note') return { ...prev, note: String(value), noteTouched: true };
       if (field === 'excludedModelsText') {

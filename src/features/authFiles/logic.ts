@@ -39,7 +39,7 @@ export const resolveAuthFileQuotaType = (
 };
 
 /**
- * 搜索 haystack：文件名 + 类型 + 提供方 + 账号邮箱 + 项目 ID + 状态/错误信息。
+ * 搜索 haystack：显示名称 + 文件名 + 类型 + 提供方 + 账号邮箱 + 项目 ID + 状态/错误信息。
  * 显式不含 account —— api-key 凭证的 account 就是 API key 本身，见 identity.ts。
  */
 export const matchesAuthFileSearch = (
@@ -50,6 +50,7 @@ export const matchesAuthFileSearch = (
   if (!term) return true;
   const needle = term.toLowerCase();
   return [
+    file.displayName,
     file.name,
     file.type,
     file.provider,

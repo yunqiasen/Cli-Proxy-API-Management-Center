@@ -45,6 +45,7 @@ export type AuthFileFieldsPatch = {
   websockets?: boolean;
   using_api?: boolean;
   note?: string;
+  display_name?: string;
   excluded_models?: string[];
   'excluded-models'?: string[];
   expired?: string;
@@ -269,6 +270,7 @@ const normalizeAuthFileEntry = (
   // account / account_type 故意不归一化：api-key 类凭证的 account 就是 API key 本身
   // （sdk/cliproxy/auth/types.go AccountInfo），不能进入展示与搜索路径。
   const projectId = readTextField(entry, 'project_id');
+  const displayName = readTextField(entry, 'display_name');
   const modified = readDateField(entry);
   const priority = readIntegerField(entry['priority']);
   const weight = readIntegerField(entry['weight']);
@@ -288,6 +290,7 @@ const normalizeAuthFileEntry = (
     ...(note ? { note } : {}),
     ...(email ? { email } : {}),
     ...(projectId ? { projectId } : {}),
+    ...(displayName ? { displayName } : {}),
   };
 };
 

@@ -53,6 +53,11 @@ export interface AuthFileItem {
   email?: string;
   /** GCP / Vertex 项目 ID，账号邮箱缺失时作为身份回落。 */
   projectId?: string;
+  /**
+   * 用户自定义显示名称（auth 文件里的 display_name 字段）。
+   * 优先级最高：卡片主行、A-Z 排序与搜索都使用它，文件名保留为副行。
+   */
+  displayName?: string;
   size?: number;
   authIndex?: string | number | null;
   runtimeOnly?: boolean | string;

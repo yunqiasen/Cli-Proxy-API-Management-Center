@@ -201,3 +201,23 @@ describe('sortAuthFiles', () => {
     ]);
   });
 });
+
+describe('matchesAuthFileSearch with display name', () => {
+  test('finds a credential by its display name', () => {
+    expect(
+      search(authFile({ name: 'raccoon-7834778.json', displayName: '小浣熊-主力' }), '小浣熊')
+    ).toBe(true);
+  });
+
+  test('matches the display name through the wildcard path', () => {
+    expect(
+      search(authFile({ name: 'raccoon-7834778.json', displayName: '小浣熊-主力' }), '小浣*主力')
+    ).toBe(true);
+  });
+
+  test('still matches the underlying file name', () => {
+    expect(
+      search(authFile({ name: 'raccoon-7834778.json', displayName: '小浣熊-主力' }), '7834778')
+    ).toBe(true);
+  });
+});

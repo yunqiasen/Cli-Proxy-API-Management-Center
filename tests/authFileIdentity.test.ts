@@ -184,3 +184,37 @@ describe('deriveAuthFileIdentity', () => {
     });
   });
 });
+
+describe('deriveAuthFileIdentity with display name', () => {
+  test('leads with the display name and keeps the file name as the secondary row', () => {
+    expect(
+      deriveAuthFileIdentity(
+        authFile({ name: 'raccoon-7834778.json', type: 'freetier', displayName: '小浣熊-主力' })
+      )
+    ).toEqual({
+      primary: '小浣熊-主力',
+      kind: 'displayName',
+      secondary: 'raccoon-7834778',
+      fullName: 'raccoon-7834778.json',
+    });
+  });
+
+  test('display name wins over the account email', () => {
+    expect(
+      deriveAuthFileIdentity(
+        authFile({ name: 'codex-a.json', email: 'user@example.com', displayName: '团队号' })
+      ).primary
+    ).toBe('团队号');
+  });
+
+  test('a whitespace-only display name is ignored', () => {
+    const identity = deriveAuthFileIdentity(
+      authFile({ name: 'kimi-1.json', email: 'user@example.com', displayName: '   ' })
+    );
+    expect(identity.kind).toBe('email');
+  });
+
+  test('never renders the raw file name twice when no display name exists', () => {
+    expect(deriveAuthFileIdentity(authFile({ name: 'kimi-1.json' })).secondary).toBeNull();
+  });
+});

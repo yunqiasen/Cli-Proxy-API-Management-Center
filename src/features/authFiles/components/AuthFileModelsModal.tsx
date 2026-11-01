@@ -5,6 +5,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import type { AuthFileModelItem } from '@/features/authFiles/constants';
 import type { AuthFileModelProbeResult } from '@/services/api/authFiles';
 import { isModelExcluded } from '@/features/authFiles/constants';
+import { summarizeProbeResult } from '@/features/authFiles/probeSnippet';
 import styles from './AuthFileModelsModal.module.scss';
 
 export type AuthFileModelsModalProps = {
@@ -72,6 +73,8 @@ export function AuthFileModelsModal(props: AuthFileModelsModalProps) {
         <div className={styles.list}>
           {models.map((model) => {
             const excludedModel = isModelExcluded(model.id, fileType, excluded);
+            const probe = probeResults[model.id];
+            const snippet = summarizeProbeResult(probe);
             return (
               <div
                 key={model.id}
@@ -87,53 +90,58 @@ export function AuthFileModelsModal(props: AuthFileModelsModalProps) {
                     : t('common.copy', { defaultValue: '点击复制' })
                 }
               >
-                <span className={styles.modelId}>{model.id}</span>
-                {model.display_name && model.display_name !== model.id && (
-                  <span className={styles.modelDisplayName}>{model.display_name}</span>
-                )}
-                {model.type && <span className={styles.modelType}>{model.type}</span>}
-                {excludedModel && (
-                  <span className={styles.excludedBadge}>
-                    {t('auth_files.models_excluded_badge', { defaultValue: '已禁用' })}
-                  </span>
-                )}
-                <span className={styles.probeSlot}>
-                  {probeResults[model.id] ? (
-                    <span
-                      className={
-                        probeResults[model.id].ok ? styles.probeOk : styles.probeFail
-                      }
-                      title={
-                        probeResults[model.id].ok
-                          ? t('auth_files.models_probe_ok')
-                          : probeResults[model.id].error ||
-                            t('auth_files.models_probe_fail')
-                      }
-                    >
-                      {probeResults[model.id].ok
-                        ? t('auth_files.models_probe_ok')
-                        : t('auth_files.models_probe_fail')}
-                      {!probeResults[model.id].ok && probeResults[model.id].status
-                        ? ` ${probeResults[model.id].status}`
-                        : ''}
+                <div className={styles.row}>
+                  <span className={styles.modelId}>{model.id}</span>
+                  {model.display_name && model.display_name !== model.id && (
+                    <span className={styles.modelDisplayName}>{model.display_name}</span>
+                  )}
+                  {model.type && <span className={styles.modelType}>{model.type}</span>}
+                  {excludedModel && (
+                    <span className={styles.excludedBadge}>
+                      {t('auth_files.models_excluded_badge', { defaultValue: '已禁用' })}
                     </span>
-                  ) : null}
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    loading={probeRunning[model.id] === true}
-                    disabled={probeRunning[model.id] === true}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      onProbeModel(model.id);
-                    }}
-                    title={t('auth_files.models_probe_button')}
+                  )}
+                  <span className={styles.probeSlot}>
+                    {probe ? (
+                      <span
+                        className={probe.ok ? styles.probeOk : styles.probeFail}
+                        title={
+                          probe.ok
+                            ? t('auth_files.models_probe_ok')
+                            : probe.error || t('auth_files.models_probe_fail')
+                        }
+                      >
+                        {probe.ok
+                          ? t('auth_files.models_probe_ok')
+                          : t('auth_files.models_probe_fail')}
+                        {!probe.ok && probe.status ? ` ${probe.status}` : ''}
+                      </span>
+                    ) : null}
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      loading={probeRunning[model.id] === true}
+                      disabled={probeRunning[model.id] === true}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onProbeModel(model.id);
+                      }}
+                      title={t('auth_files.models_probe_button')}
+                    >
+                      {probeRunning[model.id] === true
+                        ? t('auth_files.models_probe_running')
+                        : t('auth_files.models_probe_button')}
+                    </Button>
+                  </span>
+                </div>
+                {snippet ? (
+                  <div
+                    className={probe?.ok ? styles.probeSnippetOk : styles.probeSnippetFail}
+                    title={snippet}
                   >
-                    {probeRunning[model.id] === true
-                      ? t('auth_files.models_probe_running')
-                      : t('auth_files.models_probe_button')}
-                  </Button>
-                </span>
+                    {snippet}
+                  </div>
+                ) : null}
               </div>
             );
           })}

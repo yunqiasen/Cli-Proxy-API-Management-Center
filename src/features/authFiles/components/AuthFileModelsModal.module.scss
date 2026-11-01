@@ -13,9 +13,8 @@
 
 .item {
   display: flex;
-  align-items: baseline;
-  gap: 8px;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 4px;
   padding: 8px 10px;
   border-radius: 8px;
   border: 1px solid transparent;
@@ -39,6 +38,14 @@
 
 .itemExcluded {
   opacity: 0.55;
+}
+
+.row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
 }
 
 .modelId {
@@ -109,4 +116,32 @@
   font-weight: 600;
   color: var(--danger-text, #dc2626);
   white-space: nowrap;
+}
+
+/* 探测回复摘要：只显示模型实际回复的短片段，不铺完整 JSON */
+.probeSnippetOk,
+.probeSnippetFail {
+  font-family: $font-mono;
+  font-size: 11px;
+  line-height: 1.45;
+  padding: 4px 8px;
+  border-radius: 6px;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.probeSnippetOk {
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--success-text, #16a34a) 8%, transparent);
+  border-left: 2px solid color-mix(in srgb, var(--success-text, #16a34a) 55%, transparent);
+}
+
+.probeSnippetFail {
+  color: var(--danger-text, #dc2626);
+  background: color-mix(in srgb, var(--danger-text, #dc2626) 8%, transparent);
+  border-left: 2px solid color-mix(in srgb, var(--danger-text, #dc2626) 55%, transparent);
 }

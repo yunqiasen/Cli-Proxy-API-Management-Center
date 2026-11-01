@@ -135,15 +135,17 @@ export function AuthFileModelsModal(props: AuthFileModelsModalProps) {
                     </Button>
                   </span>
                 </div>
-                {snippet ? (
+                {meta || snippet ? (
                   <div className={styles.probeDetail}>
-                    <span className={styles.probeMeta}>{meta}</span>
-                    <span
-                      className={probe?.ok ? styles.probeSnippetOk : styles.probeSnippetFail}
-                      title={snippet}
-                    >
-                      {snippet}
-                    </span>
+                    {meta ? <span className={styles.probeMeta}>{meta}</span> : null}
+                    {snippet ? (
+                      <span
+                        className={probe?.ok ? styles.probeSnippetOk : styles.probeSnippetFail}
+                        title={snippet}
+                      >
+                        {snippet}
+                      </span>
+                    ) : null}
                   </div>
                 ) : null}
               </div>

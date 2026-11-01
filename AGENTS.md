@@ -7,7 +7,8 @@
 - `origin`: `https://github.com/yunqiasen/Cli-Proxy-API-Management-Center.git`.
 - `upstream`: `https://github.com/router-for-me/Cli-Proxy-API-Management-Center.git`.
 - Backend checkout: `/home/div/1_Project_dir/AI/CPA/CLIProxyAPI` (`CPA-fork`).
-- The former checkout remains for history; use the new checkout for development.
+- The former checkout and linked worktrees are archived under `/home/div/1_Project_dir/AI/CPA/_archive/20261101/`; the outer legacy path has been removed. Use the primary checkout for development.
+- Create future isolated worktrees under `/home/div/1_Project_dir/AI/CPA/.worktrees/Cli-Proxy-API-Management-Center/`.
 - Migration changes paths only; the deployed `management.html` is preserved.
 
 ## Project Scope & Structure

@@ -40,7 +40,8 @@
 - 日常分支：`CPA-UI-fork`；`main` 保留上游同步线。
 - `origin` 指向 `yunqiasen/Cli-Proxy-API-Management-Center`，`upstream` 指向 `router-for-me/Cli-Proxy-API-Management-Center`。
 - 后端目录：`/home/div/1_Project_dir/AI/CPA/CLIProxyAPI`，分支 `CPA-fork`。
-- 旧目录保留历史记录，新开发使用新目录；本次迁移保留原管理页面构建产物。
+- 旧仓库和关联工作区已归档到 `/home/div/1_Project_dir/AI/CPA/_archive/20261101/`；外层旧路径已移除。开发使用新主工作区，管理页面构建产物保持原样。
+- 新建隔离工作区统一放在 `/home/div/1_Project_dir/AI/CPA/.worktrees/Cli-Proxy-API-Management-Center/`。
 
 ## 快速开始
 
